@@ -1,0 +1,5 @@
+export function seedDemo(model) {
+ const time=new Date().toISOString();
+ for(const [id,parent,name,provider,cwd] of [['main',null,'Build workspace search','codex','/demo/workspace'],['indexer','main','Index source files','codex','/demo/workspace'],['reviewer','main','Review search results','codex','/demo/workspace'],['claude',null,'Update settings panel','claude','/demo/settings'],['tests','claude','Check keyboard access','claude','/demo/settings']])model.agent(id,{parentId:parent,name,provider,cwd,scope:'demo',link:parent?'confirmed':'root',status:'working',lastEvent:time,tool:parent?'Edit':'Agent',role:parent?'sub-agent':'main'});
+ let n=0;const tick=()=>{const agent=['indexer','reviewer','tests'][n++%3];model.addFile({path:agent==='tests'?'/demo/settings/accessibility.test.ts':'/demo/workspace/search.ts',operation:'edit',timestamp:new Date().toISOString(),agentId:agent,attribution:'confirmed',evidence:'simulated tool receipt'});};tick();const timer=setInterval(tick,2500);return()=>clearInterval(timer);
+}

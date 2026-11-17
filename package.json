@@ -1,0 +1,6 @@
+{
+  "name": "agent-view-prototype", "version": "0.1.0", "private": true, "type": "module",
+  "description": "Local Codex and Claude Code activity viewer",
+  "scripts": {"start": "node src/server.mjs", "test": "node --test test/*.test.mjs", "audit:live": "node test/live-audit.mjs", "demo": "node src/server.mjs --demo"},
+  "engines": {"node": ">=22"}
+}
