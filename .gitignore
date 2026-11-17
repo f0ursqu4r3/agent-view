@@ -2,3 +2,4 @@ node_modules/
 work/
 .serena/
 .DS_Store
+.superpowers/
