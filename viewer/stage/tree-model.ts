@@ -63,7 +63,10 @@ export class TreeModel {
   private readonly roots = new Map<TreeNode, string>();
   /** Containers removed by moves, reported by the next `prune`. */
   private queued: TreeNode[] = [];
-  /** The latest time seen in a touch or a `prune`. */
+  /**
+   * The latest `now` given to `prune`: the latest known time. Touch times do not move it, so one touch
+   * with a far-future time cannot make every later touch look old.
+   */
   private latestMs = Number.NEGATIVE_INFINITY;
 
   constructor(opts: { fileTtlMs?: number; newNodesPerSecond?: number } = {}) {
@@ -82,7 +85,6 @@ export class TreeModel {
   /** Places a touch. A touch already past the file lifetime (against the latest known time) places nothing. */
   touch(t: Touch): TreeNode | null {
     if (this.latestMs - t.atMs >= this.fileTtlMs) return null;
-    if (t.atMs > this.latestMs) this.latestMs = t.atMs;
     const path = trimPath(t.path);
     const hs = this.hostState(t.host);
     if (t.attribution === 'confirmed' && t.projectRoot !== null) this.learnRoot(hs, t.host, trimPath(t.projectRoot), t.atMs);

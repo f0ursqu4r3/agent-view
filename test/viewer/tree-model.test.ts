@@ -270,14 +270,14 @@ test('prune returns each removed node once', () => {
   expect(out2.map((n) => n.id).sort()).toEqual(['h|/p', 'h|/p/f.ts', 'h|/p/g.ts', 'h|<other>', 'h|<other>/p']);
 });
 
-test('I3: a touch older than the file lifetime, against the latest known time, places no node', () => {
+test('I3: a touch older than the file lifetime, against the latest known time (prune now), places no node', () => {
   const m = new TreeModel({ fileTtlMs: 1000 });
-  expect(m.touch(conf('/p/new.ts', { atMs: T0 + 5000 }))).not.toBeNull();
-  expect(m.touch(conf('/p/old.ts', { atMs: T0 + 4000 }))).toBeNull();
-  expect(m.find('h', '/p/old.ts')).toBeUndefined();
-  expect(m.touch(conf('/p/edge.ts', { atMs: T0 + 4001 }))).not.toBeNull();
-  // prune's now counts as a known time too.
   m.prune(T0 + 10_000);
-  expect(m.touch(conf('/p/late.ts', { atMs: T0 + 8500 }))).toBeNull();
-  expect(m.touch(unat('/x/late.ts', { atMs: T0 + 9500 }))).not.toBeNull();
+  expect(m.touch(conf('/p/old.ts', { atMs: T0 + 9000 }))).toBeNull();
+  expect(m.find('h', '/p/old.ts')).toBeUndefined();
+  expect(m.touch(unat('/x/old.ts', { atMs: T0 + 8500 }))).toBeNull();
+  expect(m.touch(conf('/p/edge.ts', { atMs: T0 + 9001 }))).not.toBeNull();
+  // A far-future touch does not make later live touches look old.
+  expect(m.touch(conf('/p/future.ts', { atMs: T0 + 1e9 }))).not.toBeNull();
+  expect(m.touch(conf('/p/live.ts', { atMs: T0 + 10_000 }))).not.toBeNull();
 });

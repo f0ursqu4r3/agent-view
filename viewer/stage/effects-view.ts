@@ -40,7 +40,6 @@ export class EffectsView {
 
   draw(now: number, store: ViewerStore, tree: TreeModel, view: TreeView, agents: AgentsView, reduced: boolean): void {
     for (const call of store.calls(now, EFFECT_TAIL_MS)) {
-      if (agents.isStale(call.agentId)) continue;
       const key = `${call.host}\u0000${call.agentId}\u0000${call.callId}`;
       let rec = this.first.get(key);
       if (!rec) {
@@ -49,6 +48,8 @@ export class EffectsView {
         this.first.set(key, (rec = { at: now, seen: now }));
       }
       rec.seen = now;
+      // Kept but not drawn while the agent is stale, so the effect comes back when the agent does.
+      if (agents.isStale(call.agentId)) continue;
       const e = effectFor(call, now, reduced, rec.at);
       if (!e) continue;
       const a = agents.pos(call.agentId);
