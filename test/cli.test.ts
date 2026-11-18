@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import os from 'node:os';
 import path from 'node:path';
-import { parseArgs, UsageError } from '../src/cli';
+import { parseArgs, remoteCommandOverride, UsageError } from '../src/cli';
 import { LineSplitter, parseLine } from '../src/shared/ndjson';
 import type { Envelope } from '../src/shared/schema';
 
@@ -32,6 +32,13 @@ test('parseArgs rejects --remote values that could inject ssh options or shell t
     expect((err as Error).message).not.toContain(bad || '\u0000');
   }
   expect(parseArgs(['--remote', 'user@host.example']).remotes).toEqual(['user@host.example']);
+});
+
+test('remoteCommandOverride: unset is null; a JSON array of strings is the argv; anything else is an error', () => {
+  expect(remoteCommandOverride(undefined)).toBeNull();
+  expect(remoteCommandOverride('')).toBeNull();
+  expect(remoteCommandOverride('["sh","-c","exit 3"]')).toEqual(['sh', '-c', 'exit 3']);
+  for (const bad of ['sh', '[]', '[1]', '{"a":1}', 'null']) expect(() => remoteCommandOverride(bad)).toThrow(UsageError);
 });
 
 test('parseArgs rejects unknown flags, bad values, and collect without --stdio', () => {
@@ -98,8 +105,8 @@ test('usage errors print to stderr and exit with code 2', async () => {
 }, 30_000);
 
 /** Starts hub mode and resolves with the URL it prints. */
-async function startHub(extra: string[]) {
-  const proc = Bun.spawn(['bun', CLI, '--no-open', '--port', '0', ...extra], { stdout: 'pipe', stderr: 'pipe' });
+async function startHub(extra: string[], env: Record<string, string> = {}) {
+  const proc = Bun.spawn(['bun', CLI, '--no-open', '--port', '0', ...extra], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } });
   const reader = proc.stdout.getReader();
   const decoder = new TextDecoder();
   let out = '';
@@ -134,18 +141,22 @@ test('hub mode prints the URL, serves /api/snapshot with the local host up, and 
 }, 30_000);
 
 test('hub mode: --remote adds one remote host per flag; an unreachable remote never stops the hub', async () => {
-  const { proc, url } = await startHub(['--demo', '--remote', 'box1.invalid', '--remote', 'box1.invalid']);
+  // The test-only override replaces ssh, so the test never runs ssh through the owner's SSH config.
+  const { proc, url } = await startHub(['--demo', '--remote', 'box1.invalid', '--remote', 'box1.invalid'], {
+    AGENT_VIEW_REMOTE_COMMAND: JSON.stringify(['sh', '-c', 'exit 3']),
+  });
   try {
-    let body: { hosts: { label: string; kind: string; state: string }[] } | undefined;
+    let body: { hosts: { label: string; kind: string; state: string; detail?: string }[] } | undefined;
     for (let i = 0; i < 50; i++) {
       body = await (await fetch(url + '/api/snapshot')).json() as typeof body;
-      if (body!.hosts[0]?.state === 'up') break;
+      if (body!.hosts[0]?.state === 'up' && body!.hosts.slice(1).every((h) => h.state === 'down')) break;
       await Bun.sleep(100);
     }
     expect(body!.hosts.map((h) => [h.label, h.kind])).toEqual([
       [os.hostname().split('.')[0], 'local'], ['box1.invalid', 'remote'], ['box1.invalid#2', 'remote'],
     ]);
     expect(body!.hosts[0]!.state).toBe('up');
+    expect(body!.hosts.slice(1).map((h) => h.detail)).toEqual(['collector exited 3', 'collector exited 3']);
   } finally {
     proc.kill('SIGINT');
   }

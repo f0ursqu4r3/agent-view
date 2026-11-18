@@ -89,6 +89,21 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
+/**
+ * TEST ONLY: `AGENT_VIEW_REMOTE_COMMAND` holds a JSON array of strings. In hub mode, every remote runs that
+ * argv instead of `ssh ... agent-view collect --stdio`, so tests never run ssh through the user's SSH config.
+ * `--remote` values are still validated. Unset or empty means no override.
+ */
+export function remoteCommandOverride(value: string | undefined): string[] | null {
+  if (value === undefined || value === '') return null;
+  let argv: unknown;
+  try { argv = JSON.parse(value); } catch { argv = null; }
+  if (!Array.isArray(argv) || argv.length === 0 || !argv.every((a) => typeof a === 'string')) {
+    throw new UsageError('AGENT_VIEW_REMOTE_COMMAND must be a JSON array of strings (test only)');
+  }
+  return argv;
+}
+
 /** Runs a collector that writes one NDJSON envelope per line to stdout, until a signal or a closed pipe. */
 async function collectStdio(args: CliArgs): Promise<void> {
   const collector = new Collector({
@@ -129,6 +144,13 @@ function openBrowser(url: string): void {
 
 /** Runs the hub: the local collector in-process, the HTTP and WebSocket server, and the browser. */
 async function runHub(args: CliArgs): Promise<void> {
+  let fakeRemote: string[] | null;
+  try {
+    fakeRemote = remoteCommandOverride(process.env.AGENT_VIEW_REMOTE_COMMAND);
+  } catch (e) {
+    process.stderr.write(`agent-view: ${(e as Error).message}\n`);
+    process.exit(2);
+  }
   const hub = new Hub({ lifecycle: { lingerMs: args.lingerMs } });
   const label = hub.uniqueLabel(os.hostname().split('.')[0] || 'local');
   const collector = new Collector({
@@ -140,7 +162,9 @@ async function runHub(args: CliArgs): Promise<void> {
   });
   const local = new LocalSource(collector, label);
   hub.addSource(local);
-  const remotes = args.remotes.map((sshHost) => new RemoteCollector({ sshHost, label: hub.uniqueLabel(sshHost) }));
+  const remotes = args.remotes.map((sshHost) => new RemoteCollector({
+    sshHost, label: hub.uniqueLabel(sshHost), ...(fakeRemote ? { command: () => fakeRemote } : {}),
+  }));
   for (const remote of remotes) hub.addSource(remote);
   let server: ReturnType<typeof startServer>;
   try {
