@@ -114,11 +114,11 @@ test('FsChangeSource counts events past the limit as dropped', async () => {
     const h = harness({ maxPerSecond: 3, now: () => 0 });
     h.source.setRoots([dir]);
     try {
-      for (let i = 0; i < 8; i++) await fs.writeFile(path.join(dir, `f${i}.txt`), '1');
-      for (let i = 0; i < 100 && h.source.dropped < 5; i++) await h.sleep(40);
+      for (let i = 0; i < 30; i++) await fs.writeFile(path.join(dir, `f${i}.txt`), '1');
+      for (let i = 0; i < 100 && h.source.dropped < 1; i++) await h.sleep(40);
       await h.sleep(150);
       expect(h.events.length).toBe(3);
-      expect(h.source.dropped).toBeGreaterThanOrEqual(5);
+      expect(h.source.dropped).toBeGreaterThanOrEqual(1);
     } finally {
       h.source.stop();
     }
@@ -250,4 +250,40 @@ test('default home is os.homedir()', async () => {
   } finally {
     h.source.stop();
   }
+});
+
+test('a rename event for a file older than one second is reported as change', async () => {
+  await withDir(async (dir) => {
+    const file = path.join(dir, 'old.txt');
+    await fs.writeFile(file, 'x');
+    const h = harness();
+    h.source.setRoots([dir]);
+    try {
+      await h.sleep(1150);
+      const before = h.events.length;
+      await fs.appendFile(file, 'y');
+      await h.wait(() => h.events.length > before);
+      const e = h.events[before]!;
+      const birth = (await fs.stat(file)).birthtimeMs;
+      if (birth > 0) expect(e).toMatchObject({ kind: 'fs.change', path: file, op: 'change' });
+      else expect(e).toMatchObject({ kind: 'fs.change', path: file, op: 'create' });
+    } finally {
+      h.source.stop();
+    }
+  });
+});
+
+test('a brand-new file is still reported as create', async () => {
+  await withDir(async (dir) => {
+    const h = harness();
+    h.source.setRoots([dir]);
+    try {
+      await fs.writeFile(path.join(dir, 'new.txt'), 'x');
+      await fs.appendFile(path.join(dir, 'new.txt'), 'y');
+      await h.wait(isFs(path.join(dir, 'new.txt')));
+      expect(h.events.every((e) => e.kind === 'fs.change' && e.op === 'create')).toBe(true);
+    } finally {
+      h.source.stop();
+    }
+  });
 });

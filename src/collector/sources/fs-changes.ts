@@ -100,6 +100,13 @@ const realOr = (p: string): string => {
 const isWithin = (child: string, parent: string): boolean =>
   child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
 
+/**
+ * macOS reports every write as a watch `rename`. A regular file whose last write is more than a second
+ * after its birth was modified, not created. Without a birth time (0 or NaN) the answer stays `create`.
+ */
+const looksModified = (stat: fs.Stats): boolean =>
+  stat.isFile() && stat.birthtimeMs > 0 && stat.mtimeMs - stat.birthtimeMs > 1000;
+
 type Opts = {
   emit: (events: SourceEvent[]) => void;
   onStatus: (source: string, s: SourceState) => void;
@@ -190,7 +197,7 @@ export class FsChangeSource {
     let stat: fs.Stats | null = null;
     try { stat = fs.lstatSync(abs); } catch { /* gone */ }
     if (stat?.isDirectory()) return;
-    const op = event === 'change' ? 'change' : stat ? 'create' : 'delete';
+    const op = event === 'change' ? 'change' : !stat ? 'delete' : looksModified(stat) ? 'change' : 'create';
     if (!this.limiter.allow(root)) { this._dropped++; return; }
     this.opts.emit([{ kind: 'fs.change', path: abs, op, ts: new Date(this.now()).toISOString() }]);
     this.reportIfDegraded(root);
