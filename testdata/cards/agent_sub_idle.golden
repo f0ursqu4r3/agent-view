@@ -1,0 +1,15 @@
+╭─ Verify review ──────╮
+│  ▄▄██▄▄   codex sub  │
+│ ██▀▄▄▀██  - IDLE     │
+│  ▄▀▀▀▀▄   calls 4    │
+│ ▄ █▀▀█ ▄  fault 0    │
+│           seen 31m   │
+╰──────────────────────╯
+---
+dddXXXXXXXXXXXXXdddddddd
+dtxxxxxxxxttdddddddddttd
+dtxxxxxxxxttddddddtttttd
+dtxxxxxxxxttddddddbttttd
+dtxxxxxxxxttddddddbttttd
+dtttttttttttdddddbbbtttd
+dddddddddddddddddddddddd
