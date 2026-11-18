@@ -1,0 +1,9 @@
+┌─ RUN ──────┐
+│$ pnpm lint…│
+│fail 3.3s   │
+└────────────┘
+---
+dddcccdddddddd
+dbbbbbbbbbbbbd
+dzzzzdddddtttd
+dddddddddddddd

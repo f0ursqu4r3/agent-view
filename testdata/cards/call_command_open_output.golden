@@ -1,0 +1,15 @@
+┌─ RUN ───────────── 5.2s ─┐
+│ $ bun test               │
+│ shell · agent-view       │
+│ > two                    │
+│ > three!                 │
+│ ██████░░░░░░   / running │
+└──────────────────────────┘
+---
+cccCCCcccccccccccccccbbbbccc
+ctbbbbbbbbbbtttttttttttttttc
+ctddddddddddddddddddtttttttc
+ctcccccttttttttttttttttttttc
+ctcccccccctttttttttttttttttc
+ctccccccfffffftttdddddddddtc
+cccccccccccccccccccccccccccc

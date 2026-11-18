@@ -1,0 +1,15 @@
+┌─ RUN ───────────── 3.3s ─┐
+│ $ pnpm lint              │
+│ shell · agent-view       │
+│ > checking               │
+│ > error: 2 problems      │
+│ [FAIL] exit 2            │
+└──────────────────────────┘
+---
+zzzCCCzzzzzzzzzzzzzzzddddzzz
+ztbbbbbbbbbbbttttttttttttttz
+ztddddddddddddddddddtttttttz
+ztcccccccccctttttttttttttttz
+ztzzzzzzzzzzzzzzzzzzzttttttz
+zt######zzzzzzzttttttttttttz
+zzzzzzzzzzzzzzzzzzzzzzzzzzzz
