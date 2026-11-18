@@ -1,19 +1,12 @@
 import path from 'node:path';
 import { categoryFor } from '../../shared/schema';
+import { MAX_COMMAND_CHARS, MAX_PENDING, isObject, outputEvents, str } from './common';
+import type { Json } from './common';
 import type { Agent, AgentStatus, Call, Category, SourceEvent, WriteOp } from '../../shared/schema';
 
-const MAX_PENDING = 5000;
-const MAX_COMMAND_CHARS = 4096;
-const MAX_CHUNK_BYTES = 4096;
-const MAX_OUTPUT_BYTES = 16 * 1024;
-
-type Json = Record<string, unknown>;
 type Identity = Pick<Agent, 'name' | 'role' | 'parentId' | 'link' | 'cwd'> & { model?: string };
 type AgentState = Identity & { status: AgentStatus; lastEventAt: string };
 type Pending = { agentId: string; name: string; category: Category; input: Json; files?: string[]; writes: WriteOp[] };
-
-const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
-const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined);
 
 function resolveFile(cwd: string | null, file: unknown): string | null {
   if (typeof file !== 'string' || file.length === 0) return null;
@@ -28,28 +21,6 @@ function outputText(content: unknown): string {
     .filter((b): b is Json => isObject(b) && b.type === 'text' && typeof b.text === 'string')
     .map((b) => b.text as string)
     .join('\n');
-}
-
-/** Split UTF-8 bytes into chunks of at most `size` bytes without cutting a character. */
-function chunkBytes(buf: Buffer, size: number): string[] {
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < buf.length) {
-    let end = Math.min(start + size, buf.length);
-    if (end < buf.length) while (end > start && (buf[end]! & 0xc0) === 0x80) end--;
-    if (end === start) end = Math.min(start + size, buf.length);
-    chunks.push(buf.subarray(start, end).toString('utf8'));
-    start = end;
-  }
-  return chunks;
-}
-
-/** The last `max` bytes of the output, starting on a character boundary. */
-function tailBytes(buf: Buffer, max: number): { buf: Buffer; cut: boolean } {
-  if (buf.length <= max) return { buf, cut: false };
-  let start = buf.length - max;
-  while (start < buf.length && (buf[start]! & 0xc0) === 0x80) start++;
-  return { buf: buf.subarray(start), cut: true };
 }
 
 /** Only explicit file tools claim files. Shell text and search results never do. */
@@ -205,9 +176,7 @@ export class ClaudeLogAdapter {
     }
 
     if (call.category === 'command') {
-      const { buf, cut } = tailBytes(Buffer.from(outputText(b.content), 'utf8'), MAX_OUTPUT_BYTES);
-      chunkBytes(buf, MAX_CHUNK_BYTES).forEach((chunk, i) =>
-        out.push({ kind: 'tool.output', ts, agentId, callId, chunk, truncated: cut && i === 0 }));
+      out.push(...outputEvents(ts, agentId, callId, outputText(b.content)));
     }
 
     const writes = ok && call.files && call.writes.length ? call.files.map((p) => ({ path: p, op: call.writes[0]! })) : undefined;

@@ -1,0 +1,12 @@
+{"timestamp":"2026-01-01T00:00:00.000Z","type":"session_meta","payload":{"id":"th-main","cwd":"/p/proj","source":"cli","thread_source":"user"}}
+{"timestamp":"2026-01-01T00:00:01.000Z","type":"turn_context","payload":{"cwd":"/p/proj","model":"m-1"}}
+{"timestamp":"2026-01-01T00:00:02.000Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-01-01T00:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"c1","arguments":"{\"cmd\":\"echo x\"}"}}
+{"timestamp":"2026-01-01T00:00:04.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"c1","output":"x"}}
+{"timestamp":"2026-01-01T00:00:05.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","call_id":"p1","input":"*** Begin Patch\n*** Add File: hello.txt\n+hi\n*** End Patch"}}
+{"timestamp":"2026-01-01T00:00:06.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"p1","output":[{"type":"input_text","text":"Success. Updated the following files:\nA hello.txt"}]}}
+{"timestamp":"2026-01-01T00:00:07.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"exec","call_id":"outer","input":"fake wrapper source"}}
+{"timestamp":"2026-01-01T00:00:08.000Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"th-main","completed_at_ms":1767225608000,"item":{"type":"CommandExecution","id":"n1","status":"completed","command":["sh","-c","echo y"],"cwd":"/p/proj","exit_code":0,"aggregated_output":"y\n"}}}
+{"timestamp":"2026-01-01T00:00:09.000Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"th-main","completed_at_ms":1767225609000,"item":{"type":"FileChange","id":"n2","status":"completed","changes":{"a.txt":{"type":"update"}}}}}
+{"timestamp":"2026-01-01T00:00:10.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"outer","output":"done"}}
+{"timestamp":"2026-01-01T00:00:11.000Z","type":"event_msg","payload":{"type":"task_complete"}}
