@@ -110,9 +110,10 @@ export class ClaudeLogAdapter {
     const content = message?.content;
     const blocks = Array.isArray(content) ? content.filter(isObject) : [];
     const toolEvents: SourceEvent[] = [];
+    const single = blocks.filter((b) => b.type === 'tool_result').length === 1;
     for (const b of blocks) {
       if (b.type === 'tool_use') this.toolUse(agent, id, cwd, b, ts, toolEvents);
-      else if (b.type === 'tool_result') this.toolResult(agent, id, root, scope, b, record, ts, toolEvents);
+      else if (b.type === 'tool_result') this.toolResult(agent, id, root, scope, b, record, single, ts, toolEvents);
     }
 
     const endsTurn = (record.type === 'system' && record.subtype === 'turn_duration') || message?.stop_reason === 'end_turn';
@@ -180,7 +181,7 @@ export class ClaudeLogAdapter {
     out.push({ kind: 'tool.start', ts, call });
   }
 
-  private toolResult(agent: AgentState, agentId: string, root: string, scope: string, b: Json, record: Json, ts: string | undefined, out: SourceEvent[]): void {
+  private toolResult(agent: AgentState, agentId: string, root: string, scope: string, b: Json, record: Json, single: boolean, ts: string | undefined, out: SourceEvent[]): void {
     const callId = str(b.tool_use_id);
     if (!callId || !ts) return;
     const key = `${agentId}:${callId}`;
@@ -190,7 +191,8 @@ export class ClaudeLogAdapter {
     const ok = b.is_error !== true;
 
     // An Agent/Task result that names the sub-agent confirms the parent link.
-    const spawned = isObject(record.toolUseResult) ? str(record.toolUseResult.agentId) : undefined;
+    // toolUseResult belongs to the record, not to a block: trust it only when the record has one result block.
+    const spawned = single && isObject(record.toolUseResult) ? str(record.toolUseResult.agentId) : undefined;
     if (call.category === 'agent' && spawned && ok) {
       const childId = `${root}:${spawned}`;
       const known = this.agents.get(childId);

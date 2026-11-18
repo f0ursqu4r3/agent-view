@@ -47,6 +47,15 @@ test('failed Agent result does not confirm a parent link', () => {
   expect(upserts(out).some((x) => x.id.endsWith(':nested'))).toBe(false);
 });
 
+test('a record with several tool_result blocks confirms no parent; every call still ends', () => {
+  const a = new ClaudeLogAdapter('mac');
+  feed(a, rec('p', [use('s1', 'Agent', { description: 'One' }), use('s2', 'Task', { description: 'Two' })]));
+  const out = feed(a, rec('p', [result('s1'), result('s2')], { toolUseResult: { agentId: 'kid' } }));
+  expect(upserts(out).filter((x) => x.link === 'confirmed')).toHaveLength(0);
+  expect(upserts(out).some((x) => x.id.endsWith(':kid'))).toBe(false);
+  expect(only(out, 'tool.end').map((e) => [e.callId, e.ok])).toEqual([['s1', true], ['s2', true]]);
+});
+
 test('two agents writing the same file retain separate confirmed receipts', () => {
   const a = new ClaudeLogAdapter('mac');
   const writes: { agentId: string; path: string }[] = [];
