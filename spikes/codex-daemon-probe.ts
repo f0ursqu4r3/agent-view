@@ -6,6 +6,10 @@
 // TRANSPORT=proxy (default) spawns `codex app-server proxy`; TRANSPORT=socket connects to the unix socket directly.
 // OPT-IN: the probe sends thread/resume to the owner's loaded threads. It runs only with AGENT_VIEW_PROBE_RESUME=1,
 // after the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run") are met.
+// WARNING (run of 2026-11-18): `initialize` itself is NOT free of side effects on the shared daemon. The first client
+// after a daemon start sets the daemon-wide originator (written into every thread the daemon creates later, and sent
+// upstream); every client's initialize sets the daemon-wide User-Agent suffix "(<clientInfo.name>; <version>)".
+// Only `codex app-server daemon restart` clears them. Do not run this probe again without the owner's consent.
 //
 // Preconditions met in this file:
 // m1  model and reasoning effort are printed only as "unchanged" booleans and hashed fingerprints.
@@ -26,6 +30,7 @@ const DURATION_MS = Number(process.env.PROBE_MS ?? 45_000)
 const TURN_WINDOW_MS = Number(process.env.TURN_WINDOW_MS ?? 10_000)
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? 10_000)
 const RESUME_OPT_IN = process.env.AGENT_VIEW_PROBE_RESUME === '1'
+const CLIENT_NAME = process.env.PROBE_CLIENT_NAME ?? 'agent-view-probe'
 
 export const ALLOWED: ReadonlySet<string> = new Set(['initialize', 'initialized', 'thread/loaded/list', 'thread/read', 'thread/resume', 'thread/unsubscribe'])
 
@@ -71,6 +76,11 @@ function shape(v: unknown, depth = 0): unknown {
 const hash = (v: unknown, n = 12) => createHash('sha256').update(JSON.stringify(v) ?? 'undefined').digest('hex').slice(0, n)
 /** Protocol enum values only (for example `idle`, `commandExecution`); anything else becomes `<other>`. */
 const enumOf = (v: unknown) => (typeof v === 'string' && /^[A-Za-z][A-Za-z_]{0,30}$/.test(v) ? v : typeof v === 'string' ? '<other>' : `<${v === null ? 'null' : typeof v}>`)
+/** A server error message with ids, paths, quoted text and numbers removed: only the fixed template is left. */
+const errorTemplate = (m: unknown) => (typeof m === 'string'
+  ? m.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\/\S+/g, '<path>')
+    .replace(/(["'`]).*?\1/g, '<quoted>').replace(/\d+/g, '<n>').slice(0, 120)
+  : `<${typeof m}>`)
 const SOURCE_KINDS = new Set(['cli', 'vscode', 'exec', 'appServer', 'unknown'])
 function sourceKind(s: unknown): string {
   if (typeof s === 'string') return SOURCE_KINDS.has(s) ? s : '<other>'
@@ -291,6 +301,7 @@ async function main() {
       'codex-daemon-probe: not run. The probe sends thread/resume to loaded Codex threads, so it needs AGENT_VIEW_PROBE_RESUME=1.',
       'Before you set it, meet the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run"),',
       'and warn the owner of the loaded threads: the probe does not answer server requests, which can stall their turn.',
+      'initialize also changes daemon-wide state (originator, User-Agent suffix) until `codex app-server daemon restart`.',
     ].join('\n'))
     process.exit(0)
   }
@@ -305,10 +316,16 @@ async function main() {
   try {
     await connect()
     const init = await Promise.race([
-      request('initialize', { clientInfo: { name: 'agent-view-probe', version: '0.0.0' } }),
+      request('initialize', { clientInfo: { name: CLIENT_NAME, version: '0.0.0' } }),
       Bun.sleep(10_000).then(() => null),
     ])
-    out.initialize = init ? { ok: !init.error, resultShape: shape(init.result), error: init.error ? shape(init.error) : undefined } : 'timeout'
+    const ua = typeof init?.result?.userAgent === 'string' ? init.result.userAgent : ''
+    out.initialize = init ? {
+      ok: !init.error, resultShape: shape(init.result), error: init.error ? shape(init.error) : undefined,
+      // Daemon-global state that initialize may set: the originator (first client wins) and the User-Agent suffix.
+      userAgentStartsWithProbeName: ua.startsWith(`${CLIENT_NAME}/`),
+      userAgentHasProbeSuffix: ua.includes(`(${CLIENT_NAME}; `),
+    } : 'timeout'
     if (!init || init.error) throw new Error('initialize failed')
     note('initialized')
     // RTT sampling with the one read-only request, to compare transports
@@ -360,6 +377,7 @@ async function main() {
         statusAfterWindow: afterWindow ? statusOf(afterWindow) : '<skipped>',
         resumeOk: !r.error,
         resumeErr: r.error ? shape(r.error) : undefined,
+        resumeErrTemplate: r.error ? errorTemplate(r.error.message) : undefined,
         resumeResultShape: shape({ ...res, thread: { ...(res?.thread ?? {}), turns: `<len:${turns.length}>` } }),
         turnsAtResume: turns.length,
         inProgressTurnsAtResume: turns.filter((t) => t?.status === 'inProgress').length,

@@ -131,7 +131,7 @@ Measured idle CPU (Apple M4 Max, 2026-11-17): the hub with its local collector o
 
 ## Known gaps
 
-- The Codex daemon source is skipped. The M0 spike found no loaded Codex thread, so attaching could not be proven free of side effects. Codex uses its session logs only. Nested Codex commands have no start events and no live output. They show as short bars that end when the log records them.
+- The Codex daemon source is skipped. Attaching to the shared Codex app-server daemon is not free of side effects: its `initialize` call sets the daemon-wide originator and User-Agent suffix (see `docs/superpowers/spikes/2026-11-17-m0-results.md`). The daemon also hosts only terminal `codex` sessions; the Codex desktop app and VS Code run their own app-servers. Codex uses its session logs only. Nested Codex commands have no start events and no live output. They show as short bars that end when the log records them.
 - File watching can miss writes in the first moments after a watch root starts.
 - The Codex `exec` wrapper shows as `other`. The commands it runs arrive as their own command items.
 - Claude Code command output does not stream. It appears when the tool result is written.
