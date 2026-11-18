@@ -251,3 +251,21 @@ test('prune sweeps an empty project node', () => {
   expect(m.find('h', '/p')).toBeUndefined();
   expect(m.hosts()[0]!.children).toEqual([]);
 });
+
+test('prune returns each removed node once', () => {
+  const m = new TreeModel();
+  m.touch(conf('/p/a/x.ts'));
+  m.touch(conf('/p/a/y.ts'));
+  const out = m.prune(T0 + 1_800_000);
+  expect(new Set(out).size).toBe(out.length);
+  expect(out.map((n) => n.id).sort()).toEqual(['h|/p', 'h|/p/a', 'h|/p/a/x.ts', 'h|/p/a/y.ts']);
+
+  const m2 = new TreeModel();
+  m2.touch(unat('/p/f.ts'));
+  m2.touch(unat('/p/g.ts'));
+  m2.touch(conf('/p/f.ts', { atMs: T0 + 1 })); // moves f.ts; `other/p` keeps g.ts
+  m2.touch(conf('/p/g.ts', { atMs: T0 + 1 })); // moves g.ts; `other/p` and `other` are queued
+  const out2 = m2.prune(T0 + 1_800_001 + 1);
+  expect(new Set(out2).size).toBe(out2.length);
+  expect(out2.map((n) => n.id).sort()).toEqual(['h|/p', 'h|/p/f.ts', 'h|/p/g.ts', 'h|<other>', 'h|<other>/p']);
+});

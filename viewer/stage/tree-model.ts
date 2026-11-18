@@ -102,7 +102,7 @@ export class TreeModel {
     for (const n of this.nodes.values()) {
       if (n.kind === 'file' && now - n.lastTouchAt >= this.fileTtlMs) removed.push(n);
     }
-    const parents = removed.map((n) => n.parent);
+    const parents = new Set(removed.map((n) => n.parent));
     for (const n of removed) this.detach(n);
     for (const p of parents) this.cleanupEmpty(p);
     for (const n of [...this.nodes.values()]) {
@@ -235,7 +235,7 @@ export class TreeModel {
 
   /** Remove `n` and then each ancestor left without children. The host stays. */
   private cleanupEmpty(n: TreeNode | null): void {
-    while (n && n.kind !== 'host' && n.kind !== 'file' && n.children.length === 0) {
+    while (n && n.kind !== 'host' && n.kind !== 'file' && n.children.length === 0 && this.nodes.get(n.id) === n) {
       const up: TreeNode | null = n.parent;
       this.detach(n);
       this.queued.push(n);
