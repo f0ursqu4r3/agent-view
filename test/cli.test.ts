@@ -122,11 +122,23 @@ test('hub mode prints the URL, serves /api/snapshot with the local host up, and 
   expect(await proc.exited).toBe(0);
 }, 30_000);
 
-test('hub mode: --remote prints one line on stderr and is otherwise ignored', async () => {
-  const { proc, url } = await startHub(['--demo', '--remote', 'box1', '--remote', 'box2']);
-  expect(url).toBeDefined();
-  proc.kill('SIGINT');
+test('hub mode: --remote adds one remote host per flag; an unreachable remote never stops the hub', async () => {
+  const { proc, url } = await startHub(['--demo', '--remote', 'box1.invalid', '--remote', 'box1.invalid']);
+  try {
+    let body: { hosts: { label: string; kind: string; state: string }[] } | undefined;
+    for (let i = 0; i < 50; i++) {
+      body = await (await fetch(url + '/api/snapshot')).json() as typeof body;
+      if (body!.hosts[0]?.state === 'up') break;
+      await Bun.sleep(100);
+    }
+    expect(body!.hosts.map((h) => [h.label, h.kind])).toEqual([
+      [os.hostname().split('.')[0], 'local'], ['box1.invalid', 'remote'], ['box1.invalid#2', 'remote'],
+    ]);
+    expect(body!.hosts[0]!.state).toBe('up');
+  } finally {
+    proc.kill('SIGINT');
+  }
   expect(await proc.exited).toBe(0);
   const err = await new Response(proc.stderr).text();
-  expect(err.trim().split('\n')).toEqual(['agent-view: remote collectors arrive in a later version']);
+  expect(err).not.toContain('later version');
 }, 30_000);

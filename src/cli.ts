@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Collector } from './collector/collector';
 import { Hub, LocalSource } from './hub/hub';
+import { RemoteCollector } from './hub/remote';
 import { startServer } from './hub/server';
 import { encodeLine } from './shared/ndjson';
 
@@ -125,7 +126,6 @@ function openBrowser(url: string): void {
 
 /** Runs the hub: the local collector in-process, the HTTP and WebSocket server, and the browser. */
 async function runHub(args: CliArgs): Promise<void> {
-  if (args.remotes.length > 0) process.stderr.write('agent-view: remote collectors arrive in a later version\n');
   const hub = new Hub({ lifecycle: { lingerMs: args.lingerMs } });
   const label = hub.uniqueLabel(os.hostname().split('.')[0] || 'local');
   const collector = new Collector({
@@ -137,6 +137,8 @@ async function runHub(args: CliArgs): Promise<void> {
   });
   const local = new LocalSource(collector, label);
   hub.addSource(local);
+  const remotes = args.remotes.map((sshHost) => new RemoteCollector({ sshHost, label: hub.uniqueLabel(sshHost) }));
+  for (const remote of remotes) hub.addSource(remote);
   let server: ReturnType<typeof startServer>;
   try {
     server = startServer({ hub, port: args.port });
@@ -155,6 +157,8 @@ async function runHub(args: CliArgs): Promise<void> {
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
   process.stdout.write(`Agent View: ${server.url}\n`);
   if (args.open) openBrowser(server.url);
+  // A remote that fails to connect only shows as `down`. It never stops the hub or the local collector.
+  for (const remote of remotes) remote.start().catch((e) => process.stderr.write(`agent-view: remote ${remote.label} failed: ${(e as Error).message}\n`));
   try {
     await local.start();
   } catch (e) {
