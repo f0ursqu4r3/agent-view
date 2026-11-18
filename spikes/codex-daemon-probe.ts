@@ -1,19 +1,58 @@
 // Throwaway spike: attach to the Codex app-server daemon through `codex app-server proxy`.
 // SAFETY: only sends initialize, initialized, thread/loaded/list, thread/read (metadata only),
-// thread/resume {threadId}, thread/unsubscribe. Never prints or saves strings: shapes only.
+// thread/resume {threadId}, thread/unsubscribe. Never prints or saves strings: shapes, booleans, counts and hashes only.
 // FINDING: the control socket speaks WebSocket (101 Switching Protocols); `codex app-server proxy` passes raw
 // bytes, so the client must do the WebSocket handshake and framing itself. Not newline-delimited JSON.
 // TRANSPORT=proxy (default) spawns `codex app-server proxy`; TRANSPORT=socket connects to the unix socket directly.
 // OPT-IN: the probe sends thread/resume to the owner's loaded threads. It runs only with AGENT_VIEW_PROBE_RESUME=1,
 // after the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run") are met.
+//
+// Preconditions met in this file:
+// m1  model and reasoning effort are printed only as "unchanged" booleans and hashed fingerprints.
+// m2  every turn/started is kept with its time after the resume and whether the resume result already listed the turn.
+//     A turn the resume did not list, on a resumed thread, inside TURN_WINDOW_MS after the resume, counts as suspect.
+// m3  the settings fingerprint of the thread/resume result includes the approval policy and the sandbox; the resume
+//     result is compared with thread/read; thread/settings/updated payloads are compared with the resume result.
+// m4  checkOutgoing() refuses any method outside the allow-list, any thread call whose params are not exactly
+//     {threadId}, and any threadId that is not in the first thread/loaded/list reply. It also refuses every message
+//     without a method, so the probe can never answer a server request.
+// m6  the run is short (PROBE_MS, default 45 s), a warning goes to stderr first, and the probe stops listening and
+//     unsubscribes at the first server request (for example an approval prompt), so it never holds one open for long.
 import { createHash, randomBytes } from 'node:crypto'
+
 const TRANSPORT = (process.env.TRANSPORT ?? 'proxy') as 'proxy' | 'socket'
 const RTT_SAMPLES = Number(process.env.RTT_SAMPLES ?? 40)
-
-const DURATION_MS = Number(process.env.PROBE_MS ?? 120_000)
+const DURATION_MS = Number(process.env.PROBE_MS ?? 45_000)
+const TURN_WINDOW_MS = Number(process.env.TURN_WINDOW_MS ?? 10_000)
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? 10_000)
 const RESUME_OPT_IN = process.env.AGENT_VIEW_PROBE_RESUME === '1'
-const ALLOWED = new Set(['initialize', 'initialized', 'thread/loaded/list', 'thread/read', 'thread/resume', 'thread/unsubscribe'])
-const SHAPE_METHODS = ['item/started', 'item/completed', 'item/commandExecution/outputDelta', 'thread/started']
+
+export const ALLOWED: ReadonlySet<string> = new Set(['initialize', 'initialized', 'thread/loaded/list', 'thread/read', 'thread/resume', 'thread/unsubscribe'])
+
+/** m4: the one gate for every outgoing message. Throws instead of sending anything outside the read-only rules. */
+export function checkOutgoing(msg: { method?: unknown; params?: unknown }, ctx: { loaded: ReadonlySet<string>; resumeOptIn: boolean }): void {
+  const method = msg.method
+  if (typeof method !== 'string' || !ALLOWED.has(method)) throw new Error(`refusing to send ${typeof method === 'string' ? method : '<no method>'}`)
+  const p = msg.params
+  const keys = p !== null && typeof p === 'object' && !Array.isArray(p) ? Object.keys(p) : null
+  switch (method) {
+    case 'initialize':
+      if (!keys || keys.length !== 1 || keys[0] !== 'clientInfo') throw new Error('refusing initialize: params must be exactly {clientInfo}')
+      return
+    case 'initialized':
+      if (p !== undefined) throw new Error('refusing initialized: it takes no params')
+      return
+    case 'thread/loaded/list':
+      if (!keys || keys.length !== 0) throw new Error('refusing thread/loaded/list: params must be {}')
+      return
+    default: {
+      if (method === 'thread/resume' && !ctx.resumeOptIn) throw new Error('refusing to send thread/resume without AGENT_VIEW_PROBE_RESUME=1')
+      if (!keys || keys.length !== 1 || keys[0] !== 'threadId') throw new Error(`refusing ${method}: params must be exactly {threadId}`)
+      const id = (p as { threadId: unknown }).threadId
+      if (typeof id !== 'string' || !ctx.loaded.has(id)) throw new Error(`refusing ${method}: the thread is not in thread/loaded/list`)
+    }
+  }
+}
 
 function shape(v: unknown, depth = 0): unknown {
   if (typeof v === 'string') return `<str:${v.length}>`
@@ -28,6 +67,15 @@ function shape(v: unknown, depth = 0): unknown {
     return o
   }
   return `<${typeof v}>`
+}
+const hash = (v: unknown, n = 12) => createHash('sha256').update(JSON.stringify(v) ?? 'undefined').digest('hex').slice(0, n)
+/** Protocol enum values only (for example `idle`, `commandExecution`); anything else becomes `<other>`. */
+const enumOf = (v: unknown) => (typeof v === 'string' && /^[A-Za-z][A-Za-z_]{0,30}$/.test(v) ? v : typeof v === 'string' ? '<other>' : `<${v === null ? 'null' : typeof v}>`)
+const SOURCE_KINDS = new Set(['cli', 'vscode', 'exec', 'appServer', 'unknown'])
+function sourceKind(s: unknown): string {
+  if (typeof s === 'string') return SOURCE_KINDS.has(s) ? s : '<other>'
+  if (s && typeof s === 'object') return `{${Object.keys(s).filter((k) => /^[A-Za-z_]{1,20}$/.test(k)).join(',')}}`
+  return `<${s === null ? 'null' : typeof s}>`
 }
 
 const enc = new TextEncoder()
@@ -115,20 +163,32 @@ let nextId = 1
 const pending = new Map<number, { method: string; sent: number; resolve: (m: any) => void }>()
 const counts: Record<string, number> = {}
 const shapes: Record<string, unknown[]> = {}
-const latencies: number[] = []
+const latencies = { itemStarted: [] as number[], itemCompleted: [] as number[] }
 const rtts: Record<string, number[]> = {}
+const loaded = new Set<string>() // m4: filled once, from the first thread/loaded/list reply
 const resumed: string[] = []
 const loadedAtResume = new Set<string>()
-const flags = { turnStartedNotFromProbe: 0, settingsUpdated: 0, threadStarted: 0, serverRequests: 0 }
+type ThreadInfo = { label: string; resumeSentAt?: number; knownTurns: Set<string>; statusBefore: string; resumeFp?: string }
+const threads = new Map<string, ThreadInfo>()
+const turnEvents: { event: 'started' | 'completed'; threadId: unknown; turnId: unknown; at: number }[] = []
+const settingsUpdates: { threadId: unknown; fp: string; at: number }[] = []
+const threadStarted: { sourceKind: string; wasLoaded: boolean; hasParent: boolean }[] = []
+const flags = { turnStartedSuspect: 0, turnStartedOther: 0, settingsUpdated: 0, threadStarted: 0, serverRequests: 0, stoppedEarly: false }
 let unsubscribed = false
+let stopEarly = false
+let wake: () => void = () => {}
+const labels = new Map<string, string>()
+const label = (id: unknown) => {
+  if (typeof id !== 'string') return '<none>'
+  let l = labels.get(id)
+  if (!l) { l = `T${labels.size + 1}`; labels.set(id, l) }
+  return l
+}
 
-function write(obj: any) {
-  const method: string = obj.method
-  if (!ALLOWED.has(method)) throw new Error(`refusing to send ${method}`)
-  if (method === 'thread/resume' && !RESUME_OPT_IN) throw new Error('refusing to send thread/resume without AGENT_VIEW_PROBE_RESUME=1')
+function write(obj: { jsonrpc: '2.0'; id?: number; method: string; params?: unknown }) {
+  checkOutgoing(obj, { loaded, resumeOptIn: RESUME_OPT_IN })
   sendJson(obj)
 }
-const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? 10_000)
 function request(method: string, params?: unknown): Promise<any> {
   const id = nextId++
   return new Promise((resolve, reject) => {
@@ -140,6 +200,12 @@ function request(method: string, params?: unknown): Promise<any> {
 }
 function note(method: string, params?: unknown) { write({ jsonrpc: '2.0', method, ...(params === undefined ? {} : { params }) }) }
 
+function keepShape(key: string, max: number, method: string, params: unknown) {
+  const list = (shapes[key] ??= [])
+  if (list.length < max) list.push({ method, params: shape(params) })
+}
+const bump = (k: string) => { counts[k] = (counts[k] ?? 0) + 1 }
+
 function handle(msg: any) {
   if (msg.id !== undefined && msg.method === undefined) {
     const p = pending.get(msg.id)
@@ -150,19 +216,45 @@ function handle(msg: any) {
     }
     return
   }
-  if (msg.method) {
-    if (msg.id !== undefined) { flags.serverRequests++; counts[`REQ:${msg.method}`] = (counts[`REQ:${msg.method}`] ?? 0) + 1; return } // never answered
-    counts[msg.method] = (counts[msg.method] ?? 0) + 1
-    const m: string = msg.method
-    if (m === 'thread/started') flags.threadStarted++
-    if (m === 'turn/started') flags.turnStartedNotFromProbe++
-    if (m === 'thread/settings/updated') flags.settingsUpdated++
-    if (m === 'item/started' && typeof msg.params?.startedAtMs === 'number') latencies.push(Date.now() - msg.params.startedAtMs)
-    if (SHAPE_METHODS.includes(m) || m.startsWith('turn/')) {
-      const key = m.startsWith('turn/') ? 'turn/*' : m
-      const list = (shapes[key] ??= [])
-      if (list.length < 3) list.push({ method: m, params: shape(msg.params) })
-    }
+  if (typeof msg.method !== 'string') return
+  const m: string = msg.method
+  if (msg.id !== undefined) {
+    // m6: a server request (for example an approval prompt). Never answered; stop listening and unsubscribe soon.
+    flags.serverRequests++
+    bump(`REQ:${m}`)
+    stopEarly = true
+    wake()
+    return
+  }
+  bump(m)
+  const params = msg.params ?? {}
+  if (m === 'thread/started') {
+    flags.threadStarted++
+    const t = params.thread
+    threadStarted.push({ sourceKind: sourceKind(t?.source), wasLoaded: loaded.has(t?.id), hasParent: typeof t?.parentThreadId === 'string' })
+    keepShape(m, 2, m, { ...params, thread: { ...(t ?? {}), turns: undefined } })
+    return
+  }
+  if (m === 'turn/started' || m === 'turn/completed') {
+    turnEvents.push({ event: m === 'turn/started' ? 'started' : 'completed', threadId: params.threadId, turnId: params.turn?.id, at: Date.now() })
+    keepShape('turn/*', 3, m, { ...params, turn: { ...(params.turn ?? {}), items: shape(params.turn?.items) } })
+    return
+  }
+  if (m === 'thread/settings/updated') {
+    flags.settingsUpdated++
+    settingsUpdates.push({ threadId: params.threadId, fp: settingsFp(params.threadSettings), at: Date.now() })
+    return
+  }
+  if (m === 'item/started' || m === 'item/completed') {
+    const type = enumOf(params.item?.type)
+    bump(`${m}:${type}`)
+    if (m === 'item/started' && typeof params.startedAtMs === 'number') latencies.itemStarted.push(Date.now() - params.startedAtMs)
+    if (m === 'item/completed' && typeof params.completedAtMs === 'number') latencies.itemCompleted.push(Date.now() - params.completedAtMs)
+    keepShape(`${m}:${type}`, 2, m, params)
+    return
+  }
+  if (m === 'item/commandExecution/outputDelta' || m === 'item/fileChange/patchUpdated' || m === 'thread/status/changed' || m === 'thread/closed' || m === 'thread/archived') {
+    keepShape(m, 2, m, params)
   }
 }
 
@@ -175,92 +267,151 @@ async function cleanup() {
   }
   try { duplex.send(frame(0x8, new Uint8Array([0x03, 0xe8]))) } catch {}
   await Bun.sleep(100)
-  duplex.close()
-}
-for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, async () => { await cleanup(); process.exit(130) })
-process.on('uncaughtException', async (e) => { console.log('ERROR', (e as Error).name); await cleanup(); process.exit(1) })
-
-// thread/read: reduce to booleans/short non-text settings fingerprint (never prints strings)
-function settingsFingerprint(resp: any) {
-  const t = resp?.result?.thread
-  if (!t) return null
-  const h = new Bun.CryptoHasher('sha256')
-  h.update(JSON.stringify([t.model, t.modelProvider, t.reasoningEffort, t.cwd, t.source, t.ephemeral, t.name, t.path]))
-  return { fp: h.digest('hex').slice(0, 12), status: t.status?.type ?? typeof t.status, model: t.model, reasoningEffort: t.reasoningEffort }
+  duplex?.close()
 }
 
-if (!RESUME_OPT_IN) {
-  console.log([
-    'codex-daemon-probe: not run. The probe sends thread/resume to loaded Codex threads, so it needs AGENT_VIEW_PROBE_RESUME=1.',
-    'Before you set it, meet the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run"),',
-    'and warn the owner of the loaded threads: the probe does not answer server requests, which can stall their turn.',
-  ].join('\n'))
-  process.exit(0)
-}
+// m1 + m3: fingerprints. Strings never leave this process; only the 12-hex hash and booleans are printed.
+/** thread/read: the settings a Thread carries. Status is left out: it changes when the owner works. */
+const readFp = (t: any) => (t ? hash([t.model, t.modelProvider, t.reasoningEffort, t.cwd, t.ephemeral, t.name, t.path, t.source, t.parentThreadId, t.forkedFromId]) : null)
+/** thread/resume result and thread/settings/updated payload: same field order, so the two hashes compare. Includes approval policy and sandbox. */
+const resumeFp = (r: any) => (r ? hash([r.model, r.modelProvider, r.serviceTier, r.cwd, r.approvalPolicy, r.approvalsReviewer, r.sandbox, r.reasoningEffort, r.collaborationMode]) : '<none>')
+const settingsFp = (s: any) => (s ? hash([s.model, s.modelProvider, s.serviceTier, s.cwd, s.approvalPolicy, s.approvalsReviewer, s.sandboxPolicy, s.effort, s.collaborationMode]) : '<none>')
+const statusOf = (t: any) => enumOf(t?.status?.type)
 
-const out: any = { startedAt: new Date().toISOString(), durationMs: DURATION_MS }
-try {
-  await connect()
-  const init = await Promise.race([
-    request('initialize', { clientInfo: { name: 'agent-view-probe', version: '0.0.0' } }),
-    Bun.sleep(10_000).then(() => null),
-  ])
-  out.initialize = init ? { ok: !init.error, resultShape: shape(init.result), error: init.error ? shape(init.error) : undefined } : 'timeout'
-  if (!init || init.error) throw new Error('initialize failed')
-  note('initialized')
-  // RTT sampling with the one read-only request, to compare transports
-  const rttList: number[] = []
-  for (let i = 0; i < RTT_SAMPLES; i++) { const t = performance.now(); await request('thread/loaded/list', {}); rttList.push(performance.now() - t) }
-  out.transport = TRANSPORT
-  out.rttSamples = (() => { const q = [...rttList].sort((a, b) => a - b); return { n: q.length, minMs: +q[0].toFixed(3), p50Ms: +q[Math.floor(q.length / 2)].toFixed(3), p95Ms: +q[Math.floor(q.length * 0.95)].toFixed(3), maxMs: +q[q.length - 1].toFixed(3) } })()
-  rtts['thread/loaded/list'] = []
-  const list = await request('thread/loaded/list', {})
-  const ids: string[] = list.result?.data ?? []
-  out.loadedCount = ids.length
-  out.loadedListShape = shape(list.result)
-  out.loadedListRttMs = rtts['thread/loaded/list']?.[0]
-  const before: Record<string, any> = {}
-  const after: Record<string, any> = {}
-  out.threads = []
-  for (const id of ids) {
-    loadedAtResume.add(id)
-    before[id] = settingsFingerprint(await request('thread/read', { threadId: id }))
-    resumed.push(id) // before sending: cleanup must unsubscribe even if the reply never arrives
-    const r = await request('thread/resume', { threadId: id })
-    after[id] = settingsFingerprint(await request('thread/read', { threadId: id }))
-    out.threads.push({
-      resumeOk: !r.error,
-      resumeErr: r.error ? shape(r.error) : undefined,
-      resumeResultShape: shape({ ...r.result, thread: { ...(r.result?.thread ?? {}), turns: undefined } }),
-      settingsBeforeEqualsAfter: !!before[id] && !!after[id] && before[id].fp === after[id].fp,
-      before: before[id] && { status: before[id].status, model: before[id].model, reasoningEffort: before[id].reasoningEffort },
-      after: after[id] && { status: after[id].status, model: after[id].model, reasoningEffort: after[id].reasoningEffort },
-    })
-  }
-  const t0 = performance.now()
-  await Bun.sleep(ids.length ? DURATION_MS : Math.min(DURATION_MS, 20_000))
-  out.listenedMs = Math.round(performance.now() - t0)
-  // re-list once to see whether new threads appeared (visibility)
-  const list2 = await request('thread/loaded/list', {})
-  const ids2: string[] = list2.result?.data ?? []
-  out.loadedCountAfter = ids2.length
-  out.newLoadedSinceStart = ids2.filter((i) => !loadedAtResume.has(i)).length
-} catch (e) {
-  out.error = (e as Error).message
-} finally {
-  await cleanup()
-}
-out.counts = counts
-out.flags = flags
-out.shapes = shapes
 const stats = (a: number[]) => {
   if (!a.length) return null
   const s = [...a].sort((x, y) => x - y)
   const q = (p: number) => s[Math.min(s.length - 1, Math.floor(p * s.length))]
   return { n: s.length, minMs: s[0], p50Ms: q(0.5), p95Ms: q(0.95), maxMs: s[s.length - 1] }
 }
-out.itemStartedLatency = stats(latencies)
-out.rttMs = Object.fromEntries(Object.entries(rtts).map(([k, v]) => [k, stats(v)]))
-out.proxyStderrBytes = duplex?.stderrBytes?.() ?? 0
-console.log(JSON.stringify(out, null, 2))
-process.exit(0)
+
+async function main() {
+  if (!RESUME_OPT_IN) {
+    console.log([
+      'codex-daemon-probe: not run. The probe sends thread/resume to loaded Codex threads, so it needs AGENT_VIEW_PROBE_RESUME=1.',
+      'Before you set it, meet the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run"),',
+      'and warn the owner of the loaded threads: the probe does not answer server requests, which can stall their turn.',
+    ].join('\n'))
+    process.exit(0)
+  }
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, async () => { await cleanup(); process.exit(130) })
+  process.on('uncaughtException', async (e) => { console.log('ERROR', (e as Error).name); await cleanup(); process.exit(1) })
+  process.on('unhandledRejection', async (e) => { console.log('ERROR', (e as Error)?.name); await cleanup(); process.exit(1) })
+  process.stderr.write(`codex-daemon-probe: resumes every loaded Codex thread for up to ${Math.round(DURATION_MS / 1000)} s. ` +
+    'It never answers approval prompts; at the first one it stops and unsubscribes. Do not start a new turn in the first ' +
+    `${Math.round(TURN_WINDOW_MS / 1000)} s.\n`)
+
+  const out: any = { startedAt: new Date().toISOString(), durationMs: DURATION_MS, turnWindowMs: TURN_WINDOW_MS }
+  try {
+    await connect()
+    const init = await Promise.race([
+      request('initialize', { clientInfo: { name: 'agent-view-probe', version: '0.0.0' } }),
+      Bun.sleep(10_000).then(() => null),
+    ])
+    out.initialize = init ? { ok: !init.error, resultShape: shape(init.result), error: init.error ? shape(init.error) : undefined } : 'timeout'
+    if (!init || init.error) throw new Error('initialize failed')
+    note('initialized')
+    // RTT sampling with the one read-only request, to compare transports
+    const rttList: number[] = []
+    for (let i = 0; i < RTT_SAMPLES; i++) { const t = performance.now(); await request('thread/loaded/list', {}); rttList.push(performance.now() - t) }
+    out.transport = TRANSPORT
+    out.rttSamples = (() => { const q = [...rttList].sort((a, b) => a - b); return { n: q.length, minMs: +q[0].toFixed(3), p50Ms: +q[Math.floor(q.length / 2)].toFixed(3), p95Ms: +q[Math.floor(q.length * 0.95)].toFixed(3), maxMs: +q[q.length - 1].toFixed(3) } })()
+    rtts['thread/loaded/list'] = []
+    const list = await request('thread/loaded/list', {})
+    const ids: string[] = (list.result?.data ?? []).filter((x: unknown): x is string => typeof x === 'string')
+    for (const id of ids) loaded.add(id)
+    out.loadedCount = ids.length
+    out.loadedListShape = shape(list.result)
+    out.loadedListRttMs = rtts['thread/loaded/list']?.[0]
+    const perThread: any[] = (out.threads = [])
+    const reads = new Map<string, { before: any; afterResume: any; resume: any }>()
+    for (const id of ids) {
+      if (stopEarly) break
+      const info: ThreadInfo = { label: label(id), knownTurns: new Set(), statusBefore: '<unknown>' }
+      threads.set(id, info)
+      loadedAtResume.add(id)
+      const before = (await request('thread/read', { threadId: id })).result?.thread
+      info.statusBefore = statusOf(before)
+      resumed.push(id) // before sending: cleanup must unsubscribe even if the reply never arrives
+      info.resumeSentAt = Date.now()
+      const r = await request('thread/resume', { threadId: id })
+      for (const t of r.result?.thread?.turns ?? []) if (typeof t?.id === 'string') info.knownTurns.add(t.id)
+      info.resumeFp = resumeFp(r.result)
+      const afterResume = (await request('thread/read', { threadId: id })).result?.thread
+      reads.set(id, { before, afterResume, resume: r })
+    }
+    const t0 = performance.now()
+    if (!stopEarly) await Promise.race([Bun.sleep(ids.length ? DURATION_MS : Math.min(DURATION_MS, 20_000)), new Promise<void>((res) => { wake = res })])
+    out.listenedMs = Math.round(performance.now() - t0)
+    for (const id of ids) {
+      const rd = reads.get(id)
+      if (!rd) continue
+      const info = threads.get(id)!
+      const afterWindow = stopEarly ? undefined : (await request('thread/read', { threadId: id })).result?.thread
+      const { before, afterResume, resume: r } = rd
+      const res = r.result
+      const turns: any[] = res?.thread?.turns ?? []
+      perThread.push({
+        thread: info.label,
+        sourceKind: sourceKind(before?.source),
+        isSubAgent: typeof before?.parentThreadId === 'string',
+        statusBefore: info.statusBefore,
+        statusAfterResume: statusOf(afterResume),
+        statusAfterWindow: afterWindow ? statusOf(afterWindow) : '<skipped>',
+        resumeOk: !r.error,
+        resumeErr: r.error ? shape(r.error) : undefined,
+        resumeResultShape: shape({ ...res, thread: { ...(res?.thread ?? {}), turns: `<len:${turns.length}>` } }),
+        turnsAtResume: turns.length,
+        inProgressTurnsAtResume: turns.filter((t) => t?.status === 'inProgress').length,
+        // m1: booleans, never the values
+        modelUnchanged: !!before && !!afterResume && before.model === afterResume.model,
+        reasoningEffortUnchanged: !!before && !!afterResume && before.reasoningEffort === afterResume.reasoningEffort,
+        readSettingsUnchangedAfterResume: !!before && readFp(before) === readFp(afterResume),
+        readSettingsUnchangedAfterWindow: afterWindow ? readFp(before) === readFp(afterWindow) : null,
+        // m3: the resume result carries approval policy and sandbox; it must agree with thread/read on the shared fields
+        resumeHasApprovalPolicy: res?.approvalPolicy !== undefined,
+        resumeHasSandbox: res?.sandbox !== undefined,
+        resumeAgreesWithRead: !!before && !!res && res.model === before.model && res.modelProvider === before.modelProvider &&
+          (res.reasoningEffort ?? null) === (before.reasoningEffort ?? null) && res.cwd === before.cwd,
+        resumeSettingsFp: info.resumeFp,
+      })
+    }
+    // re-list once to see whether new threads appeared (visibility)
+    if (!stopEarly) {
+      const list2 = await request('thread/loaded/list', {})
+      const ids2: string[] = list2.result?.data ?? []
+      out.loadedCountAfter = ids2.length
+      out.newLoadedSinceStart = ids2.filter((i) => !loaded.has(i)).length
+    }
+  } catch (e) {
+    out.error = (e as Error).message
+  } finally {
+    await cleanup()
+  }
+  flags.stoppedEarly = stopEarly
+  // m2: attribute each turn event after the fact, so a notification that raced the resume reply is still matched.
+  out.turns = turnEvents.slice(0, 50).map((ev) => {
+    const info = typeof ev.threadId === 'string' ? threads.get(ev.threadId) : undefined
+    const msAfterResume = info?.resumeSentAt !== undefined ? ev.at - info.resumeSentAt : null
+    const knownAtResume = !!info && typeof ev.turnId === 'string' && info.knownTurns.has(ev.turnId)
+    const suspect = ev.event === 'started' && !!info && !knownAtResume && msAfterResume !== null && msAfterResume >= 0 && msAfterResume <= TURN_WINDOW_MS
+    return { event: ev.event, thread: label(ev.threadId), turn: typeof ev.turnId === 'string' ? hash(ev.turnId, 8) : '<none>', msAfterResume, knownAtResume, threadStatusBeforeResume: info?.statusBefore ?? null, suspect }
+  })
+  for (const t of out.turns) if (t.event === 'started') t.suspect ? flags.turnStartedSuspect++ : flags.turnStartedOther++
+  out.settingsUpdates = settingsUpdates.map((u) => {
+    const info = typeof u.threadId === 'string' ? threads.get(u.threadId) : undefined
+    return { thread: label(u.threadId), msAfterResume: info?.resumeSentAt !== undefined ? u.at - info.resumeSentAt : null, matchesResumeSettings: !!info && u.fp === info.resumeFp }
+  })
+  out.threadStarted = threadStarted
+  out.counts = counts
+  out.flags = flags
+  out.shapes = shapes
+  out.itemStartedLatency = stats(latencies.itemStarted)
+  out.itemCompletedLatency = stats(latencies.itemCompleted)
+  out.rttMs = Object.fromEntries(Object.entries(rtts).map(([k, v]) => [k, stats(v)]))
+  out.proxyStderrBytes = duplex?.stderrBytes?.() ?? 0
+  console.log(JSON.stringify(out, null, 2))
+  process.exit(0)
+}
+
+if (import.meta.main) await main()
