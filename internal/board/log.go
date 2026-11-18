@@ -51,6 +51,14 @@ type LogLine struct {
 	DurMs          int64
 	Dim            bool
 	short          string // Target without the folder, used when Target does not fit
+	fs             fsKey  // the touch group of an FS line
+	fsN            int    // the touches of an FS line; 0 for other lines
+}
+
+// fsKey names one group of unattributed touches.
+type fsKey struct {
+	host, folder string
+	bucket       int64
 }
 
 // Log is the event log: a ring of the last 500 lines.
@@ -185,24 +193,21 @@ func (l *Log) Host(atMs int64, host, msg string) {
 }
 
 // AddTouches adds one dim FS line per group of touches. A group is the touches
-// of one host and folder in the same 2-second bucket of time. A touch more than
-// 10 s older than now is history and is skipped.
+// of one host and folder in the same 2-second bucket of time. A group that
+// already has a line, because an earlier call released part of it, adds to
+// that line. A touch more than 10 s older than now is history and is skipped.
 func (l *Log) AddTouches(t []store.Touch, now int64) {
-	type key struct {
-		host, folder string
-		bucket       int64
-	}
 	type group struct {
 		n  int
 		at int64
 	}
-	var order []key
-	groups := map[key]*group{}
+	var order []fsKey
+	groups := map[fsKey]*group{}
 	for _, tc := range t {
 		if now-tc.AtMs > historyMs {
 			continue
 		}
-		k := key{tc.Host, path.Dir(tc.Path), tc.AtMs / touchBucketMs}
+		k := fsKey{tc.Host, path.Dir(tc.Path), tc.AtMs / touchBucketMs}
 		g := groups[k]
 		if g == nil {
 			g = &group{}
@@ -214,15 +219,37 @@ func (l *Log) AddTouches(t []store.Touch, now int64) {
 	}
 	for _, k := range order {
 		g := groups[k]
-		folder := text.Clean(k.folder)
-		if !strings.HasSuffix(folder, "/") {
-			folder += "/"
+		if i := l.fsLine(k); i >= 0 {
+			ln := &l.lines[i]
+			ln.fsN += g.n
+			ln.AtMs = max(ln.AtMs, g.at)
+			ln.Target = fsTarget(ln.fsN, k.folder)
+			continue
 		}
 		l.Add(LogLine{
 			AtMs: g.at, Label: "FS", LabelRole: cells.RDim, Dim: true,
-			Target: fmt.Sprintf("%d change(s) in %s", g.n, folder),
+			Target: fsTarget(g.n, k.folder), fs: k, fsN: g.n,
 		})
 	}
+}
+
+// fsLine returns the index of the FS line of a group, or -1.
+func (l *Log) fsLine(k fsKey) int {
+	for i := len(l.lines) - 1; i >= 0; i-- {
+		if l.lines[i].fsN > 0 && l.lines[i].fs == k {
+			return i
+		}
+	}
+	return -1
+}
+
+// fsTarget returns the text of an FS line.
+func fsTarget(n int, folder string) string {
+	folder = text.Clean(folder)
+	if !strings.HasSuffix(folder, "/") {
+		folder += "/"
+	}
+	return fmt.Sprintf("%d change(s) in %s", n, folder)
 }
 
 // Render draws the log box, exactly w by h cells: a border with the title,

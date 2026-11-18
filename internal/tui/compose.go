@@ -73,12 +73,8 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 	paused := in.UI.Paused || in.Status.Paused
 	drawStatus(g, in.Status, paused)
 
-	lh := logH
-	if in.UI.TallLog {
-		lh = g.H / 2
-	}
-	bh := g.H - boardTop - lh - 1
-	b, hits := drawBoard(in, g.W, bh)
+	lh := logHeight(g.H, in.UI.TallLog)
+	b, hits := drawBoard(in, g.W, boardHeight(g.H, in.UI.TallLog))
 	g.Blit(b, 0, boardTop)
 	for i := range hits {
 		hits[i].Y += boardTop
@@ -91,11 +87,35 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 	g.Blit(log.Render(g.W-2*marginX, lh, in.UI.Focus), marginX, g.H-1-lh)
 	drawKeys(g, g.H-1, paused)
 
-	if p := panel(in, g.W, g.H); p != nil {
-		g.Blit(p, (g.W-p.W)/2, (g.H-p.H)/2)
+	if drawPanel(g, in) {
 		hits = nil
 	}
 	return g, hits
+}
+
+// logHeight returns the height of the log box on a screen h lines high.
+func logHeight(h int, tall bool) int {
+	if tall {
+		return h / 2
+	}
+	return logH
+}
+
+// boardHeight returns the height of the board on a screen h lines high:
+// what the status bar, the log, and the key bar leave.
+func boardHeight(h int, tallLog bool) int {
+	return h - boardTop - logHeight(h, tallLog) - 1
+}
+
+// drawPanel draws the open panel in the middle of g and reports whether a
+// panel is open.
+func drawPanel(g *cells.Grid, in Input) bool {
+	p := panel(in, g.W, g.H)
+	if p == nil {
+		return false
+	}
+	g.Blit(p, (g.W-p.W)/2, (g.H-p.H)/2)
+	return true
 }
 
 // tooSmall draws the screen for a terminal below the minimum size.

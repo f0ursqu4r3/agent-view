@@ -1,0 +1,312 @@
+package tui
+
+import (
+	"slices"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"agent-view/internal/anim"
+	"agent-view/internal/board"
+	"agent-view/internal/cells"
+	"agent-view/internal/feed"
+	"agent-view/internal/store"
+	"agent-view/internal/text"
+)
+
+// Ticks and limits of the model.
+const (
+	frameEvery = 50 * time.Millisecond  // animation frames, while something animates
+	spinEvery  = 125 * time.Millisecond // spinner and elapsed bar, while a call is open
+	clockEvery = time.Second            // status clock, touches, host summaries
+
+	diagCap   = 200    // diagnostics lines kept
+	rateMs    = 60_000 // the window of calls per minute
+	summaryMs = 3_000  // a host's summary goes out this long after its hello
+)
+
+// The tick messages. Each tick re-arms itself only while its condition
+// holds; an event batch, a key, or a resize starts a stopped tick again.
+type (
+	frameMsg struct{}
+	spinMsg  struct{}
+	clockMsg struct{}
+)
+
+// Config configures a Model. Now nil uses the wall clock. LingerMs is the
+// window of the faults count; zero or less takes the lifecycle default.
+type Config struct {
+	Store    *store.Store
+	Reduced  bool
+	Now      func() time.Time
+	LingerMs int64
+}
+
+// Model is the Bubble Tea model of the TUI. It owns the store, the animation
+// engine, the event log, and the interface state.
+//
+// Update composes the frame after each change, so the engine has seen every
+// row before the model decides whether frames go on; View returns that frame.
+// While paused, the board is a frozen frame with a live status bar; a key
+// that changes the board (selection, focus, log size) or a resize draws it
+// again from the store.
+type Model struct {
+	store  *store.Store
+	anim   *anim.Engine
+	log    *board.Log
+	now    func() time.Time
+	linger int64
+
+	ui   board.UI
+	w, h int
+	spin int
+
+	frameOn, spinOn, clockOn bool // a tick of that kind is on its way
+
+	// Collector state: feedState applies to every host without its own state.
+	feedState string
+	hostState map[string]string
+	hosts     map[string]*hostInfo
+	known     map[string]bool // agents that may have animation state
+	starts    []int64         // arrival times of live call starts
+	fails     []int64         // arrival times of live failed ends
+	diag      []string
+	panics    int // store panics already reported
+
+	content    string // the last frame, encoded
+	hits       []Hit  // the agent cards of the last frame
+	frozen     *cells.Grid
+	frozenHits []Hit
+	thaw       bool // draw the frozen board again
+}
+
+var _ tea.Model = (*Model)(nil)
+
+// hostInfo is what the model tracks for one host.
+type hostInfo struct {
+	helloMs    int64 // arrival of the first hello; 0 for none
+	summarized bool  // the "loaded" line went out
+	due        bool  // the summary waits for the pause to end
+	degraded   int   // the degraded sources last logged
+}
+
+// NewModel returns a model on the store. The status shows the collector as
+// connecting until the first StateMsg.
+func NewModel(c Config) *Model {
+	now := c.Now
+	if now == nil {
+		now = time.Now
+	}
+	linger := c.LingerMs
+	if linger <= 0 {
+		linger = store.DefaultLingerMs
+	}
+	s := c.Store
+	if s == nil {
+		s = store.New(store.Options{})
+	}
+	return &Model{
+		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger,
+		ui:        board.UI{Reduced: c.Reduced},
+		feedState: "connecting", hostState: map[string]string{},
+		hosts: map[string]*hostInfo{}, known: map[string]bool{},
+	}
+}
+
+// Init starts the clock tick.
+func (m *Model) Init() tea.Cmd { return m.arm() }
+
+// Update applies one message, composes the frame, and returns the ticks to
+// start.
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case feed.EnvelopesMsg:
+		m.applyBatch(msg)
+	case feed.StateMsg:
+		m.setState(msg)
+	case feed.DiagMsg:
+		m.addDiag(string(msg))
+	case frameMsg:
+		m.frameOn = false
+		if !m.ui.Paused {
+			m.anim.Step()
+		}
+	case spinMsg:
+		m.spinOn = false
+		m.spin++
+	case clockMsg:
+		m.clockOn = false
+		m.tick()
+	case tea.WindowSizeMsg:
+		m.w, m.h = max(msg.Width, 0), max(msg.Height, 0)
+		m.thaw = true
+		m.fixTop(m.nowMs())
+	case tea.KeyPressMsg:
+		cmd, ok := m.key(msg)
+		if !ok || cmd != nil {
+			return m, cmd
+		}
+	case tea.MouseClickMsg:
+		if !m.click(msg) {
+			return m, nil
+		}
+	default:
+		return m, nil
+	}
+	m.render()
+	return m, m.arm()
+}
+
+// View returns the last composed frame.
+func (m *Model) View() tea.View {
+	return tea.View{Content: m.content, AltScreen: true, MouseMode: tea.MouseModeCellMotion}
+}
+
+// Diagnostics returns the held diagnostics lines, oldest first: collector
+// stderr, collector failures, and dropped envelopes.
+func (m *Model) Diagnostics() []string { return slices.Clone(m.diag) }
+
+// arm returns the ticks that are needed and not on their way.
+func (m *Model) arm() tea.Cmd {
+	var cmds []tea.Cmd
+	if !m.clockOn {
+		m.clockOn = true
+		cmds = append(cmds, tea.Every(clockEvery, func(time.Time) tea.Msg { return clockMsg{} }))
+	}
+	if !m.frameOn && !m.ui.Paused && m.anim.Active() {
+		m.frameOn = true
+		cmds = append(cmds, tea.Tick(frameEvery, func(time.Time) tea.Msg { return frameMsg{} }))
+	}
+	if !m.spinOn && !m.ui.Paused && m.anyOpen(m.nowMs()) {
+		m.spinOn = true
+		cmds = append(cmds, tea.Tick(spinEvery, func(time.Time) tea.Msg { return spinMsg{} }))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) nowMs() int64 { return m.now().UnixMilli() }
+
+// anyOpen reports whether an agent on the board has an open call.
+func (m *Model) anyOpen(now int64) bool {
+	for _, id := range m.store.LaneOrder(now) {
+		if len(m.store.OpenCalls(id)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// tick runs the work of the clock: touches, host lines, agents that left,
+// and the scroll position.
+func (m *Model) tick() {
+	now := m.nowMs()
+	m.takeTouches(now)
+	m.checkHosts(now)
+	m.prune(now)
+	m.fixTop(now)
+}
+
+// render composes the frame. While paused, the board stays as it was and
+// only the status bar and the panel are drawn again.
+func (m *Model) render() {
+	now := m.nowMs()
+	in := Input{
+		Store: m.store, UI: m.ui, Anim: m.anim, Log: m.log, Status: m.status(now),
+		Now: now, Spin: m.spin, W: m.w, H: m.h, Diagnostics: m.diag,
+	}
+	if !m.ui.Paused || m.w < MinW || m.h < MinH {
+		var g *cells.Grid
+		g, m.hits = Compose(in)
+		m.frozen, m.frozenHits, m.thaw = nil, nil, false
+		m.content = cells.Encode(g)
+		return
+	}
+	if m.frozen == nil || m.thaw || m.frozen.W != m.w || m.frozen.H != m.h {
+		base := in
+		base.UI.Panel = board.PanelNone
+		m.frozen, m.frozenHits = Compose(base)
+		m.thaw = false
+	}
+	g := &cells.Grid{W: m.frozen.W, H: m.frozen.H, C: slices.Clone(m.frozen.C)}
+	g.Blit(cells.New(g.W, 1), 0, 0)
+	drawStatus(g, in.Status, true)
+	m.hits = m.frozenHits
+	if drawPanel(g, in) {
+		m.hits = nil
+	}
+	m.content = cells.Encode(g)
+}
+
+// status returns the values of the status bar.
+func (m *Model) status(now int64) Status {
+	st := Status{Hosts: m.segments(), Paused: m.ui.Paused, Clock: time.UnixMilli(now).Format("15:04:05")}
+	for _, a := range m.store.Agents(now) {
+		st.Agents++
+		if a.Status == "working" {
+			st.Working++
+		}
+	}
+	m.starts = dropBefore(m.starts, now-rateMs)
+	m.fails = dropBefore(m.fails, now-m.linger)
+	st.CallsPerMin, st.Faults = len(m.starts), len(m.fails)
+	return st
+}
+
+// dropBefore drops the leading times before cutoff from times in arrival
+// order.
+func dropBefore(times []int64, cutoff int64) []int64 {
+	i := 0
+	for i < len(times) && times[i] < cutoff {
+		i++
+	}
+	return times[i:]
+}
+
+// fixTop scrolls the board to keep the selection visible and clamps the top
+// line as the composer does, so it never runs past the end of the board.
+func (m *Model) fixTop(now int64) {
+	bh := boardHeight(m.h, m.ui.TallLog)
+	if m.w < MinW || m.h < MinH || bh <= 0 {
+		return
+	}
+	rows := board.Rows(m.store, m.ui, now)
+	m.ui.Top = board.Scroll(rows, bh, m.ui.Top, m.ui.Selected)
+	total := 0
+	for _, r := range rows {
+		total += r.H
+	}
+	m.ui.Top = min(max(m.ui.Top, 0), max(0, total-bh))
+}
+
+// prune forgets the agents that left the board, and clears the focus and
+// the selection when their agent left.
+func (m *Model) prune(now int64) {
+	order := m.store.LaneOrder(now)
+	present := make(map[string]bool, len(order))
+	for _, id := range order {
+		present[id] = true
+	}
+	for id := range m.known {
+		if !present[id] {
+			m.anim.Forget(id)
+			delete(m.known, id)
+		}
+	}
+	for _, id := range order {
+		m.known[id] = true
+	}
+	if !present[m.ui.Focus] {
+		m.ui.Focus = ""
+	}
+	if !present[m.ui.Selected] {
+		m.ui.Selected = ""
+	}
+}
+
+// addDiag adds a cleaned diagnostics line and drops the oldest beyond 200.
+func (m *Model) addDiag(s string) {
+	m.diag = append(m.diag, text.Clean(s))
+	if n := len(m.diag) - diagCap; n > 0 {
+		m.diag = append(m.diag[:0:0], m.diag[n:]...)
+	}
+}

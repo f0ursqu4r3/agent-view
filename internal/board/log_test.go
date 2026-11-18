@@ -163,6 +163,32 @@ func TestLogGroupsTouches(t *testing.T) {
 	}
 }
 
+// TestLogMergesTouchesAcrossCalls checks that one group (host, folder,
+// 2-second bucket) released in two sweeps stays one FS line.
+func TestLogMergesTouchesAcrossCalls(t *testing.T) {
+	var l Log
+	base := int64(1_700_000_000_000)
+	l.AddTouches([]store.Touch{{Host: "h", Path: "/p/src/a.go", AtMs: base + 100}}, base+2200)
+	l.Add(LogLine{AtMs: base + 2300, AgentID: "a", Who: "agent-a", Label: "READ", Target: "x.go", Result: "ok"})
+	l.AddTouches([]store.Touch{
+		{Host: "h", Path: "/p/src/b.go", AtMs: base + 1500},
+		{Host: "h", Path: "/p/src/c.go", AtMs: base + 1900},
+		{Host: "g", Path: "/p/src/a.go", AtMs: base + 1500}, // another host
+		{Host: "h", Path: "/p/src/d.go", AtMs: base + 2100}, // another bucket
+	}, base+4000)
+	if l.Len() != 4 {
+		t.Fatalf("len %d, want 4 (merged FS line, READ, host g, next bucket)", l.Len())
+	}
+	if got := l.lines[0]; got.Target != "3 change(s) in /p/src/" || got.AtMs != base+1900 {
+		t.Errorf("merged line = %q at %d, want 3 changes at %d", got.Target, got.AtMs, base+1900)
+	}
+	for i, want := range []string{"x.go", "1 change(s) in /p/src/", "1 change(s) in /p/src/"} {
+		if got := l.lines[i+1].Target; got != want {
+			t.Errorf("line %d = %q, want %q", i+1, got, want)
+		}
+	}
+}
+
 func TestLogRingAndFocus(t *testing.T) {
 	var l Log
 	for i := range 600 {

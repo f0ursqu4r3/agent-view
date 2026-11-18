@@ -55,10 +55,8 @@ func drawStatus(g *cells.Grid, st Status, paused bool) {
 // sources replace "up".
 func hostState(h HostStatus) (string, cells.Role) {
 	switch {
-	case h.State == "up" && h.Degraded == 1:
-		return "1 source degraded", cells.RSearch
-	case h.State == "up" && h.Degraded > 1:
-		return fmt.Sprintf("%d sources degraded", h.Degraded), cells.RSearch
+	case h.State == "up" && h.Degraded > 0:
+		return degradedText(h.Degraded), cells.RSearch
 	case h.State == "up":
 		return "up", cells.ROK
 	case h.State == "down":
@@ -67,6 +65,14 @@ func hostState(h HostStatus) (string, cells.Role) {
 		return "connecting", cells.RSearch
 	}
 	return text.Clean(h.State), cells.RDim
+}
+
+// degradedText returns the state word of a host with n degraded sources.
+func degradedText(n int) string {
+	if n == 1 {
+		return "1 source degraded"
+	}
+	return fmt.Sprintf("%d sources degraded", n)
 }
 
 // keyItem is one entry of the key bar. Entries with a lower drop rank go
