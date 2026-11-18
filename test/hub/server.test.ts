@@ -154,3 +154,20 @@ test('stop closes sockets and releases the hub subscription', async () => {
   expect(c.msgs.length).toBe(n);
   await expect(fetch(server.url + '/api/snapshot')).rejects.toThrow();
 });
+
+test('I2: every hosts message carries the hub linger', async () => {
+  const hub = new Hub({ lifecycle: { lingerMs: 120_000 } });
+  const src = new FakeSource('alpha');
+  hub.addSource(src);
+  const server = startServer({ hub, port: 0 });
+  cleanups.push(() => server.stop());
+  const c = await connect(server.url);
+  await c.until(() => c.msgs.length >= 3);
+  src.setState('down');
+  await c.until(() => c.msgs.length >= 4);
+  c.ws.send(JSON.stringify({ type: 'resnapshot' }));
+  await c.until(() => c.msgs.length >= 7);
+  const hosts = c.msgs.filter((m) => 'type' in m);
+  expect(hosts).toHaveLength(3);
+  for (const m of hosts) expect(m).toMatchObject({ type: 'hosts', lingerMs: 120_000 });
+});

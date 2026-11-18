@@ -23,7 +23,7 @@ export async function boot(root: HTMLElement): Promise<Viewer> {
 
   const socket = connectHub(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`, {
     onEnvelope: (e) => store.apply(e),
-    onHosts: (h) => store.setHosts(h),
+    onHosts: (h, lingerMs) => store.setHosts(h, lingerMs),
   });
 
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');

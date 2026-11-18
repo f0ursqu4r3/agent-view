@@ -146,7 +146,7 @@ export class Drawer {
 
   private renderCommands(now: number): void {
     const focus = this.store.focus;
-    const calls = this.store.commands(focus, 3);
+    const calls = this.store.commands(now, focus, 3);
     const names = new Map(this.store.agents(now).map((a) => [a.id, a]));
     const sig = commandSignature(focus, calls, names);
     if (sig === this.cmdSignature) return;

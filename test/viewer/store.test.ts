@@ -172,25 +172,25 @@ test('commands(focus) returns the newest 3 command calls, filtered by agent when
     s.apply(env('local', { kind: 'tool.start', call: call(who, `c${i}`, { category: 'command', rawName: 'Bash', command: `cmd${i}`, startedAt: iso(NOW - 5000 + i * 100) }) }, NOW - 5000 + i * 100));
   }
   s.apply(env('local', { kind: 'tool.start', call: call('a', 'r', { startedAt: iso(NOW) }) }, NOW));
-  expect(s.commands(null).map((c) => c.callId)).toEqual(['c4', 'c3', 'c2']);
-  expect(s.commands('b').map((c) => c.callId)).toEqual(['c3', 'c1']);
-  expect(s.commands('a', 2).map((c) => c.callId)).toEqual(['c4', 'c2']);
+  expect(s.commands(NOW, null).map((c) => c.callId)).toEqual(['c4', 'c3', 'c2']);
+  expect(s.commands(NOW, 'b').map((c) => c.callId)).toEqual(['c3', 'c1']);
+  expect(s.commands(NOW, 'a', 2).map((c) => c.callId)).toEqual(['c4', 'c2']);
 
   const chunk = (ch: string, n: number) => ch.repeat(n);
   s.apply(env('local', { kind: 'tool.output', agentId: 'a', callId: 'c4', chunk: chunk('x', 4096), truncated: false }));
-  expect(s.commands(null)[0]!.output.length).toBe(4096);
-  expect(s.commands(null)[0]!.outputTruncated).toBe(false);
+  expect(s.commands(NOW, null)[0]!.output.length).toBe(4096);
+  expect(s.commands(NOW, null)[0]!.outputTruncated).toBe(false);
   for (const ch of ['y', 'z', 'w', 'v']) s.apply(env('local', { kind: 'tool.output', agentId: 'a', callId: 'c4', chunk: chunk(ch, 4096), truncated: false }));
-  const out = s.commands(null)[0]!;
+  const out = s.commands(NOW, null)[0]!;
   expect(out.output.length).toBe(16 * 1024);
   expect(out.output.startsWith('y')).toBe(true);
   expect(out.output.endsWith('v')).toBe(true);
   expect(out.outputTruncated).toBe(true);
 
   s.apply(env('local', { kind: 'tool.output', agentId: 'b', callId: 'c3', chunk: 'hi', truncated: true }));
-  expect(s.commands('b')[0]!.outputTruncated).toBe(true);
+  expect(s.commands(NOW, 'b')[0]!.outputTruncated).toBe(true);
   s.apply(env('local', { kind: 'tool.end', agentId: 'b', callId: 'c3', ok: false, exitCode: 2 }));
-  expect(s.commands('b')[0]!.ok).toBe(false);
+  expect(s.commands(NOW, 'b')[0]!.ok).toBe(false);
 });
 
 test('laneOrder nests sub-agents under parents per host', () => {
@@ -364,7 +364,58 @@ test('R25: events for a pruned agent are not stored and request a resnapshot; a 
 test('tool.end keeps the exit code on the call', () => {
   const s = seeded();
   s.apply(env('local', { kind: 'tool.start', call: call('a', 'c1', { category: 'command', rawName: 'Bash', command: 'false' }) }));
-  expect(s.commands(null, 1)[0]!.exitCode).toBeUndefined();
+  expect(s.commands(NOW, null, 1)[0]!.exitCode).toBeUndefined();
   s.apply(env('local', { kind: 'tool.end', agentId: 'a', callId: 'c1', ok: false, exitCode: 1 }, NOW + 500));
-  expect(s.commands(null, 1)[0]!.exitCode).toBe(1);
+  expect(s.commands(NOW, null, 1)[0]!.exitCode).toBe(1);
+});
+
+test('I2: setHosts applies the hub linger to presence and invalidates the cached presence', () => {
+  const s = new ViewerStore({ now: () => NOW });
+  s.apply(hello('local'));
+  s.apply(snapshot('local', [agent('quiet', { lastEventAt: iso(NOW - 180_000) }), agent('busy', { lastEventAt: iso(NOW - 1000) })]));
+  expect(s.agents(NOW).map((a) => a.id).sort()).toEqual(['busy', 'quiet']);
+  s.setHosts([{ label: 'local', kind: 'local', state: 'up' }], 120_000);
+  expect(s.agents(NOW).map((a) => a.id)).toEqual(['busy']);
+  // A missing or invalid linger keeps the current value.
+  s.setHosts([{ label: 'local', kind: 'local', state: 'up' }]);
+  s.setHosts([{ label: 'local', kind: 'local', state: 'up' }], -1);
+  expect(s.agents(NOW).map((a) => a.id)).toEqual(['busy']);
+  s.setHosts([{ label: 'local', kind: 'local', state: 'up' }], 1_200_000);
+  expect(s.agents(NOW).map((a) => a.id).sort()).toEqual(['busy', 'quiet']);
+});
+
+test('I3: touches older than the file lifetime at take time are dropped (history replay is not live)', () => {
+  const s = seeded();
+  const old = NOW - 2 * 3_600_000;
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'h1', { startedAt: iso(old), files: ['/p/history.ts'] }) }, old));
+  s.apply(env('local', { kind: 'tool.end', agentId: 'a', callId: 'h1', ok: true, writes: [{ path: '/p/written.ts', op: 'edit' }] }, old + 1000));
+  s.apply(env('local', { kind: 'fs.change', path: '/p/old-grey.ts', op: 'change' }, old));
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'n1', { files: ['/p/live.ts'] }) }, NOW - 1000));
+  expect(s.takeTouches(NOW).map((t) => t.path)).toEqual(['/p/live.ts']);
+  expect(s.takeTouches(NOW + 5000)).toEqual([]);
+});
+
+test('I3: commands() lists only calls of present agents', () => {
+  const s = new ViewerStore({ now: () => NOW });
+  s.apply(hello('local'));
+  s.apply(snapshot('local', [agent('a'), agent('gone', { lastEventAt: iso(NOW - 700_000) })]));
+  s.apply(env('local', { kind: 'tool.start', call: call('gone', 'old', { category: 'command', rawName: 'Bash', command: 'ls', startedAt: iso(NOW - 700_000) }) }, NOW - 700_000));
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'new', { category: 'command', rawName: 'Bash', command: 'pwd', startedAt: iso(NOW - 1000) }) }, NOW - 1000));
+  expect(s.commands(NOW, null).map((c) => c.callId)).toEqual(['new']);
+  expect(s.commands(NOW, 'gone')).toEqual([]);
+});
+
+test('Minor 2: only a confirmed write suppresses a grey flicker; reads, call starts and snapshot seeds do not', () => {
+  const s = new ViewerStore({ now: () => NOW });
+  s.apply(hello('local'));
+  s.apply(snapshot('local', [agent('a')], [], [{ path: '/p/seed.ts', lastTouchAt: iso(NOW), attribution: 'confirmed', agentId: 'a' }]));
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'r1', { files: ['/p/read.ts'] }) }, NOW));
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'e1', { category: 'edit', rawName: 'Edit', files: ['/p/started.ts'] }) }, NOW));
+  s.apply(env('local', { kind: 'tool.end', agentId: 'a', callId: 'w1', ok: true, writes: [{ path: '/p/written.ts', op: 'edit' }] }, NOW));
+  for (const p of ['/p/seed.ts', '/p/read.ts', '/p/started.ts', '/p/written.ts']) {
+    s.apply(env('local', { kind: 'fs.change', path: p, op: 'change' }, NOW + 500));
+  }
+  expect(s.takeTouches(NOW).every((t) => t.attribution === 'confirmed')).toBe(true);
+  const grey = s.takeTouches(NOW + 2500).map((t) => `${t.attribution}:${t.path}`);
+  expect(grey).toEqual(['unattributed:/p/seed.ts', 'unattributed:/p/read.ts', 'unattributed:/p/started.ts']);
 });

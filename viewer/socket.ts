@@ -2,7 +2,8 @@ import type { Envelope, HostStatus } from '../src/shared/schema';
 
 // Browser-safe. The WebSocket constructor and timers can be injected for tests.
 
-export type HubHandlers = { onEnvelope(e: Envelope): void; onHosts(h: HostStatus[]): void };
+/** `lingerMs` is the hub's linger, when the hosts message carries a valid one. */
+export type HubHandlers = { onEnvelope(e: Envelope): void; onHosts(h: HostStatus[], lingerMs?: number): void };
 export type HubSocket = { send(msg: unknown): void; close(): void };
 type SocketLike = {
   onopen: ((ev: unknown) => void) | null;
@@ -65,9 +66,10 @@ export function connectHub(url: string, handlers: HubHandlers, deps?: Partial<De
         return;
       }
       if (typeof msg !== 'object' || msg === null) return;
-      const o = msg as { type?: unknown; hosts?: unknown; v?: unknown };
+      const o = msg as { type?: unknown; hosts?: unknown; lingerMs?: unknown; v?: unknown };
       if (o.type === 'hosts') {
-        if (Array.isArray(o.hosts)) handlers.onHosts(o.hosts as HostStatus[]);
+        const linger = typeof o.lingerMs === 'number' && Number.isFinite(o.lingerMs) && o.lingerMs > 0 ? o.lingerMs : undefined;
+        if (Array.isArray(o.hosts)) handlers.onHosts(o.hosts as HostStatus[], linger);
       } else if (o.v === 1) {
         handlers.onEnvelope(msg as Envelope);
       }

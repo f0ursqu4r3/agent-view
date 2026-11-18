@@ -269,3 +269,15 @@ test('prune returns each removed node once', () => {
   expect(new Set(out2).size).toBe(out2.length);
   expect(out2.map((n) => n.id).sort()).toEqual(['h|/p', 'h|/p/f.ts', 'h|/p/g.ts', 'h|<other>', 'h|<other>/p']);
 });
+
+test('I3: a touch older than the file lifetime, against the latest known time, places no node', () => {
+  const m = new TreeModel({ fileTtlMs: 1000 });
+  expect(m.touch(conf('/p/new.ts', { atMs: T0 + 5000 }))).not.toBeNull();
+  expect(m.touch(conf('/p/old.ts', { atMs: T0 + 4000 }))).toBeNull();
+  expect(m.find('h', '/p/old.ts')).toBeUndefined();
+  expect(m.touch(conf('/p/edge.ts', { atMs: T0 + 4001 }))).not.toBeNull();
+  // prune's now counts as a known time too.
+  m.prune(T0 + 10_000);
+  expect(m.touch(conf('/p/late.ts', { atMs: T0 + 8500 }))).toBeNull();
+  expect(m.touch(unat('/x/late.ts', { atMs: T0 + 9500 }))).not.toBeNull();
+});

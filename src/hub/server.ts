@@ -28,8 +28,10 @@ export function startServer(opts: { hub: Hub; port: number }): { port: number; u
     ws.send(JSON.stringify(msg));
     if (ws.getBufferedAmount() > MAX_BUFFERED_BYTES) ws.close(1013, 'client too slow');
   };
+  /** The host list, with the hub's linger so the viewer judges presence the same way. */
+  const hostsMessage = (hosts = hub.hosts()) => ({ type: 'hosts', hosts, lingerMs: hub.lingerMs });
   const sendCatchUp = (ws: Bun.ServerWebSocket<WsData>): void => {
-    send(ws, { type: 'hosts', hosts: hub.hosts() });
+    send(ws, hostsMessage());
     for (const env of hub.snapshotAll()) send(ws, env);
   };
 
@@ -60,8 +62,8 @@ export function startServer(opts: { hub: Hub; port: number }): { port: number; u
       maxPayloadLength: MAX_CLIENT_MESSAGE_BYTES,
       open(ws) {
         sockets.add(ws);
-        send(ws, { type: 'hosts', hosts: hub.hosts() });
-        ws.data.offHosts = hub.onHostsChange((hosts) => send(ws, { type: 'hosts', hosts }));
+        send(ws, hostsMessage());
+        ws.data.offHosts = hub.onHostsChange((hosts) => send(ws, hostsMessage(hosts)));
         // `subscribe` delivers hello, snapshot, and coverage for each host first, then live envelopes.
         ws.data.off = hub.subscribe((env) => send(ws, env));
       },

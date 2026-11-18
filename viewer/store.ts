@@ -8,7 +8,7 @@ export type ViewAgent = Agent & { host: string; stale: boolean; lastEventMs: num
 export type ViewCall = Call & { host: string; startMs: number; endMs: number | null; ok: boolean | null; exitCode?: number; output: string; outputTruncated: boolean };
 export type Touch = { host: string; path: string; projectRoot: string | null; attribution: 'confirmed' | 'unattributed'; agentId?: string; atMs: number };
 
-/** A grey flicker is held this long, and a confirmed touch this close to it suppresses it. */
+/** A grey flicker is held this long, and a confirmed write this close to it suppresses it. */
 const FLICKER_MS = 2000;
 const OUTPUT_KEEP = 16 * 1024;
 const MAX_CALLS_PER_HOST = 2000;
@@ -33,7 +33,7 @@ type HostState = {
   openByAgent: Map<string, Map<string, ViewCall>>;
   confirmedQueue: Touch[];
   held: Touch[];
-  /** Recent confirmed touch times per path, for suppressing grey flickers. */
+  /** Recent confirmed write times per path, for suppressing grey flickers. */
   recent: Map<string, number[]>;
   /** Present agents for one `(version, now)`. */
   presence?: { version: number; now: number; agents: AgentEntry[] };
@@ -48,7 +48,7 @@ export class ViewerStore {
   /** Diagnostic: how many times presence was computed. Repeated reads with one `now` must not add to it. */
   presenceComputes = 0;
   private readonly nowFn: () => number;
-  private readonly lifecycle: Partial<LifecycleOptions>;
+  private readonly lifecycle: LifecycleOptions;
   private readonly hostStates = new Map<string, HostState>();
   private hostList: HostStatus[] = [];
   private orderCounter = 0;
@@ -81,8 +81,13 @@ export class ViewerStore {
     return true;
   }
 
-  setHosts(h: HostStatus[]): void {
+  /** The hub's host list. `lingerMs`, when valid, is the hub's linger: presence follows it from now on. */
+  setHosts(h: HostStatus[], lingerMs?: number): void {
     this.hostList = h;
+    if (typeof lingerMs === 'number' && Number.isFinite(lingerMs) && lingerMs > 0 && lingerMs !== this.lifecycle.lingerMs) {
+      this.lifecycle.lingerMs = lingerMs;
+      this.version++; // cached presence used the old linger
+    }
   }
 
   hosts(): HostStatus[] {
@@ -177,28 +182,35 @@ export class ViewerStore {
     return found;
   }
 
-  /** Newest command calls first, for one agent when `focus` is set. */
-  commands(focus: string | null, limit = 3): ViewCall[] {
+  /** Newest command calls of present agents first, for one agent when `focus` is set. */
+  commands(now: number, focus: string | null, limit = 3): ViewCall[] {
+    this.sweep(now);
     const out: ViewCall[] = [];
     for (const h of this.hostStates.values()) {
+      const present = new Set(this.presentAgents(h, now).map((a) => a.agent.id));
       for (const c of h.calls.values()) {
-        if (c.category === 'command' && (focus === null || c.agentId === focus)) out.push(c);
+        if (c.category === 'command' && present.has(c.agentId) && (focus === null || c.agentId === focus)) out.push(c);
       }
     }
     return out.sort((a, b) => b.startMs - a.startMs).slice(0, limit);
   }
 
-  /** Confirmed touches at once. Unattributed ones after the hold, unless a confirmed touch of the same path is close. */
+  /**
+   * Confirmed touches at once. Unattributed ones after the hold, unless a confirmed write of the same path is close.
+   * A touch older than the file lifetime is dropped: it is history (an initial scan or a reconnect), not live activity.
+   */
   takeTouches(now: number): Touch[] {
     const out: Touch[] = [];
+    const ttl = this.lifecycle.fileTtlMs;
     for (const h of this.hostStates.values()) {
       if (h.confirmedQueue.length > 0) {
-        out.push(...h.confirmedQueue);
+        for (const t of h.confirmedQueue) if (now - t.atMs < ttl) out.push(t);
         h.confirmedQueue = [];
       }
       if (h.held.length > 0) {
         const keep: Touch[] = [];
         for (const t of h.held) {
+          if (now - t.atMs >= ttl) continue;
           if (now - t.atMs < FLICKER_MS) {
             keep.push(t);
           } else if (!(h.recent.get(t.path) ?? []).some((c) => Math.abs(c - t.atMs) <= FLICKER_MS)) {
@@ -340,9 +352,9 @@ export class ViewerStore {
         if (call) {
           if (call.endMs !== null) return;
           call.files = [...new Set([...(call.files ?? []), ...e.files])];
-          if (call.category !== 'search') this.confirm(h, e.host, e.files, e.agentId, at);
+          if (call.category !== 'search') this.confirm(h, e.host, e.files, e.agentId, at, false);
         } else {
-          this.confirm(h, e.host, e.files, e.agentId, at);
+          this.confirm(h, e.host, e.files, e.agentId, at, false);
         }
         break;
       }
@@ -372,7 +384,7 @@ export class ViewerStore {
           this.closeOpen(h, call);
         }
         for (const w of Array.isArray(e.writes) ? e.writes : []) {
-          if (isObj(w) && isStr(w.path)) this.confirm(h, e.host, [w.path], e.agentId, at);
+          if (isObj(w) && isStr(w.path)) this.confirm(h, e.host, [w.path], e.agentId, at, true);
         }
         break;
       }
@@ -410,7 +422,8 @@ export class ViewerStore {
       if (!isObj(f) || !isStr(f.path)) continue;
       const atMs = this.ms(h, f.lastTouchAt);
       if (f.attribution === 'confirmed') {
-        this.pushConfirmed(h, host, f.path, f.agentId, atMs);
+        // A seed only: the snapshot does not say whether this touch was a write.
+        this.pushConfirmed(h, host, f.path, f.agentId, atMs, false);
       } else {
         h.held.push({ host, path: f.path, projectRoot: null, attribution: 'unattributed', atMs });
       }
@@ -425,7 +438,7 @@ export class ViewerStore {
     const a = h.agents.get(c.agentId);
     if (a) a.agent = { ...a.agent, status: 'working' };
     this.bump(h, c.agentId, at);
-    if (c.category !== 'search' && Array.isArray(c.files)) this.confirm(h, host, c.files, c.agentId, at);
+    if (c.category !== 'search' && Array.isArray(c.files)) this.confirm(h, host, c.files, c.agentId, at, false);
     this.trimCalls(h);
   }
 
@@ -461,11 +474,12 @@ export class ViewerStore {
     }
   }
 
-  private confirm(h: HostState, host: string, paths: unknown[], agentId: string, atMs: number): void {
-    for (const p of paths) if (isStr(p)) this.pushConfirmed(h, host, p, agentId, atMs);
+  /** `write`: the touch is a confirmed write (a `tool.end` write). Only writes suppress grey flickers. */
+  private confirm(h: HostState, host: string, paths: unknown[], agentId: string, atMs: number, write: boolean): void {
+    for (const p of paths) if (isStr(p)) this.pushConfirmed(h, host, p, agentId, atMs, write);
   }
 
-  private pushConfirmed(h: HostState, host: string, path: string, agentId: string | undefined, atMs: number): void {
+  private pushConfirmed(h: HostState, host: string, path: string, agentId: string | undefined, atMs: number, write: boolean): void {
     const agent = agentId === undefined ? undefined : h.agents.get(agentId)?.agent;
     const touch: Touch = {
       host, path, projectRoot: agent?.projectRoot ?? null, attribution: 'confirmed',
@@ -473,6 +487,7 @@ export class ViewerStore {
     };
     h.confirmedQueue.push(touch);
     if (h.confirmedQueue.length > MAX_CONFIRMED) h.confirmedQueue.splice(0, h.confirmedQueue.length - MAX_CONFIRMED);
+    if (!write) return;
     const times = h.recent.get(path);
     if (times) {
       times.push(atMs);

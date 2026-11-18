@@ -88,3 +88,17 @@ test('close stops reconnecting', () => {
   expect(timers).toHaveLength(0);
   expect(FakeSocket.all).toHaveLength(1);
 });
+
+test('I2: a hosts message passes the hub linger to onHosts; a missing or invalid one passes undefined', () => {
+  FakeSocket.all = [];
+  const got: [unknown, unknown][] = [];
+  connectHub('ws://h/ws', { onEnvelope: () => {}, onHosts: (h, linger) => got.push([h, linger]) }, {
+    WebSocket: FakeSocket, setTimeout: () => 0, clearTimeout: () => {},
+  });
+  const s = FakeSocket.all[0]!;
+  s.open();
+  s.onmessage!({ data: JSON.stringify({ type: 'hosts', hosts: [], lingerMs: 120_000 }) });
+  s.onmessage!({ data: JSON.stringify({ type: 'hosts', hosts: [] }) });
+  s.onmessage!({ data: JSON.stringify({ type: 'hosts', hosts: [], lingerMs: 'x' }) });
+  expect(got).toEqual([[[], 120_000], [[], undefined], [[], undefined]]);
+});
