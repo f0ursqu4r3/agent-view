@@ -113,9 +113,11 @@ type Opts = {
   maxPerSecond?: number;
   home?: string;
   now?: () => number;
+  /** Replaceable for tests. */
+  watch?: typeof watchTree;
 };
 
-type Active = { watcher: TreeWatcher; reportedDegraded: string | null };
+type Active = { watcher: TreeWatcher };
 
 /**
  * Watches project roots and emits `fs.change` events. These events never carry an agent id:
@@ -128,6 +130,8 @@ export class FsChangeSource {
   private readonly home: string;
   /** Root names already reported as refused or missing, so a repeated `setRoots` stays quiet. */
   private readonly reported = new Set<string>();
+  /** The degraded detail last reported for each root, so a repeated failure is reported once. */
+  private readonly degradedSeen = new Map<string, string>();
   private _dropped = 0;
 
   constructor(private readonly opts: Opts) {
@@ -140,12 +144,20 @@ export class FsChangeSource {
   get roots(): string[] { return [...this.active.keys()]; }
 
   setRoots(roots: string[]): void {
+    // A watcher that has failed delivers no events. Report it, close it and drop it here; a later call restarts it.
+    const failed = new Set<string>();
+    for (const [root, a] of this.active) {
+      if (a.watcher.degraded === null) continue;
+      this.reportIfDegraded(root);
+      a.watcher.close();
+      this.active.delete(root);
+      failed.add(root);
+    }
     const wanted = this.resolve(roots);
     for (const [root, a] of this.active) {
       if (!wanted.includes(root)) { a.watcher.close(); this.active.delete(root); }
     }
-    for (const root of wanted) if (!this.active.has(root)) this.start(root);
-    this.checkDegraded();
+    for (const root of wanted) if (!this.active.has(root) && !failed.has(root)) this.start(root);
   }
 
   stop(): void {
@@ -168,6 +180,7 @@ export class FsChangeSource {
       try { rp = fs.realpathSync(root); } catch { report(root, 'cannot watch: root not found'); continue; }
       if (!isDirectory(rp)) { report(root, 'cannot watch: not a directory'); continue; }
       if (rp === path.parse(rp).root || isWithin(this.home, rp)) { report(root, 'refused: too broad'); continue; }
+      this.reported.delete(root);
       real.add(rp);
     }
     // Shortest first, so a parent is kept and the roots nested in it are skipped.
@@ -187,9 +200,12 @@ export class FsChangeSource {
       else if (rel === path.join('.git', 'info', 'exclude')) matcher.invalidate(path.join(root, '.gitignore'));
       return rel.split(path.sep).some((s) => IGNORED_DIRS.has(s)) || matcher.isIgnored(abs);
     };
-    const watcher = watchTree(root, (rel, event) => this.onChange(root, rel, event), FS_WATCH_MODE, { maxDirs: MAX_DIRS, ignore: ignored });
-    this.active.set(root, { watcher, reportedDegraded: null });
-    if (!this.reportIfDegraded(root)) this.opts.onStatus('fs:' + root, { state: 'ok' });
+    const watcher = (this.opts.watch ?? watchTree)(root, (rel, event) => this.onChange(root, rel, event), FS_WATCH_MODE, { maxDirs: MAX_DIRS, ignore: ignored });
+    this.active.set(root, { watcher });
+    if (!this.reportIfDegraded(root)) {
+      this.degradedSeen.delete(root);
+      this.opts.onStatus('fs:' + root, { state: 'ok' });
+    }
   }
 
   private onChange(root: string, rel: string, event: WatchEvent): void {
@@ -203,17 +219,13 @@ export class FsChangeSource {
     this.reportIfDegraded(root);
   }
 
-  private checkDegraded(): void {
-    for (const root of this.active.keys()) this.reportIfDegraded(root);
-  }
-
   /** Report a watcher's degraded reason once. Returns true when the watcher is degraded. */
   private reportIfDegraded(root: string): boolean {
     const a = this.active.get(root);
     const detail = a?.watcher.degraded ?? null;
     if (!a || detail === null) return false;
-    if (a.reportedDegraded !== detail) {
-      a.reportedDegraded = detail;
+    if (this.degradedSeen.get(root) !== detail) {
+      this.degradedSeen.set(root, detail);
       this.opts.onStatus('fs:' + root, { state: 'degraded', detail });
     }
     return true;

@@ -287,3 +287,70 @@ test('a brand-new file is still reported as create', async () => {
     }
   });
 });
+
+test('a deleted root is reported degraded and dropped, and restarts when it is recreated', async () => {
+  await withDir(async (dir) => {
+    const root = path.join(dir, 'proj');
+    await fs.mkdir(root);
+    const h = harness();
+    try {
+      h.source.setRoots([root]);
+      expect(h.source.roots).toEqual([root]);
+      await fs.rm(root, { recursive: true });
+      await h.sleep(200);
+      h.source.setRoots([root]);
+      expect(h.source.roots).toEqual([]);
+      const degraded = () => h.statuses.filter((x) => x.source === `fs:${root}` && x.s.state === 'degraded');
+      expect(degraded().length).toBe(1);
+      // Repeated calls do not repeat the report.
+      h.source.setRoots([root]);
+      expect(degraded().length).toBe(1);
+
+      await fs.mkdir(root);
+      const okBefore = h.statuses.filter((x) => x.source === `fs:${root}` && x.s.state === 'ok').length;
+      h.source.setRoots([root]);
+      expect(h.source.roots).toEqual([root]);
+      expect(h.statuses.filter((x) => x.source === `fs:${root}` && x.s.state === 'ok').length).toBe(okBefore + 1);
+      await fs.writeFile(path.join(root, 'again.txt'), '1');
+      await h.wait(isFs(path.join(root, 'again.txt')));
+    } finally {
+      h.source.stop();
+    }
+  });
+});
+
+test('a watcher that errors is reported once, closed and dropped, then restarted on a later setRoots', async () => {
+  await withDir(async (dir) => {
+    type Fake = { degraded: string | null; closed: boolean };
+    const fakes: Fake[] = [];
+    const watch = ((_root: string) => {
+      const fake: Fake = { degraded: null, closed: false };
+      fakes.push(fake);
+      return { close() { fake.closed = true; }, get degraded() { return fake.degraded; } };
+    }) as unknown as typeof import('../../src/collector/watch').watchTree;
+    const h = harness({ watch });
+    const status = (state: string) => h.statuses.filter((x) => x.source === `fs:${dir}` && x.s.state === state);
+    try {
+      h.source.setRoots([dir]);
+      expect(fakes.length).toBe(1);
+      expect(status('ok').length).toBe(1);
+
+      // The watcher dies (as when the root is deleted on Linux) and delivers no events.
+      fakes[0]!.degraded = 'watcher error on root: ENOENT';
+      h.source.setRoots([dir]);
+      expect(status('degraded').map((x) => x.s.detail)).toEqual(['watcher error on root: ENOENT']);
+      expect(fakes[0]!.closed).toBe(true);
+      expect(h.source.roots).toEqual([]);
+      expect(fakes.length).toBe(1);
+
+      // The next call restarts it and reports ok; nothing more is reported degraded.
+      h.source.setRoots([dir]);
+      expect(fakes.length).toBe(2);
+      expect(h.source.roots).toEqual([dir]);
+      expect(status('ok').length).toBe(2);
+      expect(status('degraded').length).toBe(1);
+    } finally {
+      h.source.stop();
+    }
+  });
+});
