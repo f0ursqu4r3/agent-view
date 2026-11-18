@@ -91,12 +91,19 @@ export class CollectorState {
     return { kind: 'snapshot', agents, openCalls, files };
   }
 
-  /** Replaces all state from a snapshot. Ended-call memory is cleared. */
+  /**
+   * Replaces all state from a snapshot. Ended-call memory is cleared.
+   * A snapshot has no per-call event time, so an open call takes its agent's last event time when that is later
+   * than its start: a later `tick` never ends a call before the collector itself would.
+   */
   load(s: Snapshot): void {
     this.agents = new Map(s.agents.map((a) => [a.id, { ...a }]));
     this.open = new Map(s.openCalls.map((c) => [
       callKey(c.agentId, c.callId),
-      { call: { ...c, ...(c.files ? { files: [...c.files] } : {}) }, lastEventMs: msOf(c.startedAt) },
+      {
+        call: { ...c, ...(c.files ? { files: [...c.files] } : {}) },
+        lastEventMs: Math.max(msOf(c.startedAt), msOf(this.agents.get(c.agentId)?.lastEventAt ?? '')),
+      },
     ]));
     this.files = new Map(s.files.map((f) => [f.path, { ...f }]));
     this.ended = new Set();
@@ -120,6 +127,11 @@ export class CollectorState {
 
   agent(id: string): Agent | undefined {
     return this.agents.get(id);
+  }
+
+  /** Diagnostic: file touches held, including those `snapshot` already leaves out. */
+  fileCount(): number {
+    return this.files.size;
   }
 
   private presentIds(now: number): Set<string> {

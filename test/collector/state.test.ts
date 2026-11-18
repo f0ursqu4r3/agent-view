@@ -229,3 +229,18 @@ test('custom lifecycle options apply to snapshot and tick', () => {
   expect(s.snapshot(BASE + 1_000).agents).toHaveLength(0);
   expect(s.tick(BASE + 2_000)).toHaveLength(1);
 });
+
+test('load: an open call counts its agent last event as its own, so a mirror tick does not end a call the collector still runs', () => {
+  const s = new CollectorState();
+  s.load({
+    kind: 'snapshot',
+    agents: [agent(A, { status: 'working', lastEventAt: iso(899_000) })],
+    openCalls: [call(A, 'long', { category: 'command', rawName: 'Bash', startedAt: iso(0) })],
+    files: [],
+  });
+  // 15 minutes after the start, 1 second after the agent's last event.
+  expect(s.tick(BASE + 900_000)).toEqual([]);
+  expect(s.snapshot(BASE + 900_000).openCalls.map((c) => c.callId)).toEqual(['long']);
+  // With no later event, the call ends 10 minutes after the agent's last event.
+  expect(s.tick(BASE + 899_000 + 600_000)).toHaveLength(1);
+});

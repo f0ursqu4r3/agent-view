@@ -8,11 +8,13 @@ export class FakeSource implements HubSource {
   readonly kind = 'remote' as const;
   state: HostStatus['state'] = 'up';
   seq = 0;
+  /** The `now` this source puts in its hello: its own clock. */
+  helloNow = TS;
   private readonly subs = new Set<(e: Envelope) => void>();
   private readonly listeners = new Set<() => void>();
   constructor(readonly label: string, private readonly sourceHost = label) {}
   subscribe(fn: (e: Envelope) => void): () => void {
-    fn(this.env({ kind: 'hello', collectorVersion: '0', platform: 'test', now: TS, ts: TS }, false));
+    fn(this.env({ kind: 'hello', collectorVersion: '0', platform: 'test', now: this.helloNow, ts: this.helloNow }, false));
     fn(this.env({ kind: 'snapshot', agents: [], openCalls: [], files: [], ts: TS }, false));
     this.subs.add(fn);
     return () => { this.subs.delete(fn); };

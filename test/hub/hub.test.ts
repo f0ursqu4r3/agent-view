@@ -1,7 +1,8 @@
-import { expect, test } from 'bun:test';
+import { expect, setSystemTime, test } from 'bun:test';
 import { Collector } from '../../src/collector/collector';
 import { Hub, LocalSource } from '../../src/hub/hub';
 import type { Envelope, HostStatus, SourceEvent } from '../../src/shared/schema';
+import { ViewerStore } from '../../viewer/store';
 import { agent, FakeSource, TS, upsert } from './helpers';
 
 test('uniqueLabel appends #2, #3 for repeated labels', () => {
@@ -136,5 +137,76 @@ test('LocalSource forwards collector envelopes through the hub', async () => {
     expect(got[0]).toMatchObject({ host: 'local', demo: true });
   } finally {
     await hub.stop();
+  }
+});
+
+const isoAt = (ms: number) => new Date(ms).toISOString();
+
+test('C1: a late subscriber gets a hello with the host clock at replay time, so the viewer skew offset stays near 0', () => {
+  const t0 = Date.parse('2026-01-01T00:00:00.000Z');
+  setSystemTime(new Date(t0));
+  try {
+    const hub = new Hub();
+    const a = new FakeSource('alpha');
+    a.helloNow = isoAt(t0);
+    hub.addSource(a);
+    // One hour of hub uptime later, a viewer tab opens.
+    setSystemTime(new Date(t0 + 3_600_000));
+    const last = isoAt(t0 + 3_600_000 - 1000);
+    a.emit({ kind: 'agent.upsert', agent: { ...agent('a1'), lastEventAt: last }, ts: last });
+    const got: Envelope[] = [];
+    const store = new ViewerStore();
+    hub.subscribe((e) => { got.push(e); store.apply(e); });
+    const hello = got.find((e) => e.kind === 'hello') as Extract<Envelope, { kind: 'hello' }>;
+    expect(Math.abs(Date.parse(hello.now) - (t0 + 3_600_000))).toBeLessThan(50);
+    const [a1] = store.agents(Date.now());
+    expect(a1?.id).toBe('a1');
+    expect(Math.abs(a1!.lastEventMs - Date.parse(last))).toBeLessThan(50);
+  } finally {
+    setSystemTime();
+  }
+});
+
+test('I1: a host whose clock is 5 minutes behind keeps an agent idle 6 minutes by its own clock in snapshotAll()', () => {
+  const hub = new Hub();
+  const a = new FakeSource('alpha');
+  const hostNow = Date.now() - 300_000;
+  a.helloNow = isoAt(hostNow);
+  hub.addSource(a);
+  const last = isoAt(hostNow - 360_000);
+  a.emit({ kind: 'agent.upsert', agent: { ...agent('r'), lastEventAt: last }, ts: last });
+  const snap = hub.snapshotAll().find((e) => e.kind === 'snapshot') as Extract<Envelope, { kind: 'snapshot' }>;
+  expect(snap.agents.map((x) => x.id)).toEqual(['r']);
+});
+
+test('I4: the hub ticks each mirror, so old files leave it; stop() leaves no timer', async () => {
+  const live = new Set<unknown>();
+  const realSet = globalThis.setInterval;
+  const realClear = globalThis.clearInterval;
+  globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+    const h = realSet(...args);
+    live.add(h);
+    return h;
+  }) as typeof setInterval;
+  globalThis.clearInterval = ((h?: Parameters<typeof clearInterval>[0]) => {
+    live.delete(h);
+    return realClear(h);
+  }) as typeof clearInterval;
+  try {
+    const hub = new Hub({ tickMs: 20 });
+    const a = new FakeSource('alpha');
+    hub.addSource(a);
+    a.emit({ kind: 'fs.change', path: '/p/old.ts', op: 'change', ts: isoAt(Date.now() - 1_900_000) });
+    a.emit({ kind: 'fs.change', path: '/p/new.ts', op: 'change', ts: isoAt(Date.now()) });
+    expect(hub.storedFileCount()).toBe(2);
+    await Bun.sleep(100);
+    expect(hub.storedFileCount()).toBe(1);
+    expect(live.size).toBe(1);
+    await hub.stop();
+    expect(live.size).toBe(0);
+  } finally {
+    globalThis.setInterval = realSet;
+    globalThis.clearInterval = realClear;
+    for (const h of live) realClear(h as never);
   }
 });

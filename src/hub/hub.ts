@@ -1,5 +1,6 @@
 import type { Collector } from '../collector/collector';
 import { CollectorState } from '../collector/state';
+import { LIFECYCLE } from '../shared/lifecycle';
 import type { LifecycleOptions } from '../shared/lifecycle';
 import { SCHEMA_VERSION } from '../shared/schema';
 import type { Envelope, Event, HostStatus, SourceEvent } from '../shared/schema';
@@ -70,7 +71,9 @@ export class LocalSource implements HubSource {
 type Mirror = {
   source: HubSource;
   state: CollectorState;
-  hello?: Envelope;
+  hello?: Extract<Envelope, { kind: 'hello' }>;
+  /** Hub clock minus host clock, measured when the hello arrived. */
+  offset: number;
   coverage?: Envelope;
   sourceStatus: Map<string, Envelope>;
   seq: number;
@@ -78,18 +81,28 @@ type Mirror = {
   offStatus?: () => void;
 };
 
+/** How often the hub ages each mirror (ends timed-out calls, drops old files). */
+const TICK_MS = 1000;
+
 /**
  * Merges the sources. For each host it keeps a `CollectorState` mirror, so a new subscriber gets
  * hello, snapshot, and coverage first, then live envelopes.
+ * Each mirror is judged by its host's clock: the hub keeps the skew it saw at the host's hello.
  */
 export class Hub {
   private readonly mirrors = new Map<string, Mirror>();
   private readonly usedLabels = new Set<string>();
   private readonly subscribers = new Set<(e: Envelope) => void>();
   private readonly hostListeners = new Set<(hosts: HostStatus[]) => void>();
+  private tickTimer?: ReturnType<typeof setInterval>;
   private stopped = false;
 
-  constructor(private readonly opts: { lifecycle?: Partial<LifecycleOptions> } = {}) {}
+  constructor(private readonly opts: { lifecycle?: Partial<LifecycleOptions>; tickMs?: number } = {}) {}
+
+  /** The linger the hub judges presence with. The viewer gets it with the host list. */
+  get lingerMs(): number {
+    return this.opts.lifecycle?.lingerMs ?? LIFECYCLE.lingerMs;
+  }
 
   /** The first use of a label returns it. Later uses return `label#2`, `label#3`, and so on. */
   uniqueLabel(wanted: string): string {
@@ -103,11 +116,12 @@ export class Hub {
     if (this.mirrors.has(src.label)) throw new Error(`duplicate host label: ${src.label}`);
     this.usedLabels.add(src.label);
     const mirror: Mirror = {
-      source: src, state: new CollectorState(this.opts.lifecycle), sourceStatus: new Map(), seq: 0, off: () => {},
+      source: src, state: new CollectorState(this.opts.lifecycle), offset: 0, sourceStatus: new Map(), seq: 0, off: () => {},
     };
     this.mirrors.set(src.label, mirror);
     mirror.offStatus = src.onStatusChange?.(() => this.notifyHosts());
     mirror.off = src.subscribe((e) => this.ingest(mirror, e));
+    this.startTicking();
     this.notifyHosts();
   }
 
@@ -118,17 +132,29 @@ export class Hub {
     return () => { this.subscribers.delete(fn); };
   }
 
+  /**
+   * Each host's hello, snapshot, and coverage. The hello carries the host's clock now, not at its first
+   * hello: the viewer measures skew from it. The snapshot is judged at the host's now.
+   */
   snapshotAll(): Envelope[] {
     const out: Envelope[] = [];
-    const now = Date.now();
-    const ts = new Date(now).toISOString();
+    const hubNow = Date.now();
     for (const [host, m] of this.mirrors) {
       if (!m.hello) continue;
-      out.push(m.hello);
+      const now = hubNow - m.offset;
+      const ts = new Date(now).toISOString();
+      out.push({ ...m.hello, now: ts, ts });
       out.push({ v: SCHEMA_VERSION, host, seq: m.seq, ...m.state.snapshot(now), ts });
       if (m.coverage) out.push(m.coverage);
     }
     return out;
+  }
+
+  /** Diagnostic: file touches held by all mirrors. */
+  storedFileCount(): number {
+    let n = 0;
+    for (const m of this.mirrors.values()) n += m.state.fileCount();
+    return n;
   }
 
   hosts(): HostStatus[] {
@@ -142,6 +168,8 @@ export class Hub {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    clearInterval(this.tickTimer);
+    this.tickTimer = undefined;
     const mirrors = [...this.mirrors.values()];
     for (const m of mirrors) m.off();
     await Promise.allSettled(mirrors.map((m) => m.source.stop()));
@@ -157,7 +185,12 @@ export class Hub {
     if (typeof env.seq === 'number') m.seq = env.seq;
     try {
       switch (env.kind) {
-        case 'hello': m.hello = env; break;
+        case 'hello': {
+          m.hello = env;
+          const t = Date.parse(env.now);
+          m.offset = Number.isNaN(t) ? 0 : Date.now() - t;
+          break;
+        }
         case 'snapshot': m.state.load(env as SnapshotEvent); break;
         case 'coverage': m.coverage = env; break;
         case 'source.status': m.sourceStatus.set(env.source, env); break;
@@ -167,6 +200,21 @@ export class Hub {
       // Bad input must not break the hub.
     }
     for (const fn of [...this.subscribers]) this.deliverTo(fn, env);
+  }
+
+  /**
+   * Ages every mirror once per tick at its host's clock. The events `tick` returns are dropped:
+   * each collector sends its own timed-out `tool.end`. The timer does not keep the process alive.
+   */
+  private startTicking(): void {
+    if (this.tickTimer || this.stopped) return;
+    this.tickTimer = setInterval(() => {
+      const hubNow = Date.now();
+      for (const m of this.mirrors.values()) {
+        try { m.state.tick(hubNow - m.offset); } catch { /* bad state must not break the hub */ }
+      }
+    }, this.opts.tickMs ?? TICK_MS);
+    this.tickTimer.unref?.();
   }
 
   private notifyHosts(): void {
