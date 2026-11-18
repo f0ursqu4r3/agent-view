@@ -17,6 +17,8 @@ const label = hub.uniqueLabel('smoke');
 const local = new LocalSource(new Collector({ host: label, demo: true }), label);
 hub.addSource(local);
 let server: ReturnType<typeof startServer> | null = null;
+let liveHub: Hub | null = null;
+let liveServer: ReturnType<typeof startServer> | null = null;
 let browser: Browser | null = null;
 let failure: unknown = null;
 
@@ -66,13 +68,29 @@ try {
   await page.keyboard.press('Escape');
   const cleared = await page.evaluate(() => (window as unknown as { __agentView: { store: { focus: string | null } } }).__agentView.store.focus);
   check(cleared === null, 'Esc did not clear the focus');
+
+  // Outside demo mode the SIMULATED badge must be hidden. `roots: []` reads no real logs, and nothing is watched.
+  liveHub = new Hub();
+  const liveLabel = liveHub.uniqueLabel('live');
+  const liveLocal = new LocalSource(new Collector({ host: liveLabel, roots: [] }), liveLabel);
+  liveHub.addSource(liveLocal);
+  liveServer = startServer({ hub: liveHub, port: 0 });
+  await liveLocal.start();
+  const livePage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await livePage.goto(liveServer.url);
+  await livePage.waitForSelector('.hud .hud-host.up', { timeout: 5000 });
+  await livePage.waitForTimeout(500);
+  check(!(await livePage.locator('.hud-badge').isVisible()), 'the SIMULATED badge is visible outside demo mode');
+  check(!(await livePage.locator('.hud').innerText()).includes('SIMULATED'), 'the HUD text shows SIMULATED outside demo mode');
   console.log('smoke ok');
 } catch (e) {
   failure = e;
 } finally {
   await browser?.close().catch(() => {});
   server?.stop();
+  liveServer?.stop();
   await hub.stop().catch(() => {});
+  await liveHub?.stop().catch(() => {});
 }
 
 if (failure) {

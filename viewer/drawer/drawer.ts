@@ -26,6 +26,13 @@ export function tailLines(output: string, n: number): string[] {
   return lines.slice(-n);
 }
 
+/** A cheap key for the command list. Output is capped, so its length alone stops changing: the tail is part of the key. */
+export function commandSignature(focus: string | null, calls: ViewCall[], names: Map<string, { name: string }>): string {
+  return [focus ?? '', ...calls.map((c) => {
+    return `${c.agentId}|${c.callId}|${c.endMs}|${c.ok}|${c.exitCode}|${c.output.length}|${c.outputTruncated}|${names.get(c.agentId)?.name ?? ''}|${c.output.slice(-200)}`;
+  })].join('\n');
+}
+
 export function callState(c: ViewCall): string {
   if (c.endMs === null) return 'running';
   if (c.exitCode !== undefined) return `exit ${c.exitCode}`;
@@ -141,10 +148,7 @@ export class Drawer {
     const focus = this.store.focus;
     const calls = this.store.commands(focus, 3);
     const names = new Map(this.store.agents(now).map((a) => [a.id, a]));
-    const sig = [focus ?? '', ...calls.map((c) => {
-      const a = names.get(c.agentId);
-      return `${c.agentId}|${c.callId}|${c.endMs}|${c.ok}|${c.exitCode}|${c.output.length}|${c.outputTruncated}|${a?.name ?? ''}`;
-    })].join('\n');
+    const sig = commandSignature(focus, calls, names);
     if (sig === this.cmdSignature) return;
     this.cmdSignature = sig;
 
