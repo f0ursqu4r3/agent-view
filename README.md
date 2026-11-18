@@ -61,7 +61,7 @@ bun run audit:live
 | `--demo-scale normal\|stress` | Size of the simulated stream. Default `normal`. |
 | `--watch <dir>` | Add a file-system root. Repeatable. |
 | `--linger <minutes>` | How long an agent stays on the stage after its last event. Default 10. |
-| `--remote <ssh-host>` | Planned. See Remote machines. |
+| `--remote <ssh-host>` | Add a remote machine over SSH. Repeatable. See Remote machines. |
 
 `agent-view collect --stdio [--label <name>]` runs a collector that writes one NDJSON event per line to stdout. It is the entry point for remote machines.
 
@@ -133,6 +133,62 @@ Performance targets: 60 fps with 50 agents, 3,000 file nodes, and 200 events per
 - The Codex `exec` wrapper shows as `other`. The commands it runs arrive as their own command items.
 - Claude Code command output does not stream. It appears when the tool result is written.
 
+## Install
+
+Build the binaries for macOS and Linux, on arm64 and x64. The binaries are in `dist/` and have the viewer embedded. Building for other platforms can download Bun runtimes:
+
+```bash
+bun run compile
+```
+
+Build one target only:
+
+```bash
+bun scripts/compile.ts bun-darwin-arm64
+```
+
+Install the binary for this machine. Use the file name that matches your OS and CPU, for example `dist/agent-view-darwin-arm64`. Copy it to a directory on your `PATH` as `agent-view`:
+
+```bash
+cp dist/agent-view-darwin-arm64 ~/.local/bin/agent-view
+```
+
+Then run `agent-view` from any directory:
+
+```bash
+agent-view
+```
+
 ## Remote machines
 
-Planned: `--remote <ssh-host>`. The hub will run `ssh -T <ssh-host> agent-view collect --stdio` through your own SSH config. The remote machine needs no open port and no stored credentials. Today the hub prints a notice and ignores the flag.
+Agent View can show agents on other machines. The hub runs `ssh -T <ssh-host> agent-view collect --stdio` through your own SSH config. The remote machine needs no open port and no stored credentials.
+
+1. Build the binaries on the hub machine:
+
+```bash
+bun run compile
+```
+
+2. Copy the matching binary to the remote machine as `agent-view`. Use the Linux binary for a Linux host and the macOS binary for a Mac. The target directory must be on the `PATH` that SSH uses for commands:
+
+```bash
+scp dist/agent-view-linux-x64 <host>:~/.local/bin/agent-view
+```
+
+3. Check that SSH works without a prompt, and that the command is on the remote `PATH`. The hub runs SSH with `BatchMode=yes`, so it cannot ask for a password or a passphrase. Use a key, and load it in your SSH agent:
+
+```bash
+ssh -o BatchMode=yes <host> command -v agent-view
+```
+
+4. Start the hub with the remote machine. Add `--remote` once for each host:
+
+```bash
+agent-view --remote <host>
+```
+
+Notes:
+
+- If the remote machine has no `agent-view` on its `PATH`, the status corner shows "agent-view not found on <host>".
+- The host name must match `[A-Za-z0-9_][A-Za-z0-9._@:-]*`. For any other name, add an alias to `~/.ssh/config` and use the alias.
+- Command output and file paths from the remote machine travel over the SSH connection to your hub. The remote machine sends nothing elsewhere.
