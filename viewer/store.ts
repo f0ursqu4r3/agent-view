@@ -15,6 +15,10 @@ const MAX_CALLS_PER_HOST = 2000;
 const MAX_RECENT_PER_PATH = 16;
 const MAX_RECENT_PATHS = 4000;
 const MAX_HELD = 10_000;
+const MAX_CONFIRMED = 10_000;
+const SWEEP_EVERY_MS = 1000;
+/** An agent is dropped after this many lingers without an event, unless a present agent descends from it. */
+const DROP_AFTER_LINGERS = 2;
 
 type AgentEntry = { agent: Agent; lastEventMs: number };
 type HostState = {
@@ -30,6 +34,8 @@ type HostState = {
   held: Touch[];
   /** Recent confirmed touch times per path, for suppressing grey flickers. */
   recent: Map<string, number[]>;
+  /** Present agents for one `(version, now)`. */
+  presence?: { version: number; now: number; agents: AgentEntry[] };
 };
 
 const callKey = (agentId: string, callId: string): string => `${agentId}\u0000${callId}`;
@@ -38,11 +44,16 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 
 export class ViewerStore {
   focus: string | null = null;
+  /** Diagnostic: how many times presence was computed. Repeated reads with one `now` must not add to it. */
+  presenceComputes = 0;
   private readonly nowFn: () => number;
   private readonly lifecycle: Partial<LifecycleOptions>;
   private readonly hostStates = new Map<string, HostState>();
   private hostList: HostStatus[] = [];
   private orderCounter = 0;
+  /** Bumped by every `apply`. A cached presence result is valid for one version. */
+  private version = 0;
+  private lastSweepMs = Number.NEGATIVE_INFINITY;
 
   constructor(opts?: { now?: () => number; lifecycle?: Partial<LifecycleOptions> }) {
     this.nowFn = opts?.now ?? Date.now;
@@ -51,6 +62,7 @@ export class ViewerStore {
 
   apply(e: Envelope): void {
     if (!isObj(e) || e.v !== 1 || !isStr(e.host) || !isStr(e.kind)) return;
+    this.version++;
     try {
       this.dispatch(e);
     } catch {
@@ -79,7 +91,15 @@ export class ViewerStore {
     return false;
   }
 
+  /** Agents held in memory, present or not. */
+  storedAgentCount(): number {
+    let n = 0;
+    for (const h of this.hostStates.values()) n += h.agents.size;
+    return n;
+  }
+
   agents(now: number): ViewAgent[] {
+    this.sweep(now);
     const out: ViewAgent[] = [];
     for (const [host, h] of this.hostStates) {
       for (const a of this.presentAgents(h, now)) {
@@ -92,9 +112,10 @@ export class ViewerStore {
 
   /** Present agent ids: hosts by first appearance; main agents, each followed by its sub-agents depth first. */
   laneOrder(now: number): string[] {
+    this.sweep(now);
     const out: string[] = [];
     for (const h of this.hostStates.values()) {
-      const present = this.presentAgents(h, now).sort((a, b) => rank(h, a.agent.id) - rank(h, b.agent.id));
+      const present = [...this.presentAgents(h, now)].sort((a, b) => rank(h, a.agent.id) - rank(h, b.agent.id));
       const ids = new Set(present.map((a) => a.agent.id));
       const children = new Map<string, Agent[]>();
       const mains: Agent[] = [];
@@ -123,6 +144,7 @@ export class ViewerStore {
 
   /** Calls of present agents that are open or ended inside the window, oldest start first. */
   calls(now: number, windowMs = 16_000): ViewCall[] {
+    this.sweep(now);
     const out: ViewCall[] = [];
     for (const h of this.hostStates.values()) {
       const present = new Set(this.presentAgents(h, now).map((a) => a.agent.id));
@@ -198,14 +220,43 @@ export class ViewerStore {
     return h;
   }
 
-  /** Present agents of one host, with skew-corrected `lastEventAt`. */
+  /** Present agents of one host, with skew-corrected `lastEventAt`. Cached per `(version, now)`. Do not mutate the result. */
   private presentAgents(h: HostState, now: number): AgentEntry[] {
+    if (h.presence && h.presence.version === this.version && h.presence.now === now) return h.presence.agents;
+    this.presenceComputes++;
     const adjusted = [...h.agents.values()].map((a) => ({
       agent: { ...a.agent, lastEventAt: new Date(a.lastEventMs).toISOString() },
       lastEventMs: a.lastEventMs,
     }));
     const present = presentAgentIds(adjusted.map((a) => a.agent), now, this.lifecycle);
-    return adjusted.filter((a) => present.has(a.agent.id));
+    const agents = adjusted.filter((a) => present.has(a.agent.id));
+    h.presence = { version: this.version, now, agents };
+    return agents;
+  }
+
+  /** Drops agents far past linger, and their calls. At most once per second of `now`. */
+  private sweep(now: number): void {
+    if (Math.abs(now - this.lastSweepMs) < SWEEP_EVERY_MS) return;
+    this.lastSweepMs = now;
+    const horizon = DROP_AFTER_LINGERS * (this.lifecycle.lingerMs ?? LIFECYCLE.lingerMs);
+    let any = false;
+    for (const h of this.hostStates.values()) {
+      let dropped = false;
+      let present: Set<string> | undefined;
+      for (const [id, a] of [...h.agents]) {
+        if (now - a.lastEventMs < horizon) continue;
+        present ??= new Set(this.presentAgents(h, now).map((p) => p.agent.id));
+        if (present.has(id)) continue; // an ancestor of a present agent
+        h.agents.delete(id);
+        h.order.delete(id);
+        h.openByAgent.delete(id);
+        dropped = true;
+      }
+      if (!dropped) continue;
+      any = true;
+      for (const [key, c] of [...h.calls]) if (!h.agents.has(c.agentId)) h.calls.delete(key);
+    }
+    if (any) this.version++;
   }
 
   private ms(h: HostState, iso: unknown): number {
@@ -403,6 +454,7 @@ export class ViewerStore {
       ...(agentId === undefined ? {} : { agentId }), atMs,
     };
     h.confirmedQueue.push(touch);
+    if (h.confirmedQueue.length > MAX_CONFIRMED) h.confirmedQueue.splice(0, h.confirmedQueue.length - MAX_CONFIRMED);
     const times = h.recent.get(path);
     if (times) {
       times.push(atMs);

@@ -262,3 +262,63 @@ test('ignores unknown and malformed envelopes without throwing', () => {
   expect(s.agents(NOW).map((a) => a.id)).toEqual(['a']);
   expect(s.takeTouches(NOW + 5000)).toEqual([]);
 });
+
+test('I1: agents idle for over 2x linger are dropped with their calls; a present child keeps its idle parent', () => {
+  const s = new ViewerStore({ now: () => NOW });
+  s.apply(hello('local'));
+  s.apply(snapshot('local', [
+    agent('fresh', { lastEventAt: iso(NOW - 1000) }),
+    agent('mid', { lastEventAt: iso(NOW - 900_000) }),
+    agent('dead', { lastEventAt: iso(NOW - 1_300_000) }),
+    agent('parent', { lastEventAt: iso(NOW - 1_300_000) }),
+    agent('kid', { parentId: 'parent', role: 'sub-agent', lastEventAt: iso(NOW - 1000) }),
+  ], [call('dead', 'open-dead', { startedAt: iso(NOW - 1_300_000) })]));
+  s.apply(env('local', { kind: 'tool.start', call: call('dead', 'x', { startedAt: iso(NOW - 1_300_000) }) }, NOW - 1_300_000));
+  s.apply(env('local', { kind: 'tool.end', agentId: 'dead', callId: 'x', ok: true }, NOW - 1_299_000));
+  expect(s.storedAgentCount()).toBe(5);
+  expect(s.laneOrder(NOW)).toEqual(['fresh', 'parent', 'kid']);
+  // 'dead' is gone; the old parent stays for its present child; 'mid' (1.5x linger) stays stored but absent
+  expect(s.storedAgentCount()).toBe(4);
+  expect(s.agents(NOW).map((a) => a.id).sort()).toEqual(['fresh', 'kid', 'parent']);
+  expect(s.openCall('dead')).toBeUndefined();
+  expect(s.calls(NOW, 10_000_000).length).toBe(0);
+  // later, the stale ones go too
+  expect(s.laneOrder(NOW + 2_000)).toEqual(['fresh', 'parent', 'kid']);
+  expect(s.storedAgentCount()).toBe(4);
+  s.apply(env('local', { kind: 'agent.upsert', agent: agent('dead', { lastEventAt: iso(NOW) }) }));
+  expect(s.laneOrder(NOW + 3_000)).toContain('dead');
+  // sweep runs at most once per second of now
+  s.apply(snapshot('local', [agent('old', { lastEventAt: iso(NOW - 1_300_000) })]));
+  expect(s.storedAgentCount()).toBe(1);
+  s.agents(NOW + 3_500);
+  expect(s.storedAgentCount()).toBe(1);
+  s.agents(NOW + 4_100);
+  expect(s.storedAgentCount()).toBe(0);
+});
+
+test('I1: repeated reads with the same now do not recompute presence, and writes invalidate it', () => {
+  const s = seeded();
+  s.agents(NOW);
+  const before = s.presenceComputes;
+  s.agents(NOW);
+  s.calls(NOW);
+  s.laneOrder(NOW);
+  s.agents(NOW);
+  expect(s.presenceComputes).toBe(before);
+  s.apply(env('local', { kind: 'agent.upsert', agent: agent('b') }));
+  expect(s.agents(NOW).map((a) => a.id).sort()).toEqual(['a', 'b']);
+  expect(s.presenceComputes).toBe(before + 1);
+  s.agents(NOW + 1);
+  expect(s.presenceComputes).toBe(before + 2);
+});
+
+test('I2: the confirmed touch queue holds at most 10,000 touches, dropping the oldest', () => {
+  const s = seeded();
+  for (let i = 0; i < 10_050; i++) {
+    s.apply(env('local', { kind: 'tool.update', agentId: 'a', callId: 'none', files: [`/p/f${i}.ts`] }, NOW + i));
+  }
+  const out = s.takeTouches(NOW + 20_000);
+  expect(out.length).toBe(10_000);
+  expect(out[0]!.path).toBe('/p/f50.ts');
+  expect(out[out.length - 1]!.path).toBe('/p/f10049.ts');
+});
