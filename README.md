@@ -1,90 +1,138 @@
-# Agent View — local prototype
+# Agent View
 
-A local card graph for Codex and Claude Code sessions, with parent links and a live file-change feed. Reads existing logs. Does not launch agents, change agent settings, or send data to a remote service.
+Agent View shows, live, what the coding agents on your machine are doing. It reads Codex and Claude Code session logs. It draws each agent as a glowing dot on a growing file tree. Agents move to the files they work on, and tool calls make visible effects. A drawer shows a timeline of tool calls and live command output. Agent View is read-only. It does not start agents, change agent settings, or send data to a remote service.
+
+## Requirements
+
+- Bun 1.4 or later.
+- macOS for the hub. The collector also runs on Linux.
 
 ## Run
 
-Requires Node.js 22 or later. No packages need to be installed.
+Install the packages:
 
-```sh
-cd /Users/la.kyle.dougan/git/personal/agent-view
-npm start
+```bash
+bun install
 ```
 
-Open http://127.0.0.1:4317. To include another directory in file monitoring:
+Start the hub and open the viewer at `http://127.0.0.1:4317`:
 
-```sh
-npm start -- --watch /absolute/project/path
+```bash
+bun start
 ```
 
-Repeat `--watch` for more directories. `PORT=4318 npm start` selects a different local port.
+Show a simulated event stream. The viewer labels it as simulated:
 
-```sh
-npm test          # Isolated parser and filesystem tests; no model calls
-npm run audit:live # Check real sessions from the running viewer; prints counts only
-npm run demo     # Simulated graph, explicitly labeled; uses the same default port
+```bash
+bun start -- --demo
 ```
 
-## What the graph proves
+Add a directory to file monitoring:
 
-- **Codex confirmed parent:** `session_meta.parent_thread_id` or `source.subagent.thread_spawn.parent_thread_id`.
-- **Claude confirmed parent:** an `Agent` or `Task` tool result with `toolUseResult.agentId`, paired with the calling agent's tool record.
-- **Claude dashed session link:** a sub-agent transcript names its owning session. This does not prove an immediate parent. A later explicit tool result replaces this link.
-- Missing parents are labeled as outside the loaded history. Message `parentUuid` is never treated as an agent parent.
-- Identity includes provider, account scope, session ID, and Claude sub-agent ID. Separate sessions can reuse a tool-call ID safely.
-- Working and finished states come from recorded events. “Stale” means no recorded agent event for two minutes. A stale agent might still be running. This is not a process monitor.
+```bash
+bun start -- --watch /abs/path
+```
 
-## What file attribution proves
+Run the tests. They make no model calls:
 
-The feed has two independent evidence sources:
+```bash
+bun test
+```
 
-1. **Confirmed tool receipt:** a paired successful file-tool call and result. Claude `Write`, `Edit`, `MultiEdit`, and `NotebookEdit` are supported. Codex native `FileChange` records with `status: completed` identify the writing thread and changed paths, including patches executed inside `functions.exec`. Direct `apply_patch` call/result pairs remain a fallback. The receipt proves what the tool reported; it does not provide a byte-level operating-system audit.
-2. **Unknown filesystem change:** a difference between file metadata snapshots. The collector never assigns this event to an agent based on timing, working directory, or recent activity.
+Run the viewer smoke test in a headless browser:
 
-A tool receipt and a filesystem change can describe the same edit. They remain separate to avoid a false merge when two agents write the same file. Failed or incomplete tools do not produce confirmed writes. Arbitrary shell writes and MCP editors are not attributed without an explicit file-change receipt. A completed shell command and its stdout do not prove which files it wrote. Their file changes can still appear as unknown when their directories are monitored. Diffs and file contents are not read from disk. Command output can contain file contents if the command printed them.
+```bash
+bun run smoke
+```
 
-## Recorded commands
+Check real sessions on a running hub. This prints counts only. Pass a port as the last argument if the hub does not use `4317`:
 
-The Commands view reads native Codex `CommandExecution` records, including commands called inside `functions.exec`. It shows the owning agent, working directory, result, exit code, and recorded output. Click a command to load its details. stdout and stderr may be combined by Codex; the viewer does not invent a separation.
+```bash
+bun run audit:live
+```
 
-The newest 100 commands are retained. Each command is limited to 4,096 characters and its output to the last 16,384 characters. Truncation is labeled. Full command text and output are fetched only when opened, rather than broadcast with each snapshot. Records update when Codex writes an execution event; this is not a direct OS stdout stream. The Codex execution handle is not treated as an operating-system PID.
+## Flags
 
-## Better process monitoring
+| Flag | Meaning |
+|---|---|
+| `--port <n>` | Hub port. Default `4317`. |
+| `--no-open` | Do not open the browser. The hub prints `Agent View: <url>`. |
+| `--demo` | Run a simulated event stream. |
+| `--demo-scale normal\|stress` | Size of the simulated stream. Default `normal`. |
+| `--watch <dir>` | Add a file-system root. Repeatable. |
+| `--linger <minutes>` | How long an agent stays on the stage after its last event. Default 10. |
+| `--remote <ssh-host>` | Planned. See Remote machines. |
 
-Native events solve agent identity and explicit patch attribution. For arbitrary shell scripts, a future collector needs an explicit mapping from agent/tool call to OS process identity, plus OS file events for that process and its descendants. Process identity must include a start time or equivalent token to avoid PID reuse. Several agents can share one Codex process, so process ancestry alone cannot prove the agent identity.
+`agent-view collect --stdio [--label <name>]` runs a collector that writes one NDJSON event per line to stdout. It is the entry point for remote machines.
 
-This machine includes `/usr/bin/eslogger`, which can emit Endpoint Security process and file events as JSON lines. It is suitable for a prototype experiment, but Apple's local manual explicitly says its output is not a stable API. It requires root and Full Disk Access for the responsible process. No tracing was started. On macOS, `fs_usage` can also help diagnose filesystem system calls with elevated privileges. A durable collector can use Endpoint Security process and filesystem events, but deployment requires Apple's Endpoint Security entitlement, root privileges, and Full Disk Access. Neither source provides an automatic agent identity or a universal stdout tap. Capture stdout/stderr at process launch, or consume the runtime's output event stream. Do not read another process's pipe as a substitute: doing so can consume its data.
+## What the views show
 
-Codex tool hooks also cover nested code-mode calls and can supply tool IDs. Hook installation and privileged process tracing are not enabled by this prototype.
+- **Stage.** A radial file tree. Each host is a root. Under it are project roots, folders, and files. Claude Code agents are orange. Codex agents are blue. Sub-agents use lighter tones. An agent moves to the file of its open call. Effects follow the call category: edit and write, read, search, command, agent, and other. An unattributed file change makes the file flicker grey.
+- **Drawer.** Press `T`, or click the handle, to open it. It covers about 35% of the height. The left side has one lane per agent, with sub-agents nested under their parent. Each tool call is a bar colored by category. The time window is 16 seconds. The right side lists live commands with their output and exit status.
+- **Coverage.** Press `C`. The panel shows log roots, open logs, watched roots, malformed records, dropped file-system events, and degraded sources.
+- **Focus.** Click a lane or an agent dot to focus that agent. The stage dims the other agents, and the command list shows only that agent. Press `Esc` to clear the focus.
 
-References: [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Codex app server](https://learn.chatgpt.com/docs/app-server), [Apple filesystem tracing](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/FileSystem/Articles/FileSystemCalls.html), [Endpoint Security entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.endpoint-security.client).
+A status corner shows each host with its connection state.
 
 ## Sources and limits
 
-- Codex: `$CODEX_HOME/sessions`, or `~/.codex/sessions`, plus existing `~/.codex-accounts/*/sessions`. Real paths remove duplicate account roots.
-- Claude Code: `$CLAUDE_CONFIG_DIR/projects`, or `~/.claude/projects`.
-- At most 120 recent logs load, divided equally between discovered providers. Only the header and last 4 MiB load for a large log. Earlier call/result pairs can be missing. New log discovery runs every five scan cycles.
-- The collector waits for complete JSON lines, preserves split UTF-8, and handles file truncation or replacement. Malformed and oversized records are counted or reported.
-- At most 24 project directories are monitored. Each directory has a 12,000-entry scan limit. Over-limit or unreadable directories are skipped and listed in the coverage panel. Failed directories retry after one minute.
-- File snapshots use modification time, change time, size, and inode. Each scan is followed by a one-second delay. Large projects take longer. Brief files created and deleted between scans can be missed. Renames appear as create/delete events. Metadata-only changes can appear as changes.
-- File monitoring starts with a baseline. Existing files do not appear as newly created. Tool receipts can include loaded history.
-- Directory symlinks are not followed. Common dependency, build, cache, Git, and `.worktrees` directories are skipped during scans. An agent's actual worktree can still be monitored as a separate root.
-- The newest 500 file events remain in memory. The UI displays at most 150 matching events. Restarting loses filesystem history; available tool receipts reload from logs.
-- No SSH support or automatic hook installation yet. Log formats are internal and can change with agent releases.
+| Source | Where it reads |
+|---|---|
+| Claude Code logs | `$CLAUDE_CONFIG_DIR/projects`, or `~/.claude/projects`. Sub-agent transcripts are under `subagents/agent-<id>.jsonl`. |
+| Codex logs | `$CODEX_HOME/sessions`, or `~/.codex/sessions`, and `~/.codex-accounts/*/sessions`. |
+| File-system changes | The project root of each active agent, and each `--watch` directory. Recursive `fs.watch`. No polling of directory trees. |
 
-The coverage panel lists actual log roots, watched directories, parse errors, and scan limits. Coverage is partial; the viewer does not claim to monitor every operation on the machine.
+A source that fails reports `degraded` or `down`. It does not stop the collector.
 
-## Local access
+| Item | Value |
+|---|---|
+| `tool.output` chunk | at most 4 KiB |
+| Output kept per call | last 16 KiB |
+| `command` field | first 4,096 characters |
+| Large log load | header line plus last 4 MiB |
+| Log discovery | modified in the last 24 hours; at most 120 logs, divided equally between providers |
+| Watch roots | at most 24 |
+| `fs.change` rate | at most 50 per second per root; extra events are dropped and counted in coverage |
+| New unattributed tree nodes | at most 20 per second per project |
+| Linger (default) | 10 minutes |
+| Stale | 2 minutes without an event while working |
+| Finished agent fade | 1 minute |
+| Open call dropped after | 10 minutes |
+| File node lifetime | 30 minutes |
+| Grey flicker hold and suppression window | 2 seconds |
 
-The server binds only to `127.0.0.1`. It validates Host and Origin, exposes read-only routes, and serves no arbitrary file paths. It has no account login. Local programs and people who can access the browser on this machine can view project paths, agent names, and tool metadata. Conversation and reasoning records are not sent to the UI. Command previews and command output are local user data and are not automatically redacted. Output can include sensitive text printed by a command. Agent settings and source logs are never written.
+The collector never watches the home directory or `/`. It skips `.git`, `node_modules`, build and cache folders, `.worktrees`, `.superpowers`, and paths that a project `.gitignore` ignores.
 
-## Implementation
+Performance targets: 60 fps with 50 agents, 3,000 file nodes, and 200 events per second. The collector uses less than 2% of one core when agents are idle.
 
-- `src/model.mjs`: provider adapters, agent graph, call/result matching, and evidence labels.
-- `src/native-events.mjs`: native Codex file changes and bounded command records.
-- `src/collector.mjs`: log discovery, incremental JSONL reads, and metadata snapshots.
-- `src/server.mjs`: local HTTP and server-sent events.
-- `public/`: dependency-free graph, filters, detail dialog, and file feed.
-- `test/`: deterministic regression tests and a separate local-log audit.
+## Accuracy rules
 
-This is a feasibility prototype, not a complete monitoring agent.
+1. Only a recorded tool call moves an agent or draws an effect.
+2. File-system changes stay unattributed. The collector never assigns them to an agent, and never attaches an agent ID to `fs.change`.
+3. A parent link is `confirmed` only from an explicit field. Otherwise it is `session` (drawn dashed) or unknown.
+   - Claude Code: an `Agent` or `Task` tool result with `toolUseResult.agentId`.
+   - Codex: `parent_thread_id` in the session metadata.
+4. A failed, declined, or incomplete tool call creates no confirmed write.
+5. Shell commands never produce file attributions. Their effects can appear only as unattributed changes.
+6. The viewer never shows file contents or diffs.
+7. Command output is shown as recorded. It is not redacted. It can contain file contents if the command printed them.
+8. A tool with no recorded result ends with `ok: null`. It creates no confirmed write.
+
+## Local access and privacy
+
+- The hub binds `127.0.0.1` only.
+- The hub checks `Host` and `Origin` on `/ws` and `/api/*`. Other values get `403`.
+- The viewer bundle at `/` holds no data. Bun serves it as an HTML route, which cannot run a check.
+- All routes are read-only. The hub serves no file paths.
+- Agent View never writes to agent settings, logs, or threads.
+- Command output and file paths stay on your machine.
+
+## Known gaps
+
+- The Codex daemon source is skipped. The M0 spike found no loaded Codex thread, so attaching could not be proven free of side effects. Codex uses its session logs only. Nested Codex commands have no start events and no live output. They show as short bars that end when the log records them.- File watching can miss writes in the first moments after a watch root starts.
+- The Codex `exec` wrapper shows as `other`. The commands it runs arrive as their own command items.
+- Claude Code command output does not stream. It appears when the tool result is written.
+
+## Remote machines
+
+Planned: `--remote <ssh-host>`. The hub will run `ssh -T <ssh-host> agent-view collect --stdio` through your own SSH config. The remote machine needs no open port and no stored credentials. Today the hub prints a notice and ignores the flag.
