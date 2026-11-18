@@ -360,3 +360,11 @@ test('R25: events for a pruned agent are not stored and request a resnapshot; a 
   expect(s.openCall('old')?.callId).toBe('c2');
   expect(s.calls(NOW).map((c) => c.callId)).toEqual(['c2']);
 });
+
+test('tool.end keeps the exit code on the call', () => {
+  const s = seeded();
+  s.apply(env('local', { kind: 'tool.start', call: call('a', 'c1', { category: 'command', rawName: 'Bash', command: 'false' }) }));
+  expect(s.commands(null, 1)[0]!.exitCode).toBeUndefined();
+  s.apply(env('local', { kind: 'tool.end', agentId: 'a', callId: 'c1', ok: false, exitCode: 1 }, NOW + 500));
+  expect(s.commands(null, 1)[0]!.exitCode).toBe(1);
+});

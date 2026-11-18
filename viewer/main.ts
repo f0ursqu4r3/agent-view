@@ -1,4 +1,6 @@
+import { Drawer, toggleFocus } from './drawer/drawer';
 import { FpsMeter } from './fps';
+import { Hud } from './hud';
 import { connectHub } from './socket';
 import type { HubSocket } from './socket';
 import { Stage } from './stage/stage';
@@ -28,6 +30,20 @@ export async function boot(root: HTMLElement): Promise<Viewer> {
   stage.setReducedMotion(motion.matches);
   motion.addEventListener('change', (e) => stage.setReducedMotion(e.matches));
 
+  const drawerRoot = document.getElementById('drawer');
+  const hudRoot = document.getElementById('hud');
+  const drawer = drawerRoot ? new Drawer(drawerRoot, store) : null;
+  const hud = hudRoot ? new Hud(hudRoot, store) : null;
+  stage.onAgentClick((id) => toggleFocus(store, id));
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (e.key === 'Escape') store.setFocus(null);
+    else if (e.key === 't' || e.key === 'T') drawer?.toggle();
+    else if (e.key === 'c' || e.key === 'C') hud?.toggleCoverage();
+  });
+
   const fps = new URLSearchParams(location.search).get('fps') === '1' ? new FpsMeter(document.body, () => stage.rendererInfo()) : null;
   const hooks: FrameHook[] = [];
   const viewer: Viewer = { store, tree, stage, socket, onFrame: (fn) => hooks.push(fn) };
@@ -50,6 +66,8 @@ export async function boot(root: HTMLElement): Promise<Viewer> {
     }
     tree.layout(dt);
     stage.render(now, dt);
+    drawer?.render(now);
+    hud?.render();
     for (const h of hooks) h(now, dt);
     fps?.tick(t);
     if (!exposed && store.isDemo()) {

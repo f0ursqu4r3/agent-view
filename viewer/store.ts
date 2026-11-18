@@ -5,7 +5,7 @@ import type { Agent, Call, Coverage, Envelope, HostStatus } from '../src/shared/
 // Browser-safe: no DOM and no Node imports. The store is also tested with `bun test`.
 
 export type ViewAgent = Agent & { host: string; stale: boolean; lastEventMs: number };
-export type ViewCall = Call & { host: string; startMs: number; endMs: number | null; ok: boolean | null; output: string; outputTruncated: boolean };
+export type ViewCall = Call & { host: string; startMs: number; endMs: number | null; ok: boolean | null; exitCode?: number; output: string; outputTruncated: boolean };
 export type Touch = { host: string; path: string; projectRoot: string | null; attribution: 'confirmed' | 'unattributed'; agentId?: string; atMs: number };
 
 /** A grey flicker is held this long, and a confirmed touch this close to it suppresses it. */
@@ -368,6 +368,7 @@ export class ViewerStore {
           if (call.endMs !== null) return;
           call.endMs = at;
           call.ok = e.ok;
+          if (typeof e.exitCode === 'number') call.exitCode = e.exitCode;
           this.closeOpen(h, call);
         }
         for (const w of Array.isArray(e.writes) ? e.writes : []) {
