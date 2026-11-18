@@ -397,6 +397,10 @@ func TestComposePanels(t *testing.T) {
 func TestComposeAnimation(t *testing.T) {
 	f := newFixture(t)
 	f.agent("a", "")
+	f.start("a", "c0", "read", "/work/repo/src/first.go")
+	f.clock += 500
+	f.end("a", "c0", true)
+	f.clock += 500
 	f.start("a", "c1", "read", "/work/repo/src/old.go")
 	f.clock += 1000
 	f.end("a", "c1", true)
@@ -423,12 +427,35 @@ func TestComposeAnimation(t *testing.T) {
 	if got := at(g, cx, cy+7, 40); strings.TrimSpace(got) != "" {
 		t.Errorf("frame 0: where line = %q", got)
 	}
-	for i := 0; i < 7; i++ {
+
+	// Frame 2: the new card's top 2 lines over the leaving card, which keeps
+	// its top 4 lines; history card 1 has moved 6 of its 15 columns in.
+	e.Step()
+	e.Step()
+	g, _ = Compose(in)
+	if got := at(g, cx, cy+1, 28); !strings.Contains(got, "new.go") {
+		t.Errorf("frame 2: line 1 = %q, want the new card over the leaving one", got)
+	}
+	if got := at(g, cx, cy+2, 28); !strings.Contains(got, "src/") {
+		t.Errorf("frame 2: line 2 = %q, want the leaving card", got)
+	}
+	if got := at(g, cx, cy+4, 28); strings.TrimSpace(got) != "" {
+		t.Errorf("frame 2: line 4 = %q, want blank", got)
+	}
+	x1 := cx + 29 + 15 // the place of history card 1
+	if got := at(g, x1-15+3*2, cy+6, 14); got != "└────────────┘" {
+		t.Errorf("frame 2: history card 1 bottom at x1-9 = %q", got)
+	}
+
+	for i := 2; i < 7; i++ {
 		e.Step()
 	}
 	g, _ = Compose(in)
 	if got := at(g, cx, cy+1, 28); !strings.Contains(got, "new.go") {
 		t.Errorf("frame 7: new card = %q", got)
+	}
+	if got := at(g, x1, cy+3, 14); !strings.HasPrefix(got, "┌─ READ") {
+		t.Errorf("frame 7: history card 1 = %q, want it in place", got)
 	}
 	if got := at(g, cx, cy+7, 40); !strings.HasPrefix(got, "repo:lib/ $ ▌") {
 		t.Errorf("frame 7: where line = %q", got)
@@ -516,5 +543,62 @@ func TestComposeTallRows(t *testing.T) {
 	_, hits = Compose(in)
 	if hs1, hs2 := hitFor(t, hits, "s1"), hitFor(t, hits, "s2"); hs2.Y != hs1.Y+1 {
 		t.Errorf("collapsed s1 = %+v, s2 = %+v", hs1, hs2)
+	}
+}
+
+// TestComposeGutterFirst checks a new sub-agent: its gutter draws down one
+// line per frame, and its row (cards and hit) shows only after the gutter.
+func TestComposeGutterFirst(t *testing.T) {
+	f := newFixture(t)
+	f.agent("a", "")
+	f.agent("s1", "a")
+	f.start("a", "c1", "read", "/work/repo/a.go")
+	f.start("s1", "c2", "read", "/work/repo/s.go")
+	e := anim.New(false)
+	e.OnAgentAdded("s1", true)
+	in := f.input(120, 40)
+	in.Anim = e
+	blankRow := func(g *cells.Grid, y int) bool { return strings.TrimSpace(at(g, 0, y, g.W)) == "" }
+
+	g, hits := Compose(in)
+	ha := hitFor(t, hits, "a")
+	sy := ha.Y + 9 // the row of s1
+	if len(hits) != 1 {
+		t.Fatalf("frame 0: hits = %+v, want only a", hits)
+	}
+	for y := sy; y < sy+9; y++ {
+		if !blankRow(g, y) {
+			t.Errorf("frame 0: line %d of s1 = %q, want blank", y-sy, at(g, 0, y, g.W))
+		}
+	}
+
+	for i := 0; i < 3; i++ {
+		e.Step()
+	}
+	g, hits = Compose(in)
+	if len(hits) != 1 {
+		t.Errorf("frame 3: hits = %+v, want only a", hits)
+	}
+	for y := sy; y < sy+3; y++ {
+		if got := at(g, 0, y, g.W); strings.TrimSpace(got) != "│" {
+			t.Errorf("frame 3: line %d of s1 = %q, want the gutter only", y-sy, got)
+		}
+	}
+	for y := sy + 3; y < sy+9; y++ {
+		if !blankRow(g, y) {
+			t.Errorf("frame 3: line %d of s1 = %q, want blank", y-sy, at(g, 0, y, g.W))
+		}
+	}
+
+	for i := 3; i < 9; i++ {
+		e.Step()
+	}
+	g, hits = Compose(in)
+	hs := hitFor(t, hits, "s1")
+	if hs.Y != sy || at(g, hs.X, hs.Y, 1) != "╭" {
+		t.Errorf("frame 9: s1 hit = %+v, card corner %q", hs, at(g, hs.X, hs.Y, 1))
+	}
+	if got := at(g, 3, sy+3, 3); got != "└──" {
+		t.Errorf("frame 9: gutter corner = %q", got)
 	}
 }
