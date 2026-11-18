@@ -106,23 +106,52 @@ func markOf(h *hostState, agentID, callID string) callMark {
 	return callUnknown
 }
 
-// replayed reports whether e repeats a tool.start or tool.end that the store applied.
-func replayed(h *hostState, e schema.Envelope) bool {
+// replay reports whether e repeats a tool.start or tool.end that the store
+// applied. A replay emits no change and counts nothing. It only restores a call
+// that the call list lost, with what the event carries: a dropped open call
+// comes back open, and an ended call waits in pending for its replayed
+// tool.end. A dormant agent stays dormant.
+func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 	switch e.Kind {
 	case "tool.start":
-		if e.Call == nil {
+		c := e.Call
+		if c == nil {
 			return false
 		}
-		m := markOf(h, e.Call.AgentID, e.Call.CallID)
-		return m == callOpen || m == callEnded
+		t := tallyOf(h, c.AgentID)
+		if t == nil || t.calls[c.CallID] == callUnknown {
+			return false
+		}
+		k := callKey{c.AgentID, c.CallID}
+		if !h.agents.has(c.AgentID) || h.calls.has(k) {
+			return true
+		}
+		switch t.calls[c.CallID] {
+		case callDropped:
+			addCall(h, e.Host, *c, s.ms(h, c.StartedAt))
+			t.calls[c.CallID] = callOpen
+		case callEnded:
+			h.pending[k] = newCall(e.Host, *c, s.ms(h, c.StartedAt))
+		}
+		return true
 	case "tool.end":
-		return markOf(h, e.AgentID, e.CallID) == callEnded
+		if markOf(h, e.AgentID, e.CallID) != callEnded {
+			return false
+		}
+		k := callKey{e.AgentID, e.CallID}
+		if call, ok := h.pending[k]; ok && h.agents.has(e.AgentID) {
+			delete(h.pending, k)
+			endCall(call, e, at)
+			storeCall(h, call)
+			trimCalls(h)
+		}
+		return true
 	}
 	return false
 }
 
-// dropOpen marks an open call that left the call list. Its next tool.start
-// shows it again without counting it again.
+// dropOpen marks an open call that left the call list. A replayed tool.start
+// restores it.
 func dropOpen(h *hostState, c *ViewCall) {
 	if t := tallyOf(h, c.AgentID); t != nil && !c.Ended && t.calls[c.CallID] == callOpen {
 		t.calls[c.CallID] = callDropped

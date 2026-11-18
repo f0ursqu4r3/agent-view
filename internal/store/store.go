@@ -5,6 +5,7 @@ package store
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"time"
@@ -108,6 +109,7 @@ type hostState struct {
 	dormant     *omap[string, *dormantRecord]
 	calls       *omap[callKey, *ViewCall]
 	openByAgent map[string]map[string]*ViewCall
+	pending     map[callKey]*ViewCall  // calls restored from a replayed tool.start, waiting for their replayed tool.end
 	nextSeq     uint64                 // seq of the next stored call
 	held        []heldTouch            // unattributed touches
 	recent      *omap[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
@@ -131,8 +133,8 @@ func New(o Options) *Store {
 
 // Apply applies one envelope and returns its changes, or nil. Envelopes with
 // another version, no host, or no kind are ignored, as are malformed events. A
-// replayed tool.start or tool.end changes nothing. A panic drops the envelope
-// and counts it in Panics; changes made before the panic stay.
+// replayed tool.start or tool.end emits and counts nothing. A panic drops the
+// envelope and counts it in Panics; changes made before the panic stay.
 func (s *Store) Apply(e schema.Envelope) (changes []Change) {
 	if e.V != schema.Version || e.Host == "" || e.Kind == "" {
 		return nil
@@ -247,7 +249,8 @@ func (s *Store) host(label string) *hostState {
 	if h == nil {
 		h = &hostState{
 			agents: newOmap[string, *agentEntry](), order: map[string]int{}, dormant: newOmap[string, *dormantRecord](),
-			calls: newOmap[callKey, *ViewCall](), openByAgent: map[string]map[string]*ViewCall{}, recent: newOmap[string, []int64](),
+			calls: newOmap[callKey, *ViewCall](), openByAgent: map[string]map[string]*ViewCall{}, pending: map[callKey]*ViewCall{},
+			recent: newOmap[string, []int64](),
 		}
 		s.hosts[label] = h
 		s.hostOrder = append(s.hostOrder, label)
@@ -317,6 +320,7 @@ func (s *Store) sweep(now int64) {
 				dropOpen(h, c)
 			}
 		}
+		maps.DeleteFunc(h.pending, func(_ callKey, c *ViewCall) bool { return !h.agents.has(c.AgentID) })
 	}
 	if anyDropped {
 		s.version++

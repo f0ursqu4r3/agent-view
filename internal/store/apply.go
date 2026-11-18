@@ -10,8 +10,8 @@ import (
 func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	h := s.host(e.Host)
 	at := s.ms(h, e.Ts)
-	// No double counting: a replayed tool.start or tool.end changes nothing, not even a dormant agent.
-	if replayed(h, e) {
+	// No double counting: a replayed tool.start or tool.end emits and counts nothing.
+	if s.replay(h, e, at) {
 		return
 	}
 	// The collector keeps every agent. An event for a dormant agent revives it.
@@ -62,7 +62,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	case "tool.start":
 		s.toolStart(h, e.Host, e.Call, at, em)
 	case "tool.update":
-		call, _ := h.calls.get(callKey{e.AgentID, e.CallID})
+		call := callFor(h, callKey{e.AgentID, e.CallID})
 		bump(h, e.AgentID, at)
 		files := e.UpdateFiles()
 		if files == nil || call == nil || call.Ended {
@@ -70,7 +70,10 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 		}
 		call.Files = union(call.Files, files)
 	case "tool.output":
-		call, _ := h.calls.get(callKey{e.AgentID, e.CallID})
+		call, stored := h.calls.get(callKey{e.AgentID, e.CallID})
+		if !stored {
+			call = h.pending[callKey{e.AgentID, e.CallID}] // a restored call fills in silently
+		}
 		bump(h, e.AgentID, at)
 		if call == nil {
 			return
@@ -81,7 +84,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			out = tail(out, outputKeep)
 			truncated = true
 		}
-		if e.Chunk != "" || truncated != call.OutputTruncated {
+		if stored && (e.Chunk != "" || truncated != call.OutputTruncated) {
 			em.add(CallOutput, e.AgentID, e.CallID, "", at)
 		}
 		call.Output, call.OutputTruncated = out, truncated
@@ -96,11 +99,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			}
 		}
 		if call, ok := h.calls.get(callKey{e.AgentID, e.CallID}); ok && !call.Ended {
-			call.Ended, call.EndMs = true, at
-			call.Ok = clonePtr(e.Ok)
-			if e.ExitCode != nil {
-				call.ExitCode = clonePtr(e.ExitCode)
-			}
+			endCall(call, e, at)
 			closeOpen(h, call)
 			em.add(CallEnded, e.AgentID, e.CallID, "", at)
 		}
@@ -126,9 +125,8 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 }
 
 // snapshot replaces the host's agents, calls, and touches. Agents it leaves out
-// become dormant with their records, and agent ranks survive. It reports an
-// agent new to the store and an open call shown anew; a call the store saw end
-// is not opened again.
+// become dormant with their records, and agent ranks survive. It reports agents
+// and open calls new to the store; a call the store saw end is not opened again.
 func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter) {
 	files := e.SnapshotFiles()
 	if e.Agents == nil || e.OpenCalls == nil || files == nil {
@@ -138,6 +136,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 	h.agents = newOmap[string, *agentEntry]()
 	h.calls = newOmap[callKey, *ViewCall]()
 	h.openByAgent = map[string]map[string]*ViewCall{}
+	h.pending = map[callKey]*ViewCall{}
 	h.held = nil
 	h.recent = newOmap[string, []int64]()
 	for _, a := range e.Agents {
@@ -187,7 +186,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		}
 		t.seen(start)
 		t.calls[c.CallID] = callOpen
-		if mark != callOpen { // callOpen: it was open in the call list before this snapshot
+		if mark == callUnknown { // a dropped call comes back silently
 			em.add(CallStarted, c.AgentID, c.CallID, "", start)
 		}
 	}
@@ -205,8 +204,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 	}
 }
 
-// toolStart opens a new call, or shows a dropped call again without counting it
-// again. Its files are not writes, so they record nothing.
+// toolStart opens a call new to the store. Its files are not writes, so they record nothing.
 func (s *Store) toolStart(h *hostState, host string, c *schema.Call, at int64, em *emitter) {
 	if c == nil || c.AgentID == "" || c.CallID == "" {
 		return
@@ -227,11 +225,38 @@ func (s *Store) toolStart(h *hostState, host string, c *schema.Call, at int64, e
 	trimCalls(h)
 }
 
-func addCall(h *hostState, host string, c schema.Call, startMs int64) *ViewCall {
+// newCall returns an open call that is not stored yet.
+func newCall(host string, c schema.Call, startMs int64) *ViewCall {
 	c.Files = slices.Clone(c.Files)
-	call := &ViewCall{Call: c, Host: host, StartMs: startMs, seq: h.nextSeq}
+	return &ViewCall{Call: c, Host: host, StartMs: startMs}
+}
+
+// storeCall puts a call at the end of the call list.
+func storeCall(h *hostState, call *ViewCall) {
+	call.seq = h.nextSeq
 	h.nextSeq++
-	h.calls.set(callKey{c.AgentID, c.CallID}, call)
+	h.calls.set(callKey{call.AgentID, call.CallID}, call)
+}
+
+// callFor returns a stored call, or a restored call waiting for its replayed tool.end.
+func callFor(h *hostState, k callKey) *ViewCall {
+	if c, ok := h.calls.get(k); ok {
+		return c
+	}
+	return h.pending[k]
+}
+
+func endCall(call *ViewCall, e schema.Envelope, at int64) {
+	call.Ended, call.EndMs = true, at
+	call.Ok = clonePtr(e.Ok)
+	if e.ExitCode != nil {
+		call.ExitCode = clonePtr(e.ExitCode)
+	}
+}
+
+func addCall(h *hostState, host string, c schema.Call, startMs int64) *ViewCall {
+	call := newCall(host, c, startMs)
+	storeCall(h, call)
 	open := h.openByAgent[c.AgentID]
 	if open == nil {
 		open = map[string]*ViewCall{}

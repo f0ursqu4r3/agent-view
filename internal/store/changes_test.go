@@ -138,11 +138,12 @@ func TestSnapshotChanges(t *testing.T) {
 	eqChanges(t, "snapshot listing an ended call", got, nil)
 	eq(t, "open calls of c", callIDs(s.OpenCalls("c")), []string{})
 
-	// An open call a snapshot dropped shows again when a later snapshot lists it, and is not counted again.
+	// An open call a snapshot dropped comes back, silently and not counted again, when a later snapshot lists it.
 	eqChanges(t, "snapshot dropping open calls", s.Apply(evSnapshot("local", agents, nil)), nil)
 	eq(t, "open calls of b", callIDs(s.OpenCalls("b")), []string{})
 	got = s.Apply(evSnapshot("local", agents, []schema.Call{call("b", "c1", withStart(nowMs-1000))}))
-	eqChanges(t, "snapshot listing a dropped call", got, []Change{started("local", "b", "c1", nowMs-1000, false)})
+	eqChanges(t, "snapshot listing a dropped call", got, nil)
+	eq(t, "open calls of b", callIDs(s.OpenCalls("b")), []string{"c1"})
 	if n := s.Counters("b").Calls; n != 2 {
 		t.Fatalf("Counters(b).Calls = %d, want 2", n)
 	}
@@ -233,8 +234,8 @@ func TestRestartedCollectorReplay(t *testing.T) {
 	eqChanges(t, "replayed upsert", s.Apply(scan[0]), nil)
 	eqChanges(t, "replayed start of an ended call", s.Apply(scan[1]), nil)
 	eqChanges(t, "replayed end", s.Apply(scan[2]), nil)
-	// c2 was open when the snapshot dropped it: its tool.start shows it again but does not count it again.
-	eqChanges(t, "replayed start of a dropped open call", s.Apply(scan[3]), []Change{started("local", "a", "c2", nowMs-30_000, true)})
+	// c2 was open when the snapshot dropped it: its tool.start restores it silently and does not count it again.
+	eqChanges(t, "replayed start of a dropped open call", s.Apply(scan[3]), nil)
 	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c2"})
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
@@ -243,8 +244,74 @@ func TestRestartedCollectorReplay(t *testing.T) {
 	if c := s.Counters("a"); c != (Counters{Calls: 2, Faults: 2, FirstSeenMs: nowMs - 60_000}) {
 		t.Fatalf("Counters = %+v, want 2 calls, 2 faults", c)
 	}
-	// The snapshot dropped c1 from the call list, and its replay does not bring it back.
-	eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{"c2"})
+	// The snapshot dropped c1 from the call list, and its replay restored it.
+	eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{"c2", "c1"})
+}
+
+// describe lists the fields a restored call must get back.
+func describe(calls []*ViewCall) []string {
+	out := []string{}
+	for _, c := range calls {
+		ok, exit := "nil", "nil"
+		if c.Ok != nil {
+			ok = fmt.Sprint(*c.Ok)
+		}
+		if c.ExitCode != nil {
+			exit = fmt.Sprint(*c.ExitCode)
+		}
+		out = append(out, fmt.Sprintf("%s %s start=%d end=%d ok=%s exit=%s out=%q files=%q",
+			c.CallID, c.Category, c.StartMs, c.EndMs, ok, exit, c.Output, c.Files))
+	}
+	return out
+}
+
+// A replay restores a call that the call list lost, with what its events carry, but emits no
+// change and does not count the call again.
+func TestReplayRestoresCalls(t *testing.T) {
+	s := New(Options{Now: fixed(nowMs)})
+	scan := []schema.Envelope{
+		evUpsert("local", agent("a", withLastAt(nowMs-60_000)), nowMs-60_000),
+		evStart("local", call("a", "c1", withStart(nowMs-50_000), withCommand("make")), nowMs-50_000),
+		evOutput("local", "a", "c1", "built\n", false, nowMs-49_000),
+		evEnd("local", "a", "c1", ptr(false), ptr(2), nil, nowMs-45_000),
+		evStart("local", call("a", "c2", withStart(nowMs-40_000), withCategory("edit"), withFiles("/p/a.ts")), nowMs-40_000),
+		evUpdate("local", "a", "c2", []string{"/p/b.ts"}, nowMs-39_000),
+		evEnd("local", "a", "c2", ptr(true), nil, nil, nowMs-35_000),
+	}
+	s.Apply(evHello("local", nowMs, false))
+	s.Apply(evSnapshot("local", nil, nil))
+	for _, e := range scan {
+		s.Apply(e)
+	}
+	counters := s.Counters("a")
+	before := describe(s.RecentEnded("a", 5))
+	if len(before) != 2 {
+		t.Fatalf("RecentEnded before the restart = %q, want c2 and c1", before)
+	}
+
+	s.Apply(evHello("local", nowMs, false))
+	s.Apply(evSnapshot("local", nil, nil))
+	for i, e := range scan {
+		eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
+		if i == 1 {
+			// A replayed start of an ended call waits for its end: it is neither open nor ended yet.
+			eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
+			eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{})
+		}
+	}
+	eq(t, "restored calls", describe(s.RecentEnded("a", 5)), before)
+	if c := s.Counters("a"); c != counters {
+		t.Fatalf("Counters = %+v, want %+v", c, counters)
+	}
+
+	// A restored call still waiting for its end goes when the sweep makes its agent dormant.
+	s.Apply(evSnapshot("local", nil, nil))
+	s.Apply(scan[0])
+	s.Apply(scan[1])
+	s.Agents(nowMs + 2*DefaultLingerMs)
+	if n := len(s.hosts["local"].pending); n != 0 {
+		t.Fatalf("pending = %d calls, want 0", n)
+	}
 }
 
 func TestCountersSurviveTrim(t *testing.T) {
@@ -283,9 +350,10 @@ func TestCountersTravelThroughDormancy(t *testing.T) {
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters after the sweep = %+v, want %+v", c, want)
 	}
-	// The sweep dropped the open call c2: its tool.start shows it again but does not count it again.
+	// The sweep dropped the open call c2: its tool.start restores it silently and does not count it again.
 	eq(t, "open calls after the sweep", callIDs(s.OpenCalls("a")), []string{})
-	eqChanges(t, "replayed start of a dropped call", s.Apply(open), []Change{started("local", "a", "c2", nowMs-3000, false)})
+	eqChanges(t, "replayed start of a dropped call", s.Apply(open), nil)
+	eq(t, "open calls after the replay", callIDs(s.OpenCalls("a")), []string{"c2"})
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters after the replay = %+v, want %+v", c, want)
 	}
