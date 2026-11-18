@@ -68,7 +68,7 @@ func callIDs(calls []*ViewCall) []string {
 }
 
 func TestChangesForLifecycle(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	eqChanges(t, "hello", s.Apply(evHello("local", nowMs, false)), nil)
 	eqChanges(t, "empty snapshot", s.Apply(evSnapshot("local", nil, nil)), nil)
 	eqChanges(t, "upsert", s.Apply(evUpsert("local", agent("a"))), []Change{added("local", "a", nowMs, false)})
@@ -94,7 +94,7 @@ func TestChangesForLifecycle(t *testing.T) {
 }
 
 func TestHistoryFlag(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", nil, nil))
 	eqChanges(t, "11 s old", s.Apply(evUpsert("local", agent("a"), nowMs-11_000)), []Change{added("local", "a", nowMs-11_000, true)})
@@ -111,7 +111,7 @@ func TestHistoryFlag(t *testing.T) {
 }
 
 func TestSnapshotChanges(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	// Each item takes History from its own time.
 	got := s.Apply(evSnapshot("local",
@@ -151,7 +151,7 @@ func TestSnapshotChanges(t *testing.T) {
 
 func TestRevivesAreNotAdded(t *testing.T) {
 	idle := nowMs - (2*DefaultLingerMs + 1000)
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("P", withLastAt(idle)), agent("K", withParent("P"), withLastAt(idle)), agent("x")}, nil))
 	s.Agents(nowMs) // P and K go dormant
@@ -171,7 +171,7 @@ func TestRevivesAreNotAdded(t *testing.T) {
 }
 
 func TestReplayIsIgnored(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	start := evStart("local", call("a", "c1", withStart(nowMs-3000)), nowMs-3000)
 	if got := s.Apply(start); len(got) == 0 {
 		t.Fatal("first tool.start emitted nothing")
@@ -211,7 +211,7 @@ func TestReplayIsIgnored(t *testing.T) {
 
 // A restarted collector sends hello, an empty snapshot, and its scan again.
 func TestRestartedCollectorReplay(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	scan := []schema.Envelope{
 		evUpsert("local", agent("a", withLastAt(nowMs-60_000)), nowMs-60_000),
 		evStart("local", call("a", "c1", withStart(nowMs-50_000)), nowMs-50_000),
@@ -268,7 +268,7 @@ func describe(calls []*ViewCall) []string {
 // A replay restores a call that the call list lost, with what its events carry, but emits no
 // change and does not count the call again.
 func TestReplayRestoresCalls(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	scan := []schema.Envelope{
 		evUpsert("local", agent("a", withLastAt(nowMs-60_000)), nowMs-60_000),
 		evStart("local", call("a", "c1", withStart(nowMs-50_000), withCommand("make")), nowMs-50_000),
@@ -314,8 +314,73 @@ func TestReplayRestoresCalls(t *testing.T) {
 	}
 }
 
+// The review probe: a replayed agent.status older than the agent's status time changes
+// nothing, so after a restart the agent stays working on its open call.
+func TestReplayedStatusKeepsNewerStatus(t *testing.T) {
+	for _, st := range []string{"idle", "interrupted"} {
+		t.Run(st, func(t *testing.T) {
+			s := newStore(t, Options{Now: fixed(nowMs)})
+			scan := []schema.Envelope{
+				evUpsert("local", agent("a", withLastAt(nowMs-60_000)), nowMs-60_000),
+				evStatus("local", "a", st, nowMs-50_000),
+				evStart("local", call("a", "c1", withStart(nowMs-40_000)), nowMs-40_000),
+			}
+			s.Apply(evHello("local", nowMs, false))
+			s.Apply(evSnapshot("local", nil, nil))
+			for _, e := range scan {
+				s.Apply(e)
+			}
+			s.Apply(evHello("local", nowMs, false))
+			s.Apply(evSnapshot("local", nil, nil))
+			for i, e := range scan {
+				eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
+			}
+			if a, _ := s.Agent("a"); a.Status != "working" {
+				t.Fatalf("status = %q, want working", a.Status)
+			}
+			eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c1"})
+		})
+	}
+}
+
+func TestStatusOrderedByEventTime(t *testing.T) {
+	s := seeded(t)
+	eqChanges(t, "finished", s.Apply(evStatus("local", "a", "finished", nowMs-10_000)),
+		[]Change{status("local", "a", "finished", nowMs-10_000, false)})
+	eqChanges(t, "older status", s.Apply(evStatus("local", "a", "working", nowMs-20_000)), nil)
+	// A call that started before the status time opens, but does not make the agent working.
+	eqChanges(t, "older tool.start", s.Apply(evStart("local", call("a", "c1", withStart(nowMs-15_000)), nowMs-15_000)),
+		[]Change{started("local", "a", "c1", nowMs-15_000, true)})
+	if a, _ := s.Agent("a"); a.Status != "finished" {
+		t.Fatalf("status = %q, want finished", a.Status)
+	}
+	// One log record sends working, its tool events, then idle, all at one time: equal times apply in order.
+	at := nowMs - 5000
+	eqChanges(t, "working", s.Apply(evStatus("local", "a", "working", at)), []Change{status("local", "a", "working", at, false)})
+	eqChanges(t, "tool.start", s.Apply(evStart("local", call("a", "c2", withStart(at)), at)), []Change{started("local", "a", "c2", at, false)})
+	eqChanges(t, "idle", s.Apply(evStatus("local", "a", "idle", at)), []Change{status("local", "a", "idle", at, false)})
+	// The status time travels through the dormant map.
+	s.Agents(nowMs + 2*DefaultLingerMs + 1000)
+	eqChanges(t, "older status for a dormant agent", s.Apply(evStatus("local", "a", "working", at-1)), nil)
+	if a, ok := s.Agent("a"); !ok || a.Status != "idle" {
+		t.Fatalf("Agent(a) = status %q, stored %v; want idle, revived", a.Status, ok)
+	}
+	// A snapshot that re-lists the agent keeps the status time.
+	s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil))
+	eqChanges(t, "older status after a snapshot", s.Apply(evStatus("local", "a", "working", at-1)), nil)
+
+	// A dormant parent that wakes with its child keeps its status time.
+	s = newStore(t, Options{Now: fixed(nowMs)})
+	s.Apply(evHello("local", nowMs, false))
+	s.Apply(evSnapshot("local", []schema.Agent{agent("P"), agent("K", withParent("P"))}, nil))
+	s.Apply(evStatus("local", "P", "finished", at))
+	s.Agents(nowMs + 2*DefaultLingerMs + 1000)
+	s.Apply(evStatus("local", "K", "working", at))
+	eqChanges(t, "older status for a woken parent", s.Apply(evStatus("local", "P", "working", at-1)), nil)
+}
+
 func TestCountersSurviveTrim(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	for i := range 2100 {
 		id := fmt.Sprintf("c%d", i)
 		s.Apply(evStart("local", call("a", id)))
@@ -331,7 +396,7 @@ func TestCountersSurviveTrim(t *testing.T) {
 }
 
 func TestCountersTravelThroughDormancy(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("a", "c1", withStart(nowMs-5000)), nowMs-5000))
 	s.Apply(evEnd("local", "a", "c1", ptr(false), nil, nil, nowMs-4000))
 	open := evStart("local", call("a", "c2", withStart(nowMs-3000)), nowMs-3000)
@@ -371,7 +436,7 @@ func TestCountersTravelThroughDormancy(t *testing.T) {
 }
 
 func TestFaultsCountOnlyFalse(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	for i, ok := range []*bool{ptr(false), nil, ptr(true)} {
 		id := fmt.Sprintf("c%d", i)
 		s.Apply(evStart("local", call("a", id)))
@@ -383,7 +448,7 @@ func TestFaultsCountOnlyFalse(t *testing.T) {
 }
 
 func TestRecentEndedOrdersByEndTime(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	base := nowMs - 60_000
 	for i, id := range []string{"c1", "c2", "c3"} {
 		at := base + int64(i)*1000
@@ -409,7 +474,7 @@ func TestRecentEndedOrdersByEndTime(t *testing.T) {
 }
 
 func TestOpenCallsNewestFirst(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	for _, c := range []struct {
 		id string
 		at int64
@@ -425,7 +490,7 @@ func TestOpenCallsNewestFirst(t *testing.T) {
 }
 
 func TestHostStats(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("a"), agent("b")}, nil))
 	for _, c := range []schema.Call{call("a", "c1"), call("a", "c2"), call("b", "c3")} {
@@ -453,7 +518,7 @@ func TestUnattributedRules(t *testing.T) {
 
 	// TS: "unattributed touch is held 2 s and suppressed by a confirmed touch of the same path"
 	t.Run("held 2 s and suppressed by a write during the hold", func(t *testing.T) {
-		s := seeded()
+		s := seeded(t)
 		s.Apply(evFS("local", "/p/x.ts", nowMs))
 		s.Apply(evFS("local", "/p/y.ts", nowMs))
 		eqTouches(t, "at +1999", s.TakeUnattributed(nowMs+1999), nil)
@@ -464,7 +529,7 @@ func TestUnattributedRules(t *testing.T) {
 
 	// TS: "unattributed touch is also suppressed by a confirmed touch up to 2 s before it"
 	t.Run("suppressed by a write up to 2 s before", func(t *testing.T) {
-		s := seeded()
+		s := seeded(t)
 		s.Apply(evEnd("local", "a", "w", ptr(true), nil, write("/p/x.ts"), nowMs))
 		eqTouches(t, "at now", s.TakeUnattributed(nowMs), nil)
 		s.Apply(evFS("local", "/p/x.ts", nowMs+2000))
@@ -478,7 +543,7 @@ func TestUnattributedRules(t *testing.T) {
 
 	// TS: "Minor 2: only a confirmed write suppresses a grey flicker; reads, call starts and snapshot seeds do not"
 	t.Run("only a confirmed write suppresses", func(t *testing.T) {
-		s := New(Options{Now: fixed(nowMs)})
+		s := newStore(t, Options{Now: fixed(nowMs)})
 		s.Apply(evHello("local", nowMs, false))
 		s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil,
 			schema.FileTouch{Path: "/p/seed.ts", LastTouchAt: iso(nowMs), Attribution: "confirmed", AgentID: "a"}))
@@ -499,7 +564,7 @@ func TestUnattributedRules(t *testing.T) {
 	// TS: "I3: touches older than the file lifetime at take time are dropped (history replay is not live)",
 	// and the unattributed seed of TS "touch sources", which is held like an fs.change.
 	t.Run("older than the file TTL dropped", func(t *testing.T) {
-		s := New(Options{Now: fixed(nowMs)})
+		s := newStore(t, Options{Now: fixed(nowMs)})
 		s.Apply(evHello("local", nowMs, false))
 		old := nowMs - 2*3_600_000
 		s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil,

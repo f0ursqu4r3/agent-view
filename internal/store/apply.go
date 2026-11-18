@@ -54,9 +54,8 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			em.add(AgentAdded, in.ID, "", "", at)
 		}
 	case "agent.status":
-		if a, ok := h.agents.get(e.AgentID); ok && a.agent.Status != e.Status {
-			a.agent.Status = e.Status
-			em.add(AgentStatus, e.AgentID, "", e.Status, at)
+		if a, ok := h.agents.get(e.AgentID); ok {
+			setStatus(a, e.AgentID, e.Status, at, em)
 		}
 		bump(h, e.AgentID, at)
 	case "tool.start":
@@ -144,12 +143,13 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 			continue
 		}
 		var t *tally
+		var statusMs int64
 		if cur, ok := h.agents.get(a.ID); ok { // listed twice
-			t = cur.tally
+			t, statusMs = cur.tally, cur.statusMs
 		} else if prev, ok := oldAgents.get(a.ID); ok {
-			t = prev.tally
+			t, statusMs = prev.tally, prev.statusMs
 		} else if d, ok := wake(h, a.ID); ok { // a dormant agent keeps its rank and record
-			t = d.tally
+			t, statusMs = d.tally, d.statusMs
 		}
 		s.note(h, a.ID)
 		first := earliest(h, a.LastEventAt, at)
@@ -160,7 +160,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		} else {
 			t.seen(first)
 		}
-		h.agents.set(a.ID, &agentEntry{agent: a, lastEventMs: last, tally: t})
+		h.agents.set(a.ID, &agentEntry{agent: a, lastEventMs: last, statusMs: statusMs, tally: t})
 	}
 	for id, a := range oldAgents.all() {
 		if !h.agents.has(id) {
@@ -217,10 +217,7 @@ func (s *Store) toolStart(h *hostState, host string, c *schema.Call, at int64, e
 	a.tally.seen(call.StartMs)
 	a.tally.calls[c.CallID] = callOpen
 	em.add(CallStarted, c.AgentID, c.CallID, "", at)
-	if a.agent.Status != "working" {
-		a.agent.Status = "working"
-		em.add(AgentStatus, c.AgentID, "", "working", at)
-	}
+	setStatus(a, c.AgentID, "working", at, em)
 	bump(h, c.AgentID, at)
 	trimCalls(h)
 }
@@ -251,6 +248,21 @@ func endCall(call *ViewCall, e schema.Envelope, at int64) {
 	call.Ok = clonePtr(e.Ok)
 	if e.ExitCode != nil {
 		call.ExitCode = clonePtr(e.ExitCode)
+	}
+}
+
+// setStatus sets the tracked status from an event at atMs: an agent.status, or
+// the implicit working of a new tool.start. An event older than the time of the
+// current status changes nothing, so scan events out of order and replays
+// cannot bring back an old status. Equal times apply in arrival order.
+func setStatus(a *agentEntry, id, status string, atMs int64, em *emitter) {
+	if atMs < a.statusMs {
+		return
+	}
+	a.statusMs = atMs
+	if a.agent.Status != status {
+		a.agent.Status = status
+		em.add(AgentStatus, id, "", status, atMs)
 	}
 }
 

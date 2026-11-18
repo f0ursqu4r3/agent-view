@@ -80,6 +80,7 @@ type Store struct {
 type agentEntry struct {
 	agent       schema.Agent
 	lastEventMs int64
+	statusMs    int64 // time of the event that set the tracked status; 0 before any
 	tally       *tally
 }
 
@@ -88,6 +89,7 @@ type dormantRecord struct {
 	agent       schema.Agent
 	rank        int
 	lastEventMs int64
+	statusMs    int64
 	tally       *tally
 }
 
@@ -330,7 +332,7 @@ func (s *Store) sweep(now int64) {
 // toDormant moves a stored agent's record into the dormant map. The oldest record goes past the cap.
 func toDormant(h *hostState, id string, a *agentEntry) {
 	h.agents.delete(id)
-	h.dormant.set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs, tally: a.tally})
+	h.dormant.set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs, statusMs: a.statusMs, tally: a.tally})
 	if h.dormant.len() > maxDormant {
 		oldest, _, _ := h.dormant.first()
 		h.dormant.delete(oldest)
@@ -358,14 +360,14 @@ func revive(h *hostState, id string) bool {
 	if !ok {
 		return false
 	}
-	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, tally: d.tally})
+	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
 	// Each wake removes a dormant record, so a parent cycle ends the walk.
 	for d.agent.ParentID != nil && !h.agents.has(*d.agent.ParentID) {
 		pid := *d.agent.ParentID
 		if d, ok = wake(h, pid); !ok {
 			break
 		}
-		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, tally: d.tally})
+		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
 	}
 	return true
 }

@@ -127,8 +127,22 @@ func evCoverage(host string, n int) schema.Envelope {
 	return env(host, schema.Envelope{Kind: "coverage", Coverage: &c})
 }
 
-func seeded() *Store {
-	s := New(Options{Now: fixed(nowMs)})
+// newStore returns a store that fails the test if Apply recovered a panic. Apply
+// turns a panic into "no changes", which many assertions expect, so a panic
+// would otherwise pass unseen.
+func newStore(t *testing.T, o Options) *Store {
+	t.Helper()
+	s := New(o)
+	t.Cleanup(func() {
+		if s.Panics != 0 {
+			t.Errorf("Apply recovered %d panic(s)", s.Panics)
+		}
+	})
+	return s
+}
+
+func seeded(t *testing.T) *Store {
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil))
 	return s
@@ -207,7 +221,7 @@ func eq(t *testing.T, what string, got, want []string) {
 
 // TS: "snapshot replaces that host state; deltas update it; other hosts untouched"
 func TestSnapshotReplacesHostState(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("h1", nowMs, false))
 	s.Apply(evHello("h2", nowMs, false))
 	s.Apply(evSnapshot("h1", []schema.Agent{agent("a"), agent("b")}, []schema.Call{call("a", "c1")}))
@@ -235,7 +249,7 @@ func TestSnapshotReplacesHostState(t *testing.T) {
 
 // TS: "tool lifecycle: start, update, output, end"
 func TestToolLifecycle(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("a", "c1", withStart(nowMs-3000), withCategory("edit"), withFiles("/p/a.ts")), nowMs-3000))
 	c := openCall(s, "a")
 	if c == nil || c.Ended || c.StartMs != nowMs-3000 {
@@ -258,7 +272,7 @@ func TestToolLifecycle(t *testing.T) {
 
 // TS: "agents() excludes agents past linger and marks stale working agents"
 func TestAgentsExcludesPastLingerAndMarksStale(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{
 		agent("fresh", withStatus("working"), withLastAt(nowMs-1000)),
@@ -293,7 +307,7 @@ func TestAgentsExcludesPastLingerAndMarksStale(t *testing.T) {
 // TS: "Review Focus 2: a host whose hello.now is 5 minutes behind still shows its new events as present
 // and in the timeline window" (presence part; the timeline window, calls(window), is not ported).
 func TestSkewedHostEventsArePresent(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("remote", nowMs-300_000, false))
 	s.Apply(evSnapshot("remote", []schema.Agent{agent("r", withLastAt(nowMs-300_000))}, nil))
 	s.Apply(evStart("remote", call("r", "c1", withStart(nowMs-300_000+1000)), nowMs-300_000+1000))
@@ -312,7 +326,7 @@ func TestSkewedHostEventsArePresent(t *testing.T) {
 
 // TS: "laneOrder nests sub-agents under parents per host"
 func TestLaneOrderNestsSubAgents(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("h1", nowMs, false))
 	s.Apply(evHello("h2", nowMs, false))
 	s.Apply(evSnapshot("h1", []schema.Agent{
@@ -333,7 +347,7 @@ func TestLaneOrderNestsSubAgents(t *testing.T) {
 
 // Go only: an agent that is its own parent is a main agent; a parent cycle stays visible.
 func TestLaneOrderKeepsParentCycles(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{
 		agent("self", withParent("self")),
@@ -346,7 +360,7 @@ func TestLaneOrderKeepsParentCycles(t *testing.T) {
 
 // TS: "hosts, coverage, demo flag and focus" (focus is not ported; Hosts is first appearance, not setHosts).
 func TestHostsCoverageDemo(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	if s.IsDemo() {
 		t.Fatal("empty store is demo")
 	}
@@ -374,7 +388,7 @@ func TestHostsCoverageDemo(t *testing.T) {
 
 // TS: "keeps at most 2000 calls per host, dropping the oldest ended calls first"
 func TestKeepsAtMost2000CallsPerHost(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("a", "keep-open", withStart(nowMs-1000)), nowMs-1000))
 	for i := range 2100 {
 		id := fmt.Sprintf("c%d", i)
@@ -395,7 +409,7 @@ func TestKeepsAtMost2000CallsPerHost(t *testing.T) {
 // TS: "ignores unknown and malformed envelopes without throwing". JSON-level garbage (null, 42, "x",
 // a non-string host or chunk) never decodes to an Envelope; its Go equivalents are zero fields.
 func TestIgnoresUnknownAndMalformedEnvelopes(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	ts := iso(nowMs)
 	v2 := agent("v2")
 	bad := []schema.Envelope{
@@ -432,7 +446,7 @@ func TestIgnoresUnknownAndMalformedEnvelopes(t *testing.T) {
 
 // TS: "I1: agents idle for over 2x linger are dropped with their calls; a present child keeps its idle parent"
 func TestIdleAgentsDropped(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{
 		agent("fresh", withLastAt(nowMs-1000)),
@@ -482,7 +496,7 @@ func TestIdleAgentsDropped(t *testing.T) {
 
 // TS: "I1: repeated reads with the same now do not recompute presence, and writes invalidate it"
 func TestPresenceCachedPerVersionAndNow(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Agents(nowMs)
 	before := s.presenceComputes
 	s.Agents(nowMs)
@@ -504,7 +518,7 @@ func TestPresenceCachedPerVersionAndNow(t *testing.T) {
 
 // TS: "tool.end keeps the exit code on the call"
 func TestToolEndKeepsExitCode(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("a", "c1", withCommand("false"))))
 	if c := storedCall(s, "a", "c1"); c.ExitCode != nil {
 		t.Fatalf("exit code before end = %d, want nil", *c.ExitCode)
@@ -517,7 +531,7 @@ func TestToolEndKeepsExitCode(t *testing.T) {
 
 // From TS "commands(focus) ... output keeps last 16 KiB" (the output part; commands() is not ported).
 func TestToolOutputKeepsLast16KiB(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("a", "c4", withCommand("cat"))))
 	s.Apply(evOutput("local", "a", "c4", strings.Repeat("x", 4096), false))
 	if c := storedCall(s, "a", "c4"); len(c.Output) != 4096 || c.OutputTruncated {
@@ -551,7 +565,7 @@ func TestToolOutputKeepsLast16KiB(t *testing.T) {
 
 // Replaces TS "R25": an agent dropped by the sweep is dormant, and an event brings it back.
 func TestDormantAgentRevives(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	idle := nowMs - (2*DefaultLingerMs + 1000)
 	s.Apply(evSnapshot("local", []schema.Agent{agent("old", withLastAt(idle)), agent("keep")}, nil))
@@ -580,7 +594,7 @@ func TestDormantAgentRevives(t *testing.T) {
 
 // Replaces TS "R25": an event for an agent never seen is dropped and counted.
 func TestUnknownAgentEventDropped(t *testing.T) {
-	s := seeded()
+	s := seeded(t)
 	s.Apply(evStart("local", call("zz", "c1", withFiles("/p/z.ts"))))
 	if _, ok := s.Agent("zz"); ok {
 		t.Fatal("unknown agent stored")
@@ -609,7 +623,7 @@ func TestUnknownAgentEventDropped(t *testing.T) {
 // A revived sub-agent brings back its dormant ancestors, as the TS resnapshot did.
 func TestDormantAncestorsReviveWithChild(t *testing.T) {
 	idle := nowMs - (2*DefaultLingerMs + 1000)
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{
 		agent("P", withLastAt(idle)),
@@ -635,7 +649,7 @@ func TestDormantAncestorsReviveWithChild(t *testing.T) {
 func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 	idle := nowMs - (2*DefaultLingerMs + 1000)
 
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("old", withLastAt(idle)), agent("keep")}, nil))
 	s.Agents(nowMs)
@@ -645,7 +659,7 @@ func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 		t.Fatalf("status = %q, want the tracked idle", a.Status)
 	}
 
-	s = New(Options{Now: fixed(nowMs)})
+	s = newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("old", withLastAt(idle)), agent("keep")}, nil))
 	s.Agents(nowMs)
@@ -658,7 +672,7 @@ func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 }
 
 func TestDormantCapDropsOldest(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	idle := nowMs - (2*DefaultLingerMs + 1000)
 	agents := make([]schema.Agent, maxDormant+1)
@@ -682,7 +696,7 @@ func TestDormantCapDropsOldest(t *testing.T) {
 
 // The held unattributed touches and confirmed write times kept for the unattributed-touch rules.
 func TestUnattributedTouchBookkeeping(t *testing.T) {
-	s := New(Options{Now: fixed(nowMs)})
+	s := newStore(t, Options{Now: fixed(nowMs)})
 	s.Apply(evHello("local", nowMs, false))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil,
 		schema.FileTouch{Path: "/p/seed.ts", LastTouchAt: iso(nowMs), Attribution: "confirmed", AgentID: "a"},
