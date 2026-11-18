@@ -611,6 +611,32 @@ func TestUnknownAgentEventDropped(t *testing.T) {
 }
 
 // A dormant agent also comes back through an upsert (which keeps the tracked status) or a snapshot.
+// A revived sub-agent brings back its dormant ancestors, as the TS resnapshot did.
+func TestDormantAncestorsReviveWithChild(t *testing.T) {
+	idle := nowMs - (2*DefaultLingerMs + 1000)
+	s := New(Options{Now: fixed(nowMs)})
+	s.Apply(evHello("local", nowMs, false))
+	s.Apply(evSnapshot("local", []schema.Agent{
+		agent("P", withLastAt(idle)),
+		agent("K", withParent("P"), withLastAt(idle)),
+		agent("x"),
+		// a dormant parent cycle must not hang the walk
+		agent("c1", withParent("c2"), withLastAt(idle)),
+		agent("c2", withParent("c1"), withLastAt(idle)),
+	}, nil))
+	eq(t, "agents", ids(s.Agents(nowMs)), []string{"x"})
+
+	s.Apply(evStart("local", call("K", "k1")))
+	eq(t, "lanes", s.LaneOrder(nowMs), []string{"P", "K", "x"})
+	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"K", "P", "x"})
+
+	s.Apply(evStatus("local", "c1", "working"))
+	eq(t, "lanes", s.LaneOrder(nowMs), []string{"P", "K", "x", "c1", "c2"})
+	if n := s.hosts["local"].dormant.len(); n != 0 || s.UnknownEvents != 0 {
+		t.Fatalf("dormant %d unknown %d, want 0 0", n, s.UnknownEvents)
+	}
+}
+
 func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 	idle := nowMs - (2*DefaultLingerMs + 1000)
 

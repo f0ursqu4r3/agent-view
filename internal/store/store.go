@@ -325,13 +325,24 @@ func wake(h *hostState, id string) (*dormantRecord, bool) {
 	return d, true
 }
 
-// revive brings a dormant agent back with its record. It reports false when the agent is not dormant.
+// revive brings a dormant agent back with its record, and its dormant
+// ancestors with theirs, as the TypeScript resnapshot did. It reports false
+// when the agent is not dormant.
 func revive(h *hostState, id string) bool {
 	d, ok := wake(h, id)
-	if ok {
-		h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs})
+	if !ok {
+		return false
 	}
-	return ok
+	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs})
+	// Each wake removes a dormant record, so a parent cycle ends the walk.
+	for d.agent.ParentID != nil && !h.agents.has(*d.agent.ParentID) {
+		pid := *d.agent.ParentID
+		if d, ok = wake(h, pid); !ok {
+			break
+		}
+		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs})
+	}
+	return true
 }
 
 // ms returns a skew-corrected event time. A missing or invalid time is now.
