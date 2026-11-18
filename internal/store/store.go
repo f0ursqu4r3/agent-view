@@ -20,6 +20,7 @@ const (
 	maxRecentPaths   = 4000
 	maxHeld          = 10_000
 	sweepEveryMs     = 1000
+	flickerMs        = 2000 // a grey flicker is held this long, and a confirmed write this close to it suppresses it
 	// An agent is dropped after this many lingers without an event, unless a present agent descends from it.
 	dropAfterLingers = 2
 	maxDormant       = 10_000
@@ -52,12 +53,15 @@ type ViewCall struct {
 	ExitCode        *int
 	Output          string
 	OutputTruncated bool
+	seq             uint64 // order of storing within the host, for ties
 }
 
 // Store applies envelopes and answers the board's queries. It is not safe for concurrent use.
 type Store struct {
 	// UnknownEvents counts events dropped because their agent was never seen on that host.
 	UnknownEvents int
+	// Panics counts envelopes dropped because applying them panicked.
+	Panics int
 
 	now          func() int64
 	lc           lifecycle
@@ -75,13 +79,15 @@ type Store struct {
 type agentEntry struct {
 	agent       schema.Agent
 	lastEventMs int64
+	tally       *tally
 }
 
-// dormantRecord is what the sweep keeps of a dropped agent.
+// dormantRecord is what the store keeps of an agent that the sweep or a snapshot dropped.
 type dormantRecord struct {
 	agent       schema.Agent
 	rank        int
 	lastEventMs int64
+	tally       *tally
 }
 
 type heldTouch struct {
@@ -102,6 +108,7 @@ type hostState struct {
 	dormant     *omap[string, *dormantRecord]
 	calls       *omap[callKey, *ViewCall]
 	openByAgent map[string]map[string]*ViewCall
+	nextSeq     uint64                 // seq of the next stored call
 	held        []heldTouch            // unattributed touches
 	recent      *omap[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
 	presence    *presence              // present agents for one (version, now)
@@ -122,16 +129,24 @@ func New(o Options) *Store {
 	return &Store{now: now, lc: resolve(o), hosts: map[string]*hostState{}}
 }
 
-// Apply applies one envelope. Envelopes with another version, no host, or no
-// kind are ignored, as are malformed events. Apply does not report changes yet
-// and returns nil.
-func (s *Store) Apply(e schema.Envelope) []Change {
+// Apply applies one envelope and returns its changes, or nil. Envelopes with
+// another version, no host, or no kind are ignored, as are malformed events. A
+// replayed tool.start or tool.end changes nothing. A panic drops the envelope
+// and counts it in Panics; changes made before the panic stay.
+func (s *Store) Apply(e schema.Envelope) (changes []Change) {
 	if e.V != schema.Version || e.Host == "" || e.Kind == "" {
 		return nil
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			s.Panics++
+			changes = nil
+		}
+	}()
+	em := &emitter{host: e.Host, arrival: s.now()}
 	s.version++
-	s.dispatch(e)
-	return nil
+	s.dispatch(e, em)
+	return em.out
 }
 
 // Hosts returns every host label in order of first appearance.
@@ -289,14 +304,7 @@ func (s *Store) sweep(now int64) {
 			if present[id] {
 				continue // an ancestor of a present agent
 			}
-			h.agents.delete(id)
-			h.dormant.set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs})
-			if h.dormant.len() > maxDormant {
-				oldest, _, _ := h.dormant.first()
-				h.dormant.delete(oldest)
-			}
-			delete(h.order, id)
-			delete(h.openByAgent, id)
+			toDormant(h, id, a)
 			dropped = true
 		}
 		if !dropped {
@@ -306,12 +314,25 @@ func (s *Store) sweep(now int64) {
 		for k, c := range h.calls.all() {
 			if !h.agents.has(c.AgentID) {
 				h.calls.delete(k)
+				dropOpen(h, c)
 			}
 		}
 	}
 	if anyDropped {
 		s.version++
 	}
+}
+
+// toDormant moves a stored agent's record into the dormant map. The oldest record goes past the cap.
+func toDormant(h *hostState, id string, a *agentEntry) {
+	h.agents.delete(id)
+	h.dormant.set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs, tally: a.tally})
+	if h.dormant.len() > maxDormant {
+		oldest, _, _ := h.dormant.first()
+		h.dormant.delete(oldest)
+	}
+	delete(h.order, id)
+	delete(h.openByAgent, id)
 }
 
 // wake removes a dormant record and gives the agent its rank back.
@@ -333,14 +354,14 @@ func revive(h *hostState, id string) bool {
 	if !ok {
 		return false
 	}
-	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs})
+	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, tally: d.tally})
 	// Each wake removes a dormant record, so a parent cycle ends the walk.
 	for d.agent.ParentID != nil && !h.agents.has(*d.agent.ParentID) {
 		pid := *d.agent.ParentID
 		if d, ok = wake(h, pid); !ok {
 			break
 		}
-		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs})
+		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, tally: d.tally})
 	}
 	return true
 }

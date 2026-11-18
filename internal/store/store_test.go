@@ -167,15 +167,10 @@ func storedCall(s *Store, agentID, callID string) *ViewCall {
 
 // openCall is the newest open call of an agent, like ViewerStore.openCall.
 func openCall(s *Store, agentID string) *ViewCall {
-	var found *ViewCall
-	for _, h := range s.hosts {
-		for _, c := range h.openByAgent[agentID] {
-			if found == nil || c.StartMs >= found.StartMs {
-				found = c
-			}
-		}
+	if open := s.OpenCalls(agentID); len(open) > 0 {
+		return open[0]
 	}
-	return found
+	return nil
 }
 
 func ids(agents []ViewAgent) []string {
