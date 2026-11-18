@@ -1,0 +1,12 @@
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:00.000Z","type":"user","message":{"content":"x"}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:01.000Z","type":"assistant","message":{"model":"m-1","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"src/a.ts"}}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:02.000Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"x"}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:03.000Z","type":"assistant","message":{"model":"m-1","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"echo x"}}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:04.000Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":[{"type":"text","text":"x"}]}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:05.000Z","type":"assistant","message":{"model":"m-1","content":[{"type":"tool_use","id":"t3","name":"Write","input":{"file_path":"out.txt","content":"x"}}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:06.000Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t3","content":"x"}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:07.000Z","type":"assistant","message":{"model":"m-1","content":[{"type":"tool_use","id":"t4","name":"Grep","input":{"pattern":"x","path":"src"}}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:08.000Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t4","content":"x"}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:09.000Z","type":"assistant","message":{"model":"m-1","content":[{"type":"tool_use","id":"t5","name":"Edit","input":{"file_path":"bad.txt"}}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:10.000Z","type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t5","content":"x","is_error":true}]}}
+{"sessionId":"s1","cwd":"/p/proj","timestamp":"2026-01-01T00:00:11.000Z","type":"assistant","message":{"model":"m-1","stop_reason":"end_turn","content":[{"type":"text","text":"x"}]}}
