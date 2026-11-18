@@ -17,6 +17,7 @@ const MAX_RECENT_PATHS = 4000;
 const MAX_HELD = 10_000;
 const MAX_CONFIRMED = 10_000;
 const SWEEP_EVERY_MS = 1000;
+const RESNAPSHOT_EVERY_MS = 5000;
 /** An agent is dropped after this many lingers without an event, unless a present agent descends from it. */
 const DROP_AFTER_LINGERS = 2;
 
@@ -54,6 +55,8 @@ export class ViewerStore {
   /** Bumped by every `apply`. A cached presence result is valid for one version. */
   private version = 0;
   private lastSweepMs = Number.NEGATIVE_INFINITY;
+  private resnapshotPending = false;
+  private lastResnapshotMs = Number.NEGATIVE_INFINITY;
 
   constructor(opts?: { now?: () => number; lifecycle?: Partial<LifecycleOptions> }) {
     this.nowFn = opts?.now ?? Date.now;
@@ -68,6 +71,14 @@ export class ViewerStore {
     } catch {
       // A malformed event must never break the viewer.
     }
+  }
+
+  /** True at most once per 5 s while an event for an unknown agent is waiting. The viewer then asks the hub for a snapshot. */
+  takeResnapshotRequest(now: number): boolean {
+    if (!this.resnapshotPending || Math.abs(now - this.lastResnapshotMs) < RESNAPSHOT_EVERY_MS) return false;
+    this.resnapshotPending = false;
+    this.lastResnapshotMs = now;
+    return true;
   }
 
   setHosts(h: HostStatus[]): void {
@@ -281,6 +292,12 @@ export class ViewerStore {
   private dispatch(e: Envelope): void {
     const h = this.host(e.host);
     const at = this.ms(h, e.ts);
+    // The collector keeps every agent, so an event for an agent we pruned needs a snapshot to restore it.
+    const subject = agentIdOf(e);
+    if (subject !== undefined && !h.agents.has(subject)) {
+      this.resnapshotPending = true;
+      return;
+    }
     switch (e.kind) {
       case 'hello': {
         const t = Date.parse(e.now);
@@ -468,4 +485,15 @@ export class ViewerStore {
 
 function rank(h: HostState, id: string): number {
   return h.order.get(id) ?? Number.MAX_SAFE_INTEGER;
+}
+
+/** The agent an event is about, for events that need a known agent. Undefined for other or malformed events. */
+function agentIdOf(e: Envelope): string | undefined {
+  let id: unknown;
+  switch (e.kind) {
+    case 'tool.start': id = isObj(e.call) ? e.call.agentId : undefined; break;
+    case 'agent.status': case 'tool.update': case 'tool.output': case 'tool.end': id = e.agentId; break;
+    default: return undefined;
+  }
+  return isStr(id) ? id : undefined;
 }

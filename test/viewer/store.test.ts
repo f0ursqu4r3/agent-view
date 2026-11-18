@@ -322,3 +322,41 @@ test('I2: the confirmed touch queue holds at most 10,000 touches, dropping the o
   expect(out[0]!.path).toBe('/p/f50.ts');
   expect(out[out.length - 1]!.path).toBe('/p/f10049.ts');
 });
+
+test('R25: events for a pruned agent are not stored and request a resnapshot; a snapshot restores the agent', () => {
+  const s = new ViewerStore({ now: () => NOW });
+  s.apply(hello('local'));
+  s.apply(snapshot('local', [agent('keep'), agent('old', { lastEventAt: iso(NOW - 1_300_000) })]));
+  expect(s.laneOrder(NOW)).toEqual(['keep']);
+  expect(s.storedAgentCount()).toBe(1); // 'old' was pruned
+  expect(s.takeResnapshotRequest(NOW)).toBe(false);
+
+  s.apply(env('local', { kind: 'tool.start', call: call('old', 'c1', { files: ['/p/z.ts'] }) }));
+  expect(s.calls(NOW, 10_000_000)).toEqual([]);
+  expect(s.openCall('old')).toBeUndefined();
+  expect(s.takeTouches(NOW + 5000)).toEqual([]);
+  expect(s.takeResnapshotRequest(NOW)).toBe(true);
+  expect(s.takeResnapshotRequest(NOW + 1)).toBe(false);
+  // more unknown-agent events inside 5 s: the request waits for the 5 s gap
+  for (const e of [
+    { kind: 'agent.status', agentId: 'old', status: 'working' },
+    { kind: 'tool.update', agentId: 'old', callId: 'c1', files: ['/p/z.ts'] },
+    { kind: 'tool.output', agentId: 'old', callId: 'c1', chunk: 'x', truncated: false },
+    { kind: 'tool.end', agentId: 'old', callId: 'c1', ok: true, writes: [{ path: '/p/z.ts', op: 'edit' }] },
+  ] as const) {
+    s.apply(env('local', e as Body));
+  }
+  expect(s.takeResnapshotRequest(NOW + 4999)).toBe(false);
+  expect(s.takeResnapshotRequest(NOW + 5000)).toBe(true);
+  expect(s.takeResnapshotRequest(NOW + 20_000)).toBe(false);
+  expect(s.takeTouches(NOW + 20_000)).toEqual([]);
+  expect(s.calls(NOW, 10_000_000)).toEqual([]);
+
+  s.apply(env('local', { kind: 'tool.start', call: call('old', 'c2') }));
+  expect(s.takeResnapshotRequest(NOW + 30_000)).toBe(true);
+
+  s.apply(snapshot('local', [agent('keep'), agent('old', { status: 'working' })], [call('old', 'c2')]));
+  expect(s.laneOrder(NOW)).toEqual(['keep', 'old']);
+  expect(s.openCall('old')?.callId).toBe('c2');
+  expect(s.calls(NOW).map((c) => c.callId)).toEqual(['c2']);
+});
