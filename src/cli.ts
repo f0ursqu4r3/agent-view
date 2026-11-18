@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Collector } from './collector/collector';
 import { Hub, LocalSource } from './hub/hub';
-import { RemoteCollector } from './hub/remote';
+import { isValidSshHost, RemoteCollector } from './hub/remote';
 import { startServer } from './hub/server';
 import { encodeLine } from './shared/ndjson';
 
@@ -64,7 +64,10 @@ export function parseArgs(argv: string[]): CliArgs {
         args.demoScale = value;
         break;
       case '--watch': args.watch.push(path.resolve(value!)); break;
-      case '--remote': args.remotes.push(value!); break;
+      case '--remote':
+        if (!isValidSshHost(value!)) throw new UsageError('Invalid --remote value (use a host name or user@host, no spaces or shell characters)');
+        args.remotes.push(value!);
+        break;
       case '--linger': {
         const minutes = Number(value);
         if (value!.trim() === '' || !Number.isFinite(minutes) || minutes <= 0) throw new UsageError(`Invalid --linger: ${value} (minutes, above 0)`);

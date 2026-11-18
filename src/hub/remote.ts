@@ -6,6 +6,19 @@ const STABLE_UP_MS = 60_000;
 const KILL_AFTER_MS = 2_000;
 const MAX_DETAIL = 200;
 const MAX_STDERR_PENDING = 4_096;
+const MAX_LINE_BYTES = 8 * 1024 * 1024;
+
+/** Host names and `user@host`. No leading `-` (ssh would read an option), no spaces, no shell characters. */
+const SSH_HOST_RE = /^[A-Za-z0-9_][A-Za-z0-9._@:-]*$/;
+
+export function isValidSshHost(sshHost: string): boolean {
+  return SSH_HOST_RE.test(sshHost);
+}
+
+/** Quotes text for a POSIX remote shell. */
+function shellQuote(text: string): string {
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
 
 export type RemoteOptions = {
   sshHost: string;
@@ -15,10 +28,12 @@ export type RemoteOptions = {
   /** `[first, max]` retry delay in ms. */
   backoffMs?: [number, number];
   spawn?: typeof Bun.spawn;
+  /** Longest child stdout line kept, in bytes. A longer line is dropped and counted as malformed. */
+  maxLineBytes?: number;
 };
 
 export function defaultCommand(sshHost: string, label: string): string[] {
-  return ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', sshHost, 'agent-view', 'collect', '--stdio', '--label', label];
+  return ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', sshHost, 'agent-view', 'collect', '--stdio', '--label', shellQuote(label)];
 }
 
 /** True when the line has the envelope fields the hub needs. `parseLine` has already checked `v`. */
@@ -44,6 +59,7 @@ export class RemoteCollector implements HubSource {
   private readonly firstDelay: number;
   private readonly maxDelay: number;
   private readonly spawn: typeof Bun.spawn;
+  private readonly maxLineBytes: number;
   private readonly subs = new Set<(e: Envelope) => void>();
   private readonly listeners = new Set<() => void>();
   private state: HostStatus['state'] = 'connecting';
@@ -57,11 +73,13 @@ export class RemoteCollector implements HubSource {
   private stopped = false;
 
   constructor(opts: RemoteOptions) {
+    if (!isValidSshHost(opts.sshHost)) throw new Error('invalid ssh host: use a host name or user@host');
     this.sshHost = opts.sshHost;
     this.label = opts.label;
     this.command = opts.command ?? defaultCommand;
     [this.firstDelay, this.maxDelay] = opts.backoffMs ?? [1_000, 30_000];
     this.spawn = opts.spawn ?? Bun.spawn;
+    this.maxLineBytes = opts.maxLineBytes ?? MAX_LINE_BYTES;
     this.delay = this.firstDelay;
   }
 
@@ -126,8 +144,16 @@ export class RemoteCollector implements HubSource {
     let lastStderr = '';
     const readStdout = async (): Promise<void> => {
       const splitter = new LineSplitter();
+      let discarding = false;
       try {
-        for await (const chunk of child.stdout as ReadableStream<Uint8Array>) {
+        for await (let chunk of child.stdout as ReadableStream<Uint8Array>) {
+          if (discarding) {
+            // An oversize line: drop input up to and including its newline.
+            const nl = chunk.indexOf(10);
+            if (nl === -1) continue;
+            chunk = chunk.subarray(nl + 1);
+            discarding = false;
+          }
           for (const line of splitter.push(chunk)) {
             if (line.trim() === '') continue;
             const env = parseLine(line);
@@ -138,6 +164,11 @@ export class RemoteCollector implements HubSource {
               this.set('up');
               this.stableTimer = setTimeout(() => { this.delay = this.firstDelay; }, STABLE_UP_MS);
             }
+          }
+          if (splitter.pendingBytes > this.maxLineBytes) {
+            splitter.reset();
+            this.malformedLines++;
+            discarding = true;
           }
         }
       } catch { /* a broken pipe ends the stream; the exit code tells the rest */ }

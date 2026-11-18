@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import path from 'node:path';
-import { RemoteCollector } from '../../src/hub/remote';
+import { defaultCommand, RemoteCollector } from '../../src/hub/remote';
 import type { Envelope } from '../../src/shared/schema';
 
 const CLI = path.join(import.meta.dir, '..', '..', 'src', 'cli.ts');
@@ -61,7 +61,7 @@ test('remote source parses NDJSON from the child and reports up after hello', as
   const states = watchStatus(c);
   expect(c.status()).toEqual({ label: 'devbox', kind: 'remote', state: 'connecting' });
   await c.start();
-  await until(() => c.status().state === 'up');
+  await until(() => c.status().state === 'up' && got.some((e) => e.kind === 'snapshot'));
   expect(got[0]).toMatchObject({ v: 1, kind: 'hello', host: 'devbox' });
   expect(got.some((e) => e.kind === 'snapshot')).toBe(true);
   expect(states).toEqual(['up']);
@@ -161,4 +161,38 @@ test('a spawn that throws sets down and retries', async () => {
   await c.start();
   await until(() => calls >= 2);
   expect(c.status().detail).toContain('ENOENT');
+});
+
+test('an oversize line without a newline is dropped and counted once; the stream continues', async () => {
+  const hello = '{"v":1,"kind":"hello","host":"x","seq":0,"ts":"t","collectorVersion":"0","platform":"t","now":"t"}';
+  const small = (n: number): string => `{"v":1,"kind":"agent.upsert","host":"x","seq":${n},"ts":"t"}`;
+  const script = [
+    `printf '%s\\n' '${hello}'`,
+    `printf '{"v":1,"kind":"agent.upsert","host":"x","seq":1,"ts":"t","pad":"'; head -c 300000 /dev/zero | tr '\\0' x; printf '"}\\n'`,
+    `printf '%s\\n' '${small(2)}'`,
+    'exec sleep 30',
+  ].join('; ');
+  const c = make({ command: () => ['sh', '-c', script], maxLineBytes: 1024 });
+  const got: Envelope[] = [];
+  c.subscribe((e) => got.push(e));
+  await c.start();
+  await until(() => got.length >= 2);
+  expect(got.map((e) => `${e.kind}:${e.seq}`)).toEqual(['hello:0', 'agent.upsert:2']);
+  expect(c.malformedLines).toBe(1);
+});
+
+const BAD_HOSTS = ['-oProxyCommand=x', 'host;id', 'a b', '$(x)', '`id`', '', 'a\nb'];
+
+test('constructor rejects ssh host values that could inject options or shell text', () => {
+  for (const sshHost of BAD_HOSTS) expect(() => new RemoteCollector({ sshHost, label: 'x' })).toThrow();
+  expect(() => new RemoteCollector({ sshHost: 'user@host.example', label: 'user@host.example' })).not.toThrow();
+  expect(() => new RemoteCollector({ sshHost: '_h-1.example:22', label: 'x' })).not.toThrow();
+});
+
+test('default command passes the label single-quoted for the remote shell', () => {
+  const cmd = defaultCommand('user@host.example', 'user@host.example');
+  expect(cmd.slice(0, 7)).toEqual(['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', 'user@host.example']);
+  expect(cmd.slice(7, 12)).toEqual(['agent-view', 'collect', '--stdio', '--label', "'user@host.example'"]);
+  expect(cmd.at(-1)).toBe("'user@host.example'");
+  expect(defaultCommand('h', "a'b;id").at(-1)).toBe("'a'\\''b;id'");
 });

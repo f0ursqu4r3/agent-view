@@ -23,6 +23,17 @@ test('parseArgs: defaults, --remote repeatable, --linger minutes → ms, collect
   expect(parseArgs(['collect', '--stdio', '--demo', '--demo-scale', 'stress'])).toMatchObject({ mode: 'collect', demo: true, demoScale: 'stress' });
 });
 
+test('parseArgs rejects --remote values that could inject ssh options or shell text', () => {
+  for (const bad of ['-oProxyCommand=x', 'host;id', 'a b', '$(x)', '`id`', '', 'a\u001b[31mb']) {
+    let err: unknown;
+    try { parseArgs(['--remote', bad]); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(UsageError);
+    expect((err as Error).message).toContain('--remote');
+    expect((err as Error).message).not.toContain(bad || '\u0000');
+  }
+  expect(parseArgs(['--remote', 'user@host.example']).remotes).toEqual(['user@host.example']);
+});
+
 test('parseArgs rejects unknown flags, bad values, and collect without --stdio', () => {
   expect(() => parseArgs(['--nope'])).toThrow(UsageError);
   expect(() => parseArgs(['collect'])).toThrow(UsageError);
