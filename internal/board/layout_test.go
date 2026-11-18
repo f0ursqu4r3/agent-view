@@ -300,3 +300,52 @@ func TestGuttersCollapsedAndHeader(t *testing.T) {
 		t.Errorf("header sub = %q", got)
 	}
 }
+
+// runCommand starts a command with the given output; end > 0 ends it then.
+func runCommand(s *store.Store, agentID, callID, output string, start, end int64) {
+	c := schema.Call{AgentID: agentID, CallID: callID, StartedAt: iso(start), Category: "command", RawName: "Bash", Command: "make"}
+	s.Apply(env("h", schema.Envelope{Kind: "tool.start", Call: &c}, start))
+	s.Apply(env("h", schema.Envelope{Kind: "tool.output", AgentID: agentID, CallID: callID, Chunk: output}, start))
+	if end > 0 {
+		s.Apply(env("h", schema.Envelope{Kind: "tool.end", AgentID: agentID, CallID: callID, Ok: ptr(true)}, end))
+	}
+}
+
+func TestRowsFocusedCommandGrows(t *testing.T) {
+	s := newStore(t)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		addAgent(s, "h", id, "", "")
+	}
+	twelve := "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n"
+	runCommand(s, "a", "c1", twelve, nowMs-1_000, 0)
+	runCommand(s, "b", "c2", "x\ny\nz\n", nowMs-2_000, nowMs-1_000) // ended: the shown call
+	runCommand(s, "c", "c3", "x\ny\n", nowMs-1_000, 0)
+	startCall(s, "h", "d", "c4", nowMs-1_000)
+
+	for _, tc := range []struct {
+		focus string
+		want  int
+	}{{"a", 17}, {"b", 10}, {"c", 9}, {"d", 9}, {"", 9}} {
+		rows := Rows(s, UI{Focus: tc.focus}, nowMs)
+		for i, r := range rows {
+			want := 9
+			if r.AgentID == tc.focus {
+				want = tc.want
+			}
+			if r.H != want {
+				t.Errorf("focus %q: row %s H = %d, want %d", tc.focus, r.AgentID, r.H, want)
+			}
+			if i > 0 && r.Y != rows[i-1].Y+rows[i-1].H {
+				t.Errorf("focus %q: row %s Y = %d, previous ends at %d", tc.focus, r.AgentID, r.Y, rows[i-1].Y+rows[i-1].H)
+			}
+		}
+	}
+
+	rows := Rows(s, UI{Focus: "a", Selected: "b"}, nowMs)
+	if b := rowFor(t, rows, "b"); b.Y != 17 {
+		t.Fatalf("b.Y = %d, want 17", b.Y)
+	}
+	if top := Scroll(rows, 10, 0, "b"); top != 17+9-10 {
+		t.Errorf("Scroll to b = %d, want %d", top, 17+9-10)
+	}
+}

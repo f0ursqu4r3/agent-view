@@ -4,6 +4,7 @@
 package board
 
 import (
+	"agent-view/internal/cards"
 	"agent-view/internal/store"
 )
 
@@ -36,7 +37,8 @@ type Row struct {
 	// true when the parent link is "session".
 	Sub, LastSib, SessionLink, Full bool
 	// Y is the row's top line on the unscrolled board. H is its height in
-	// lines: 9 (full) or 1 (collapsed), plus 1 with a host header.
+	// lines: 9 (full) or 1 (collapsed), plus 1 with a host header. The
+	// focused row is taller when its call card grows for command output.
 	Y, H int
 }
 
@@ -49,7 +51,8 @@ const (
 
 // Rows lays out the board: the store's lane order, with each row full or
 // collapsed. A row is full when the agent has an open call, had a call end in
-// the last 60 s, is selected, or is focused.
+// the last 60 s, is selected, or is focused. The focused row is as high as
+// its call card with MaxOutputLines, plus the "where" line and a blank line.
 func Rows(s *store.Store, ui UI, now int64) []Row {
 	order := s.LaneOrder(now)
 	present := make(map[string]bool, len(order))
@@ -97,7 +100,10 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 			r.HostHeader = r.Host
 		}
 		r.H = collapsedHeight
-		if r.Full {
+		switch {
+		case r.Full && r.AgentID == ui.Focus:
+			r.H = focusedHeight(s, r.AgentID)
+		case r.Full:
 			r.H = fullHeight
 		}
 		if r.HostHeader != "" {
@@ -107,6 +113,19 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 		y += r.H
 	}
 	return rows
+}
+
+// focusedHeight returns the height of the focused agent's full row: its
+// call card (the newest open call, else the newest ended call) as the
+// focused card draws it, then the "where" line and a blank line.
+func focusedHeight(s *store.Store, id string) int {
+	var shown *store.ViewCall
+	if open := s.OpenCalls(id); len(open) > 0 {
+		shown = open[0]
+	} else if ended := s.RecentEnded(id, 1); len(ended) > 0 {
+		shown = ended[0]
+	}
+	return cards.CallCardHeight(shown, cards.MaxOutputLines) + fullHeight - cards.CallH
 }
 
 // isActive reports whether the agent has an open call or a call that ended

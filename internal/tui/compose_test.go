@@ -463,10 +463,21 @@ func TestComposeTallRows(t *testing.T) {
 	in.Anim, in.UI.Focus = e, "a"
 	g, hits := Compose(in)
 	ha, hs1 := hitFor(t, hits, "a"), hitFor(t, hits, "s1")
-	if hs1.Y != ha.Y+17 {
-		t.Fatalf("s1 at line %d, a at %d: want a's row 17 high", hs1.Y, ha.Y)
+	rows := board.Rows(f.s, in.UI, f.clock)
+	if rows[0].H != 17 || hs1.Y != boardTop+rows[1].Y || hs1.Y != ha.Y+17 {
+		t.Fatalf("s1 at line %d, a at %d, board rows %+v: want a's row 17 high", hs1.Y, ha.Y, rows[:2])
 	}
 	cx := ha.X + 25
+	// No overlap: the focused card, its "where" line, a blank line, then s1.
+	if got := at(g, cx, ha.Y+14, 1); got != "└" {
+		t.Errorf("card bottom = %q", got)
+	}
+	if got := at(g, cx, ha.Y+15, 40); !strings.HasPrefix(got, "repo:(shell) $ ▌") {
+		t.Errorf("where line = %q", got)
+	}
+	if got := at(g, ha.X+5, ha.Y+16, 100); strings.TrimSpace(got) != "" {
+		t.Errorf("blank line = %q", got)
+	}
 	if got := at(g, cx, ha.Y+3, 28); !strings.Contains(got, "> l3") {
 		t.Errorf("first output line = %q", got)
 	}

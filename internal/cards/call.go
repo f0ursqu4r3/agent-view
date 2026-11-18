@@ -19,11 +19,29 @@ const (
 	CallW = 28
 	CallH = 7
 
-	callTextX   = 2 // border, one space
-	callTextW   = CallW - 4
-	callBarW    = 12
-	maxOutLines = 10
+	callTextX = 2 // border, one space
+	callTextW = CallW - 4
+	callBarW  = 12
 )
+
+// MaxOutputLines is the most output lines a call card shows. The focused
+// card asks for this many.
+const MaxOutputLines = 10
+
+// CallCardHeight returns the height of the card CallCard draws for c with
+// the given OutputLines: CallH, or for a command with more than 2 output
+// lines when outputLines is above 2, 5 plus the lines shown (at most
+// outputLines, at most MaxOutputLines). A nil call gives CallH.
+func CallCardHeight(c *store.ViewCall, outputLines int) int {
+	if c == nil || outputLines <= 2 || c.Category != "command" {
+		return CallH
+	}
+	n := len(text.CleanLines(c.Output))
+	if n <= 2 {
+		return CallH
+	}
+	return 5 + min(n, outputLines, MaxOutputLines)
+}
 
 var spinFrames = [4]string{"|", "/", "-", `\`}
 
@@ -36,7 +54,7 @@ type CallIn struct {
 	Spin        int // the spinner frame counter
 	Stale       bool
 	LastEventMs int64
-	OutputLines int // 0 for the normal card; above 2, the focused card
+	OutputLines int // 0 for the normal card; above 2, the focused card (see CallCardHeight)
 }
 
 // Elapsed formats a duration: 1.4s under 60 s, then 2m 03s.
@@ -211,15 +229,13 @@ func line2(root string, c *store.ViewCall) string {
 	return ""
 }
 
-// CallCard draws a call card, 28 wide. It is 7 high, or 5 + OutputLines high
-// when OutputLines is above 2 (the focused card shows up to 10 lines).
+// CallCard draws a call card, 28 wide and CallCardHeight high: 7, or taller
+// for a command with more output lines than 2 when OutputLines is above 2
+// (the focused card shows up to 10 lines).
 func CallCard(in CallIn) *cells.Grid {
 	c := in.Call
-	extra := 2 // output or "started" lines
-	if in.OutputLines > 2 {
-		extra = min(in.OutputLines, maxOutLines)
-	}
-	h := 5 + extra
+	h := CallCardHeight(c, in.OutputLines)
+	extra := h - 5 // output or "started" lines
 	g := cells.New(CallW, h)
 
 	cat := cells.RoleOf(c.Category)

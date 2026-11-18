@@ -15,7 +15,6 @@ const (
 	callX        = cards.AgentW + 1        // the call card, one column right of the agent card
 	histX        = callX + cards.CallW + 1 // the first history card
 	histStep     = cards.HistoryW + 1      // history cards are one column apart
-	focusOutput  = 10                      // output lines of the focused command card
 	dimHistoryAt = 2                       // history cards from this index are dimmer
 	gutterW      = 5                       // the gutter columns 0-4
 )
@@ -33,8 +32,9 @@ type rowPlan struct {
 	prev    *store.ViewCall // the call shown before it, for the leaving card
 	hist    []*store.ViewCall
 	hasKids bool // a present agent has this agent as its parent
+	outputs int  // OutputLines of the call card: MaxOutputLines when focused
 	callH   int  // the call card height
-	target  int  // the row height the board wants
+	target  int  // the row height the board wants (Row.H)
 	f       anim.AgentFrame
 }
 
@@ -49,7 +49,7 @@ func planRows(in Input, rows []board.Row, w int, eng *anim.Engine) []*rowPlan {
 		if a.ParentID != nil {
 			parents[*a.ParentID] = true
 		}
-		plans = append(plans, &rowPlan{row: r, rows: rows, index: i, w: w, agent: a, callH: cards.CallH, target: r.H})
+		plans = append(plans, &rowPlan{row: r, rows: rows, index: i, w: w, agent: a, target: r.H})
 	}
 	for _, p := range plans {
 		id := p.row.AgentID
@@ -73,10 +73,11 @@ func planRows(in Input, rows []board.Row, w int, eng *anim.Engine) []*rowPlan {
 			ended = ended[1:] // the shown call is not history
 		}
 		p.hist = ended[:min(histN, len(ended))]
-		if p.row.Full && in.UI.Focus == id && p.shown != nil && p.shown.Category == "command" {
-			p.callH = 5 + focusOutput
-			p.target += p.callH - cards.CallH
+		if p.row.Full && in.UI.Focus == id {
+			p.outputs = cards.MaxOutputLines
 		}
+		// board.Rows sized the row for this card.
+		p.callH = cards.CallCardHeight(p.shown, p.outputs)
 		p.f = eng.Frame(id, p.target, len(p.hist))
 	}
 	return plans
@@ -140,9 +141,9 @@ const (
 )
 
 // gutterBelow returns the gutter of the lines past the board's row height,
-// in a row that is taller (a focused card, a row that collapses): the tree
-// line goes on below a sub-agent that has later siblings, and below a full
-// main row whose sub-agents follow.
+// in a row whose animated height is still above it (a row that collapses):
+// the tree line goes on below a sub-agent that has later siblings, and below
+// a full main row whose sub-agents follow.
 func (p *rowPlan) gutterBelow() string {
 	r := p.row
 	switch {
@@ -263,14 +264,11 @@ func shownCard(in Input, p *rowPlan) *cells.Grid {
 		card = cells.New(cards.CallW, cards.CallH)
 		card.Box(0, 0, cards.CallW, cards.CallH, cells.Square, cells.Style{Role: cells.RDim})
 	} else {
-		other, lines := 0, 0
+		other := 0
 		if !p.shown.Ended {
 			other = len(p.open) - 1
 		}
-		if p.callH > cards.CallH {
-			lines = focusOutput
-		}
-		card = callCard(in, p, p.shown, other, lines)
+		card = callCard(in, p, p.shown, other, p.outputs)
 	}
 	if p.f.Flash {
 		for i := range card.C {

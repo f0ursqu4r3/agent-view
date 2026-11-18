@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -206,5 +207,41 @@ func TestCollapsedRow(t *testing.T) {
 	bad := viewAgent("x", "ev\x1b[31mil\nname", "co\x07dex", "idle", nil)
 	if got := cells.Plain(CollapsedRow(60, bad, idle, nil, now)); strings.ContainsAny(got, "\x1b\x07\n") {
 		t.Errorf("not cleaned: %q", got)
+	}
+}
+
+func TestCallCardHeight(t *testing.T) {
+	cmd := func(n int) func(*store.ViewCall) {
+		return func(c *store.ViewCall) {
+			c.Command = "make"
+			for i := 1; i <= n; i++ {
+				c.Output += fmt.Sprintf("l%d\n\n", i) // blank lines do not count
+			}
+		}
+	}
+	tests := []struct {
+		name  string
+		call  *store.ViewCall
+		lines int
+		want  int
+	}{
+		{"focused 12 lines", mkCall("command", -1, nil, cmd(12)), 10, 15},
+		{"focused 3 lines", mkCall("command", 900, bptr(true), cmd(3)), 10, 8},
+		{"focused 2 lines", mkCall("command", -1, nil, cmd(2)), 10, 7},
+		{"asks for 4 of 12", mkCall("command", -1, nil, cmd(12)), 4, 9},
+		{"not focused", mkCall("command", -1, nil, cmd(12)), 0, 7},
+		{"not a command", mkCall("read", -1, nil, func(c *store.ViewCall) { c.Files, c.Output = []string{"/a"}, "x\ny\nz\nw" }), 10, 7},
+		{"nil call", nil, 10, 7},
+	}
+	for _, tc := range tests {
+		if got := CallCardHeight(tc.call, tc.lines); got != tc.want {
+			t.Errorf("%s: CallCardHeight = %d, want %d", tc.name, got, tc.want)
+		}
+		if tc.call == nil {
+			continue
+		}
+		if g := CallCard(CallIn{Call: tc.call, Now: callStart + 1000, OutputLines: tc.lines}); g.H != tc.want {
+			t.Errorf("%s: CallCard is %d high, want %d", tc.name, g.H, tc.want)
+		}
 	}
 }
