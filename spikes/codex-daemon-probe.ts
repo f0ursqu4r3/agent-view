@@ -4,11 +4,14 @@
 // FINDING: the control socket speaks WebSocket (101 Switching Protocols); `codex app-server proxy` passes raw
 // bytes, so the client must do the WebSocket handshake and framing itself. Not newline-delimited JSON.
 // TRANSPORT=proxy (default) spawns `codex app-server proxy`; TRANSPORT=socket connects to the unix socket directly.
+// OPT-IN: the probe sends thread/resume to the owner's loaded threads. It runs only with AGENT_VIEW_PROBE_RESUME=1,
+// after the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run") are met.
 import { createHash, randomBytes } from 'node:crypto'
 const TRANSPORT = (process.env.TRANSPORT ?? 'proxy') as 'proxy' | 'socket'
 const RTT_SAMPLES = Number(process.env.RTT_SAMPLES ?? 40)
 
 const DURATION_MS = Number(process.env.PROBE_MS ?? 120_000)
+const RESUME_OPT_IN = process.env.AGENT_VIEW_PROBE_RESUME === '1'
 const ALLOWED = new Set(['initialize', 'initialized', 'thread/loaded/list', 'thread/read', 'thread/resume', 'thread/unsubscribe'])
 const SHAPE_METHODS = ['item/started', 'item/completed', 'item/commandExecution/outputDelta', 'thread/started']
 
@@ -122,6 +125,7 @@ let unsubscribed = false
 function write(obj: any) {
   const method: string = obj.method
   if (!ALLOWED.has(method)) throw new Error(`refusing to send ${method}`)
+  if (method === 'thread/resume' && !RESUME_OPT_IN) throw new Error('refusing to send thread/resume without AGENT_VIEW_PROBE_RESUME=1')
   sendJson(obj)
 }
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? 10_000)
@@ -183,6 +187,15 @@ function settingsFingerprint(resp: any) {
   const h = new Bun.CryptoHasher('sha256')
   h.update(JSON.stringify([t.model, t.modelProvider, t.reasoningEffort, t.cwd, t.source, t.ephemeral, t.name, t.path]))
   return { fp: h.digest('hex').slice(0, 12), status: t.status?.type ?? typeof t.status, model: t.model, reasoningEffort: t.reasoningEffort }
+}
+
+if (!RESUME_OPT_IN) {
+  console.log([
+    'codex-daemon-probe: not run. The probe sends thread/resume to loaded Codex threads, so it needs AGENT_VIEW_PROBE_RESUME=1.',
+    'Before you set it, meet the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run"),',
+    'and warn the owner of the loaded threads: the probe does not answer server requests, which can stall their turn.',
+  ].join('\n'))
+  process.exit(0)
 }
 
 const out: any = { startedAt: new Date().toISOString(), durationMs: DURATION_MS }

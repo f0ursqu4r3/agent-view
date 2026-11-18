@@ -1,7 +1,8 @@
 // Offline check for the probe's unsubscribe-on-exit guarantee. No Codex daemon involved.
 // A fake WebSocket JSON-RPC server (unix socket) reports one loaded thread and NEVER answers thread/resume.
 // Scenario "sigint": send SIGINT while the resume is in flight.  Scenario "timeout": let the 10 s request timeout fire.
-// Pass: the fake receives thread/unsubscribe for the thread, in both scenarios.
+// Pass: the fake receives thread/unsubscribe for the thread, in both scenarios. Both set AGENT_VIEW_PROBE_RESUME=1.
+// Scenario "no-opt-in": without AGENT_VIEW_PROBE_RESUME=1 the probe prints why, exits 0, and sends nothing.
 // Usage: bun spikes/codex-daemon-probe.offline-check.ts
 import { createHash } from 'node:crypto'
 import { rmSync } from 'node:fs'
@@ -49,7 +50,7 @@ async function scenario(name: 'sigint' | 'timeout') {
   const seen: Seen = []
   const server = startFake(seen)
   const proc = Bun.spawn(['bun', 'spikes/codex-daemon-probe.ts'], {
-    env: { ...process.env, TRANSPORT: 'socket', SOCKET_PATH: sockPath, RTT_SAMPLES: '1', PROBE_MS: '5000', REQUEST_TIMEOUT_MS: name === 'timeout' ? '1500' : '10000' },
+    env: { ...process.env, AGENT_VIEW_PROBE_RESUME: '1', TRANSPORT: 'socket', SOCKET_PATH: sockPath, RTT_SAMPLES: '1', PROBE_MS: '5000', REQUEST_TIMEOUT_MS: name === 'timeout' ? '1500' : '10000' },
     stdout: 'pipe', stderr: 'pipe',
   })
   const t0 = Date.now()
@@ -66,5 +67,20 @@ async function scenario(name: 'sigint' | 'timeout') {
   server.stop(true); rmSync(sockPath, { force: true })
   return ok
 }
-const a = await scenario('sigint'), b = await scenario('timeout')
-process.exit(a && b ? 0 : 1)
+async function noOptIn() {
+  const seen: Seen = []
+  const server = startFake(seen)
+  const env: Record<string, string | undefined> = { ...process.env, TRANSPORT: 'socket', SOCKET_PATH: sockPath, RTT_SAMPLES: '1', PROBE_MS: '1000' }
+  delete env.AGENT_VIEW_PROBE_RESUME
+  const proc = Bun.spawn(['bun', 'spikes/codex-daemon-probe.ts'], { env, stdout: 'pipe', stderr: 'pipe' })
+  const code = await Promise.race([proc.exited, Bun.sleep(15_000).then(() => 'hung')])
+  if (code === 'hung') proc.kill('SIGKILL')
+  const text = await new Response(proc.stdout).text()
+  const ok = code === 0 && seen.length === 0 && text.includes('AGENT_VIEW_PROBE_RESUME=1')
+  console.log(`${'no-opt-in'.padEnd(8)} exit=${code} messagesSent=${seen.length} explains=${text.includes('AGENT_VIEW_PROBE_RESUME=1')} -> ${ok ? 'PASS' : 'FAIL'}`)
+  server.stop(true); rmSync(sockPath, { force: true })
+  return ok
+}
+
+const g = await noOptIn(), a = await scenario('sigint'), b = await scenario('timeout')
+process.exit(g && a && b ? 0 : 1)
