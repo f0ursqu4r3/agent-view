@@ -1,0 +1,15 @@
+{"kind":"agent.upsert","agent":{"id":"mac/claude:default:s1","provider":"claude","name":"main task","role":"main","parentId":null,"link":"root","cwd":"/work/proj","projectRoot":"/work/proj","status":"idle","lastEventAt":"2026-01-01T00:00:00.000Z"},"ts":"2026-01-01T00:00:00.000Z"}
+{"kind":"agent.upsert","agent":{"id":"mac/claude:default:s1:sub1","provider":"claude","name":"helper","role":"sub-agent","parentId":"mac/claude:default:s1","link":"confirmed","cwd":"/work/proj","projectRoot":"/work/proj","status":"idle","lastEventAt":"2026-01-01T00:00:01.000Z"},"ts":"2026-01-01T00:00:01.000Z"}
+{"kind":"tool.start","call":{"agentId":"mac/claude:default:s1","callId":"c1","startedAt":"2026-01-01T00:00:02.000Z","category":"read","rawName":"Read","files":["/work/proj/a.ts"]},"ts":"2026-01-01T00:00:02.000Z"}
+{"kind":"tool.end","agentId":"mac/claude:default:s1","callId":"c1","ok":true,"ts":"2026-01-01T00:00:03.000Z"}
+{"kind":"tool.start","call":{"agentId":"mac/claude:default:s1:sub1","callId":"c2","startedAt":"2026-01-01T00:00:04.000Z","category":"edit","rawName":"Edit","files":["/work/proj/b.ts"]},"ts":"2026-01-01T00:00:04.000Z"}
+{"kind":"fs.change","path":"/work/proj/c.ts","op":"change","ts":"2026-01-01T00:00:05.000Z"}
+{"kind":"tool.output","agentId":"mac/claude:default:s1:sub1","callId":"c2","chunk":"editing","truncated":false,"ts":"2026-01-01T00:00:06.000Z"}
+{"kind":"tool.end","agentId":"mac/claude:default:s1:sub1","callId":"c2","ok":true,"writes":[{"path":"/work/proj/b.ts","op":"edit"},{"path":"/work/proj/new.ts","op":"create"}],"ts":"2026-01-01T00:00:07.000Z"}
+{"kind":"agent.status","agentId":"mac/claude:default:s1:sub1","status":"idle","ts":"2026-01-01T00:00:08.000Z"}
+{"kind":"tool.start","call":{"agentId":"mac/claude:default:s1","callId":"c3","startedAt":"2026-01-01T00:00:09.000Z","category":"command","rawName":"Bash","command":"ls"},"ts":"2026-01-01T00:00:09.000Z"}
+{"kind":"tool.update","agentId":"mac/claude:default:s1","callId":"c3","files":["/work/proj/d.ts"],"ts":"2026-01-01T00:00:10.000Z"}
+{"kind":"tool.start","call":{"agentId":"mac/claude:default:s1:sub1","callId":"c4","startedAt":"2026-01-01T00:00:11.000Z","category":"search","rawName":"Grep","pattern":"foo","files":["/work/proj/e.ts"]},"ts":"2026-01-01T00:00:11.000Z"}
+{"kind":"tool.end","agentId":"mac/claude:default:s1:sub1","callId":"c4","ok":true,"ts":"2026-01-01T00:00:12.000Z"}
+{"kind":"fs.change","path":"/work/proj/a.ts","op":"change","ts":"2026-01-01T00:00:13.000Z"}
+{"kind":"agent.status","agentId":"mac/claude:default:s1:sub1","status":"finished","ts":"2026-01-01T00:00:14.000Z"}
