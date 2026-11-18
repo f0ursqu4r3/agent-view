@@ -210,11 +210,13 @@ func TestClipRows(t *testing.T) {
 func TestDim(t *testing.T) {
 	g := New(5, 1)
 	g.Text(0, 0, 1, "a", Style{Role: RRead, Bold: true})
-	g.Text(1, 0, 1, "b", Style{Role: RFail})
+	g.Text(1, 0, 1, "b", Style{Role: RFail, Bold: true})
 	g.Text(2, 0, 1, "c", Style{Role: RFaint})
-	g.Text(3, 0, 1, "d", Style{Role: RBright})
+	g.Text(3, 0, 1, "d", Style{Role: RBright, Bold: true})
+	g.Text(4, 0, 1, "e", Style{Role: RRead, Inverse: true})
 	g.Dim()
-	if got := Mask(g); got != "Dzfdd" {
-		t.Fatalf("Mask = %q, want %q", got, "Dzfdd")
+	// Bold is cleared on every cell; Inverse is kept.
+	if got := Mask(g); got != "dzfd#" {
+		t.Fatalf("Mask = %q, want %q", got, "dzfd#")
 	}
 }
