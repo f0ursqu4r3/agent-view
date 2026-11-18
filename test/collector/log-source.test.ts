@@ -228,3 +228,70 @@ test('LogSource reports source.status degraded for an unreadable root and keeps 
     }
   });
 });
+
+/** Track every interval and recursive watcher so a test can prove stop() released them. */
+function trackResources() {
+  const intervals = new Set<unknown>();
+  const realSet = globalThis.setInterval;
+  const realClear = globalThis.clearInterval;
+  globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
+    const h = realSet(...args);
+    intervals.add(h);
+    return h;
+  }) as typeof setInterval;
+  globalThis.clearInterval = ((h?: Parameters<typeof clearInterval>[0]) => {
+    intervals.delete(h);
+    return realClear(h);
+  }) as typeof clearInterval;
+  let opened = 0;
+  let closed = 0;
+  const watch: typeof watchTree = () => {
+    opened++;
+    return { close() { closed++; }, degraded: null };
+  };
+  return {
+    watch,
+    liveIntervals: () => intervals.size,
+    liveWatchers: () => opened - closed,
+    restore: () => { globalThis.setInterval = realSet; globalThis.clearInterval = realClear; for (const h of intervals) realClear(h as never); },
+  };
+}
+
+test('stop() during start() leaves no timers and no watchers, and emits nothing afterwards', async () => {
+  await withDir(async (dir) => {
+    const root = claudeRoot(dir);
+    for (const n of ['a', 'b', 'c']) {
+      const log = path.join(root.path, 'proj', `${n}.jsonl`);
+      await fs.mkdir(path.dirname(log), { recursive: true });
+      await fs.writeFile(log, toolLine(`t-${n}`));
+    }
+    const res = trackResources();
+    try {
+      // Stop while the initial scan is still running.
+      const early = harness([root], { watch: res.watch });
+      const starting = early.source.start();
+      early.source.stop();
+      await starting;
+      await Bun.sleep(200);
+      expect(early.events).toEqual([]);
+      expect(res.liveIntervals()).toBe(0);
+      expect(res.liveWatchers()).toBe(0);
+
+      // Stop while the initial reads are running: the first batch is the last.
+      let source: LogSource | undefined;
+      const batches: SourceEvent[][] = [];
+      source = new LogSource({
+        host: 'mac', roots: [root], pollMs: 50, rescanMs: 100, watch: res.watch,
+        emit: (b) => { batches.push(b); source!.stop(); },
+        onStatus: () => {},
+      });
+      await source.start();
+      await Bun.sleep(200);
+      expect(batches.length).toBe(1);
+      expect(res.liveIntervals()).toBe(0);
+      expect(res.liveWatchers()).toBe(0);
+    } finally {
+      res.restore();
+    }
+  });
+});

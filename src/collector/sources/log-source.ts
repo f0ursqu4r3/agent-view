@@ -65,6 +65,7 @@ export class LogSource {
   async start(): Promise<void> {
     this.stopped = false;
     await this.rescan();
+    if (this.stopped) return;
     this.pollTimer = setInterval(() => this.poll(), this.pollMs);
     this.rescanTimer = setInterval(() => void this.rescan(), this.rescanMs);
   }
@@ -102,6 +103,7 @@ export class LogSource {
     if (this.batch.length === 0) return;
     const events = this.batch;
     this.batch = [];
+    if (this.stopped) return;
     try {
       this.opts.emit(events);
     } catch (e) {
@@ -111,6 +113,7 @@ export class LogSource {
 
   /** Read one file. A trigger during a read schedules exactly one follow-up read. */
   private readFile(file: string): Promise<void> {
+    if (this.stopped) return Promise.resolve();
     const running = this.reading.get(file);
     if (running) { running.again = true; return running.done; }
     const state = { again: false, done: Promise.resolve() };
@@ -172,6 +175,7 @@ export class LogSource {
     for (const file of dropped) {
       // A read in flight creates its cursor after the stat call, so forget only once it ends.
       await this.reading.get(file)?.done;
+      if (this.stopped) return;
       if (!this.selected.has(file)) this.tailer.forget(file);
     }
     const fresh: RecentLog[] = [];
@@ -184,7 +188,10 @@ export class LogSource {
       this.ensureWatcher(root, codes.get(root.path) ?? null);
     }
     // Oldest first, so the newest activity is the last thing emitted.
-    for (const log of fresh.reverse()) await this.readFile(log.file);
+    for (const log of fresh.reverse()) {
+      if (this.stopped) return;
+      await this.readFile(log.file);
+    }
   }
 
   /** Watch a readable root, and report its status when it changes. */
