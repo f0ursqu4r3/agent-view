@@ -20,7 +20,10 @@ type Opts = {
   maxLogs?: number;
   sinceMs?: number;
   pollMs?: number;
+  /** Safety rescan interval while any root's watcher is missing or degraded. */
   rescanMs?: number;
+  /** Safety rescan interval while every root has a healthy watcher. */
+  healthyRescanMs?: number;
   onWarning?: (msg: string) => void;
   /** Replaceable for tests. */
   watch?: typeof watchTree;
@@ -28,13 +31,16 @@ type Opts = {
 
 /**
  * Tails the newest Claude and Codex logs under the given roots and emits adapter events.
- * File watchers give low latency, a poll covers missed callbacks, and a rescan finds new logs.
+ * File watchers give low latency, a poll of the selected files covers missed callbacks, and a rescan finds new logs.
+ * A watcher hint for an unknown log starts a rescan at once. The safety rescan walks every root, which is costly
+ * on large log trees: it runs every 120 s while every root has a healthy watcher, and every 10 s otherwise.
  */
 export class LogSource {
   private readonly maxLogs: number;
   private readonly sinceMs: number;
   private readonly pollMs: number;
   private readonly rescanMs: number;
+  private readonly healthyRescanMs: number;
   private readonly watch: typeof watchTree;
   private readonly claude: ClaudeLogAdapter;
   private readonly codex: CodexLogAdapter;
@@ -45,6 +51,7 @@ export class LogSource {
   private readonly reported = new Map<string, string>();
   private batch: SourceEvent[] = [];
   private discovered = 0;
+  private lastScanMs = Number.NEGATIVE_INFINITY;
   private stopped = false;
   private pollTimer?: ReturnType<typeof setInterval>;
   private rescanTimer?: ReturnType<typeof setInterval>;
@@ -56,6 +63,7 @@ export class LogSource {
     this.sinceMs = opts.sinceMs ?? 24 * HOUR;
     this.pollMs = opts.pollMs ?? 2000;
     this.rescanMs = opts.rescanMs ?? 10_000;
+    this.healthyRescanMs = opts.healthyRescanMs ?? 120_000;
     this.watch = opts.watch ?? watchTree;
     this.claude = new ClaudeLogAdapter(opts.host);
     this.codex = new CodexLogAdapter(opts.host);
@@ -67,7 +75,7 @@ export class LogSource {
     await this.rescan();
     if (this.stopped) return;
     this.pollTimer = setInterval(() => this.poll(), this.pollMs);
-    this.rescanTimer = setInterval(() => void this.rescan(), this.rescanMs);
+    this.rescanTimer = setInterval(() => this.safetyRescan(), this.checkMs());
   }
 
   stop(): void {
@@ -142,6 +150,27 @@ export class LogSource {
     for (const file of this.selected.keys()) void this.readFile(file);
   }
 
+  /** How often the safety rescan checks whether a rescan is due. */
+  private checkMs(): number {
+    return Math.min(this.rescanMs, this.healthyRescanMs);
+  }
+
+  /** True when every root has a watcher that reports no fault. */
+  private watchersHealthy(): boolean {
+    return this.opts.roots.every((r) => {
+      const w = this.watchers.get(r.path);
+      return w !== undefined && w.degraded === null;
+    });
+  }
+
+  /** A rescan when the interval for the current watcher health has passed since the last scan of any kind. */
+  private safetyRescan(): void {
+    if (this.stopped) return;
+    const due = this.watchersHealthy() ? this.healthyRescanMs : this.rescanMs;
+    // Half a check of slack, so timer jitter never pushes a due rescan to the next check.
+    if (Date.now() - this.lastScanMs + this.checkMs() / 2 >= due) void this.rescan();
+  }
+
   /** At most one rescan runs. A request during a scan schedules one follow-up scan. */
   private rescan(): Promise<void> {
     if (this.stopped) return Promise.resolve();
@@ -164,6 +193,7 @@ export class LogSource {
   }
 
   private async scan(): Promise<void> {
+    this.lastScanMs = Date.now();
     const codes = new Map<string, string | null>();
     const all = await scanLogs(this.opts.roots, this.sinceMs, (root, code) => codes.set(root.path, code));
     if (this.stopped) return;

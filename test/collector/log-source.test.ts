@@ -33,7 +33,8 @@ function harness(roots: LogRoot[], extra: Partial<ConstructorParameters<typeof L
   const waiters: { ok: () => boolean; done: () => void }[] = [];
   const poke = () => { for (const w of [...waiters]) if (w.ok()) { waiters.splice(waiters.indexOf(w), 1); w.done(); } };
   const source = new LogSource({
-    host: 'mac', roots, pollMs: 50, rescanMs: 100,
+    // Unless a test says otherwise, the safety rescan is as fast with healthy watchers as without.
+    host: 'mac', roots, pollMs: 50, rescanMs: 100, healthyRescanMs: extra.healthyRescanMs ?? extra.rescanMs ?? 100,
     emit: (batch) => { events.push(...batch); poke(); },
     onStatus: (s, st) => { statuses.push([s, st]); poke(); },
     ...extra,
@@ -115,6 +116,32 @@ test('LogSource finds a new log file after a rescan, with the watcher suppressed
       await watched.until(() => watched.toolStarts().includes('n2'), 1500, 'watcher-triggered rescan to find n2');
     } finally {
       watched.source.stop();
+    }
+  });
+});
+
+test('I5: with healthy watchers the safety rescan is slow; a degraded watcher brings back the fast rescan', async () => {
+  await withDir(async (dir) => {
+    const root = claudeRoot(dir);
+    await fs.mkdir(path.join(root.path, 'proj'), { recursive: true });
+    // The watcher looks healthy but reports nothing, so only a periodic rescan can find a new file.
+    const healthy = harness([root], { watch: noWatch, rescanMs: 50, healthyRescanMs: 60_000 });
+    await healthy.source.start();
+    try {
+      await fs.writeFile(path.join(root.path, 'proj', 'quiet.jsonl'), toolLine('q1'));
+      await Bun.sleep(300); // 6x the degraded interval
+      expect(healthy.toolStarts()).toEqual([]);
+    } finally {
+      healthy.source.stop();
+    }
+    const degradedWatch: typeof watchTree = () => ({ close() {}, degraded: 'watcher error' });
+    const degraded = harness([root], { watch: degradedWatch, rescanMs: 50, healthyRescanMs: 60_000 });
+    await degraded.source.start();
+    try {
+      await fs.writeFile(path.join(root.path, 'proj', 'loud.jsonl'), toolLine('l1'));
+      await degraded.until(() => degraded.toolStarts().includes('l1'), 2000, 'fast rescan to find l1');
+    } finally {
+      degraded.source.stop();
     }
   });
 });
