@@ -1,0 +1,40 @@
+# Agent View v2 — follow-ups
+
+Date: 2026-11-17. Branch: feat/agent-view-v2.
+
+These are the minor findings that per-task and final reviews deferred, plus the residual items parked after the final fix wave. Some deferred items were fixed later in the final fix wave (commits b557db5..446f95b): the frame-loop guard, the README bullet merge and `/api/*` wording, stale-agent effects, and the probe safety notes (now in `docs/superpowers/spikes/2026-11-17-m0-results.md`). The list keeps the original review wording.
+
+## Parked after the final fix wave
+
+- log-source watchersHealthy() ignores roots whose scan fails while their old watcher is healthy (rescan stays 120 s) — Ruling: real, rare, nothing builds on it; deferred. Cost if wrong: slower pickup of new logs under a root that turned unreadable.
+- parallel Agent calls whose children appear at different times draw a short-lived link to the first child — Ruling: real, cosmetic, brief; deferred. Cost if wrong: a guessed link visible for a moment.
+- C1/I1 hub tests never stop() their hubs (unref'd timers) — Ruling: test hygiene only; deferred.
+- remote collect is spawned without --linger, so a hub --linger above 10 min is not honored for remote snapshots after reconnect — Ruling: real; deferred to a follow-up (pass --linger through the default remote command). Cost if wrong: remote agents idle 10–N min vanish after a remote reconnect.
+
+## Deferred during task reviews
+
+- **Task 2:** m1 probe prints model/reasoningEffort raw; m2 turn/started attribution by time window; m3 settings fingerprint misses approval/sandbox; m4 write() guard should check resume/read params exactly; m5 note `codex app-server daemon version` CLI call; m6 unanswered server requests may stall owner turn — warn/short run; m7 external-writer latency stamp; m8 no Ctrl-C cleanup in fs probe; m9 pixi culling wording; m10 duplicate unanchored DAEMON_SOURCE text. R7 follow-up (daemon re-run) must fix m1,m2,m3,m4,m6 before running on a loaded thread.
+- **Task 3:** cursor stored before header read (failed header → full read next time); onRecord throw loses rest of chunk; oversize warning text uses formatted limit vs fixed "4 MiB"; large-log warning per cursor reset; complete line up to ~2x limit can pass; concurrent read() not serialized (T7 must serialize per file); tests lack forget/re-read, multi-chunk tail split, cut-on-boundary.
+- **Task 4:** command slice by UTF-16 units / pattern uncapped; confirmed Agent result overwrites custom-title name; untimestamped end_turn idle lag untested; test gaps (truncated:false, multibyte >16 KiB, agentId beats filename, dead content arg, Grep title mentions glob); unbounded agents/emitted maps.
+- **Task 5:** native item in record without timestamp marks started/ended then drops events → call lost on replay; unknown-thread upsert before ts/ended early return; unanchored "Process exited with code" regex can mark a successful command failed; non-patch non-command direct calls always ok:true; native items don't set working (T6 tool.start → working covers it); bound test proves only pending eviction.
+- **Task 6:** applyEnd confirms writes without checking ok (defence in depth); open-call timeout clock resets on load; agents map never pruned (slow leak in long-running collector — triage at final review); late tool.update for unknown call touches files as confirmed; duplicated msOf; explicit-undefined option spread; presentAgentIds re-walks shared ancestors.
+- **Task 7:** rescan storm on unselectable .jsonl; partial-error root gets no watcher (2 s poll latency); stop() leaves debounceTimer set / start() not idempotent; symlinked ~/.codex-accounts/<name> skipped; missing stop/degraded/recreate tests; per-dir sync readdir blocks event loop (note for T8).
+- **Task 7:** stop() then start() while old scan runs (single stopped flag, no generation token); case-2 stop test not mutation-checked; dropped-file await guard untested.
+- **Task 8:** status keys raw vs realpath; per-dir gitignore dirs without trailing slash; lstat before rate limit + per-event emit batches; matcher cache never evicts; stop() keeps reported/limiter state; tests write right after setRoots (watch-ready race), weak "later write" assertion, 1150 ms sleep; IGNORED_DIRS coverage 9/17, no nested .gitignore source test; symlink edits report create; `..foo` edge.
+- **Task 8:** setRoots treats any degraded (incl. per-dir maxDirs cap) as fatal — comment/handle before wiring per-dir; deleted-root test may report 2 degraded on Linux.
+- **Task 10:** start() after stop() / run() rejection leaks timers; subscribe() after stop() still sends hello+snapshot; positive path cache never expires; stdout backpressure ignored; --remote/--watch accepted in collect mode; --help exits 2; no tests for 5 s coverage timer / 1 s root sync; timing-sensitive demo tests.
+- **Task 10:** tick chain has no overlap guard; .catch swallows tick/syncRoots errors; cached ancestor resolution never invalidated.
+- **Task 11:** collect --stdio statically loads viewer HTML via server import (lazy-import server in runHub) — triage for T17/T18; shutdown waits on hub.stop with no timeout, second signal ignored; Bun.serve default development mode exposes dev routes (set development:false) — triage at final review; sourceStatus stored but unused; per-socket stringify, no resnapshot rate limit; 2 MiB close untested; viewer/ not type-checked (T12 adds it to tsconfig).
+- **Task 12:** hello without string now accepted; unknown kind creates host state; isStale re-parse, commands() sorts all per call; 16 KiB counts UTF-16 units / surrogate split; ended-call tool.end skips writes; unknown-call tool.update touches; recent eviction by insertion; prune filter allocations; test gaps (skewed ended call in window, skewed touch atMs, per-host call cap).
+- **Task 12:** returning agent moves to end of lane order.
+- **Task 12:** resnapshot flag global not per host.
+- **Task 13:** out-of-order cap window; path normalization of fileId/known check; unattributed touch on a dir path returns the dir node.
+- **Task 13:** file whose path equals a later-learned project root is skipped by learnRoot; queued removed dir can share id with new project node (stage must key fades by node object, not id); roots stay in hs.projects after pruning.
+- **Task 13:** cleanupEmpty liveness guard on learnRoot path untested.
+- **Task 14:** folder labels always when ≤60 per host; idle home positions drift with tree layout; stale agents keep beams/pulses (spec says dim slow pulse) — triage at final review; per-frame Map/array allocations; Meta.fading never cleared; boot() rejection unhandled (blank page on WebGL failure); no TreeView/AgentsView lifecycle tests.
+- **Task 15:** drawer/HUD exceptions in frame stop the stage (try/catch or rAF first) — triage at final review; timeline shadowBlur per frame; key repeat/isComposing guard; host state used in className unvalidated; JSON.stringify signatures per frame; smoke lane click timing; lanes beyond drawer height hidden.
+- **Task 15:** smoke isVisible passes vacuously if the selector breaks (add count()===1); renderCommands builds names Map per frame.
+- **Task 16:** README "Known gaps" missing newline merges two bullets (fix in final wave); README says /api/* (only /api/snapshot exists); audit example port; NaN lastTouchAt message.
+- **Task 17:** run() waits for stdout EOF (grandchild holding the pipe blocks down/retry/stop); deliver() not guarded by stopped; empty 255 detail; cli remote test depends on ssh/DNS; real-timer gap test may flake.
+- **Task 17:** no test of --remote=value form; LineSplitter copy cost O(n²/chunk) up to 8 MiB; label not validated for custom commands (existing contract).
+- **Task 18:** AGENT_VIEW_DIST empty string → cwd; spawns literal `bun` (use process.execPath); compile test stderr not drained; non-darwin treated as linux; README ~/.local/bin may not exist.
