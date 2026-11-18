@@ -1,4 +1,5 @@
 // Placeholder viewer. It is replaced by the stage and drawer in later tasks.
+export {};
 const status = document.getElementById('status')!;
 const hosts = new Set<string>();
 let events = 0;
