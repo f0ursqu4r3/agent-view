@@ -3,3 +3,5 @@ work/
 .serena/
 .DS_Store
 .superpowers/
+dist/
+test/.tmp/
