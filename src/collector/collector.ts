@@ -24,26 +24,22 @@ const TICK_MS = 1000;
 const COVERAGE_MS = 5000;
 const MAX_WATCH_ROOTS = 24;
 const CACHE_SIZE = 5000;
-/** A failed lookup is remembered this long, so a path that does not exist yet costs one call per interval. */
-const MISS_TTL_MS = 10_000;
-
-/** Least-recently-used cache. A miss entry (null) expires; a hit entry does not. */
+/** Least-recently-used cache of resolved paths. Misses are never stored: the path may exist a moment later. */
 class PathCache {
-  private readonly map = new Map<string, { value: string | null; until: number }>();
+  private readonly map = new Map<string, string>();
   constructor(private readonly max: number) {}
 
-  get(key: string): string | null | undefined {
+  get(key: string): string | undefined {
     const hit = this.map.get(key);
-    if (!hit) return undefined;
-    if (hit.value === null && hit.until <= Date.now()) { this.map.delete(key); return undefined; }
+    if (hit === undefined) return undefined;
     this.map.delete(key);
     this.map.set(key, hit);
-    return hit.value;
+    return hit;
   }
 
-  set(key: string, value: string | null): void {
+  set(key: string, value: string): void {
     this.map.delete(key);
-    this.map.set(key, { value, until: value === null ? Date.now() + MISS_TTL_MS : Infinity });
+    this.map.set(key, value);
     if (this.map.size > this.max) this.map.delete(this.map.keys().next().value as string);
   }
 }
@@ -98,11 +94,12 @@ export class Collector {
   subscribe(fn: (e: Envelope) => void): () => void {
     const now = Date.now();
     const ts = new Date(now).toISOString();
+    // hello and snapshot carry the current seq without taking a number, so other subscribers see no gap.
     this.deliverTo(fn, this.envelope({
       kind: 'hello', collectorVersion: pkg.version, platform: `${process.platform}-${process.arch}`, now: ts,
       ...(this.opts.demo ? { demo: true as const } : {}), ts,
-    }));
-    this.deliverTo(fn, this.envelope({ ...this.state.snapshot(now), ts }));
+    }, false));
+    this.deliverTo(fn, this.envelope({ ...this.state.snapshot(now), ts }, false));
     this.subscribers.add(fn);
     return () => { this.subscribers.delete(fn); };
   }
@@ -150,11 +147,17 @@ export class Collector {
     this.push([{ kind: 'coverage', coverage: this.coverage(), ts: new Date().toISOString() }]);
   }
 
+  /**
+   * Runs inside the queue, so it sees the state after every earlier event, including those still waiting on enrichment.
+   * Its events (timed-out calls) are final: they go out directly and are not applied to the state again.
+   */
   private tick(): void {
     if (this.stopped) return;
-    const now = Date.now();
-    this.push(this.state.tick(now));
-    this.syncRoots();
+    this.queue = this.queue.then(() => {
+      if (this.stopped) return;
+      for (const e of this.state.tick(Date.now())) this.deliver(this.envelope(e));
+      this.syncRoots();
+    }).catch(() => {});
   }
 
   /** Watch the `--watch` directories plus the project roots of present agents. */
@@ -191,8 +194,8 @@ export class Collector {
     if (sawAgent) this.syncRoots();
   }
 
-  private envelope(e: SourceEvent): Envelope {
-    return { v: SCHEMA_VERSION, host: this.opts.host, seq: ++this.seq, ...e };
+  private envelope(e: SourceEvent, live = true): Envelope {
+    return { v: SCHEMA_VERSION, host: this.opts.host, seq: live ? ++this.seq : this.seq, ...e };
   }
 
   private deliver(env: Envelope): void {
@@ -235,25 +238,46 @@ export class Collector {
   private async projectRootFor(cwd: string): Promise<string | null> {
     const cached = this.projectRoots.get(cwd);
     if (cached !== undefined) return cached;
-    let root: string | null = null;
-    try { root = await fsp.realpath(await findProjectRoot(cwd)); } catch { /* leave null */ }
-    this.projectRoots.set(cwd, root);
-    return root;
+    try {
+      const root = await fsp.realpath(await findProjectRoot(cwd));
+      this.projectRoots.set(cwd, root);
+      return root;
+    } catch {
+      return null;
+    }
   }
 
   private mapPaths(paths: string[]): Promise<string[]> {
     return Promise.all(paths.map((p) => this.realPath(p)));
   }
 
-  /** The real path of the parent directory plus the base name. The file itself may not exist yet. */
+  /**
+   * The real path of the parent directory plus the base name. The file, and even its directory, may not exist
+   * yet: Claude logs a `Write` before the tool creates it. The nearest existing ancestor is resolved
+   * and the missing segments are appended.
+   */
   private async realPath(p: string): Promise<string> {
     if (!path.isAbsolute(p)) return p;
-    const dir = path.dirname(p);
-    let real = this.dirs.get(dir);
-    if (real === undefined) {
-      try { real = await fsp.realpath(dir); } catch { real = null; }
-      this.dirs.set(dir, real);
+    const dir = await this.realDir(path.dirname(p));
+    return dir === null ? p : path.join(dir, path.basename(p));
+  }
+
+  private async realDir(dir: string): Promise<string | null> {
+    const missing: string[] = [];
+    let cur = dir;
+    for (;;) {
+      let real: string | undefined = this.dirs.get(cur);
+      if (real === undefined) {
+        try {
+          real = await fsp.realpath(cur);
+          this.dirs.set(cur, real);
+        } catch { /* walk up */ }
+      }
+      if (real !== undefined) return missing.length ? path.join(real, ...missing.reverse()) : real;
+      const parent = path.dirname(cur);
+      if (parent === cur) return null;
+      missing.push(path.basename(cur));
+      cur = parent;
     }
-    return real === null ? p : path.join(real, path.basename(p));
   }
 }

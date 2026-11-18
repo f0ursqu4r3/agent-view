@@ -74,9 +74,11 @@ test('subscribe gets hello (with now) then snapshot then live events with increa
 
       await fs.appendFile(log, toolUse('t1', 'Read', { file_path: '/project/b.ts' }, '/project'));
       await rec.until(() => rec.envs.some((e) => e.kind === 'tool.start' && e.call.callId === 't1'), 8000, 'tool.start t1');
+      // hello and snapshot carry the current seq without taking a number; live envelopes strictly increase.
+      expect(rec.envs[1]!.seq).toBe(rec.envs[0]!.seq);
       const seqs = rec.envs.map((e) => e.seq);
-      expect(seqs[0]!).toBeGreaterThanOrEqual(1);
-      for (let i = 1; i < seqs.length; i++) expect(seqs[i]!).toBeGreaterThan(seqs[i - 1]!);
+      for (let i = 2; i < seqs.length; i++) expect(seqs[i]!).toBeGreaterThan(seqs[i - 1]!);
+      expect(seqs.at(-1)!).toBeGreaterThan(seqs[1]!);
     } finally {
       unsubscribe();
       await collector.stop();
@@ -187,6 +189,86 @@ test('events keep their order through enrichment', async () => {
       const order = rec.envs.flatMap((e) => (e.kind === 'tool.start' ? [`s${e.call.callId}`] : e.kind === 'tool.end' ? [`e${e.callId}`] : []));
       const expected = Array.from({ length: 30 }, (_, i) => [`sc${i}`, `ec${i}`]).flat();
       expect(order).toEqual(expected);
+    } finally {
+      await collector.stop();
+    }
+  });
+}, 30_000);
+
+test('S1: a joining subscriber does not leave a gap in another subscriber\'s seq', async () => {
+  const collector = new Collector({ host: 'demo-host', demo: true });
+  const a = recorder();
+  collector.subscribe(a.fn);
+  await collector.start();
+  try {
+    await a.until(() => a.envs.length > 6, 3000, 'events for A');
+    const b = recorder();
+    collector.subscribe(b.fn);
+    expect(b.envs[0]!.seq).toBe(b.envs[1]!.seq);
+    await a.until(() => a.envs.length > 30, 8000, 'more events for A');
+    const seqs = a.envs.slice(2).map((e) => e.seq);
+    for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBe(seqs[i - 1]! + 1);
+    // B's hello and snapshot carry the seq of the last live envelope A had seen when B joined.
+    expect(a.envs.some((e) => e.seq === b.envs[0]!.seq)).toBe(true);
+  } finally {
+    await collector.stop();
+  }
+});
+
+test('I1: an open call that times out yields a live tool.end with ok null and no writes', async () => {
+  await withDir(async (dir) => {
+    const proj = path.join(dir, 'proj');
+    await fs.mkdir(path.join(proj, '.git'), { recursive: true });
+    const root = claudeRoot(dir);
+    const log = path.join(root.path, 'p', 'sess.jsonl');
+    await fs.mkdir(path.dirname(log), { recursive: true });
+    await fs.writeFile(log, toolUse('slow1', 'Write', { file_path: path.join(proj, 'a.ts'), content: 'x' }, proj));
+    const collector = new Collector({ host: 'mac', roots: [root], lifecycle: { callTimeoutMs: 300 } });
+    const rec = recorder();
+    collector.subscribe(rec.fn);
+    await collector.start();
+    try {
+      await rec.until(() => rec.envs.some((e) => e.kind === 'tool.end' && e.callId === 'slow1'), 8000, 'timed-out tool.end');
+      const end = rec.envs.find((e) => e.kind === 'tool.end' && e.callId === 'slow1') as Extract<Envelope, { kind: 'tool.end' }>;
+      expect(end.ok).toBeNull();
+      expect('writes' in end).toBe(false);
+      expect(end.agentId).toBe('mac/claude:default:sess');
+      const startIdx = rec.envs.findIndex((e) => e.kind === 'tool.start' && e.call.callId === 'slow1');
+      expect(startIdx).toBeGreaterThan(-1);
+      expect(rec.envs.indexOf(end)).toBeGreaterThan(startIdx);
+      // The call is closed in the state too: a later subscriber sees no open call.
+      const late = recorder();
+      collector.subscribe(late.fn);
+      expect((late.envs[1] as Extract<Envelope, { kind: 'snapshot' }>).openCalls).toEqual([]);
+    } finally {
+      await collector.stop();
+    }
+  });
+}, 30_000);
+
+test('I2: a Write into a not-yet-existing subdirectory of a symlinked project resolves under the real project root', async () => {
+  await withDir(async (dir) => {
+    const proj = path.join(dir, 'real', 'proj');
+    await fs.mkdir(path.join(proj, '.git'), { recursive: true });
+    await fs.symlink(path.join(dir, 'real'), path.join(dir, 'link'));
+    const viaLink = path.join(dir, 'link', 'proj', 'newdir', 'sub', 'a.ts');
+    const expected = path.join(proj, 'newdir', 'sub', 'a.ts');
+    const cwd = path.join(dir, 'link', 'proj');
+    const root = claudeRoot(dir);
+    const log = path.join(root.path, 'p', 'sess.jsonl');
+    await fs.mkdir(path.dirname(log), { recursive: true });
+    // Claude logs tool_use before the tool creates the directory, and the result comes right after.
+    await fs.writeFile(log, toolUse('w1', 'Write', { file_path: viaLink, content: 'x' }, cwd) + toolResult('w1', cwd));
+    const collector = new Collector({ host: 'mac', roots: [root] });
+    const rec = recorder();
+    collector.subscribe(rec.fn);
+    await collector.start();
+    try {
+      await rec.until(() => rec.envs.some((e) => e.kind === 'tool.end' && e.callId === 'w1'), 8000, 'tool.end w1');
+      const start = rec.envs.find((e) => e.kind === 'tool.start' && e.call.callId === 'w1') as Extract<Envelope, { kind: 'tool.start' }>;
+      const end = rec.envs.find((e) => e.kind === 'tool.end' && e.callId === 'w1') as Extract<Envelope, { kind: 'tool.end' }>;
+      expect(start.call.files).toEqual([expected]);
+      expect(end.writes?.map((w) => w.path)).toEqual([expected]);
     } finally {
       await collector.stop();
     }

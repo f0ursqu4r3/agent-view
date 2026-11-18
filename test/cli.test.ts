@@ -52,10 +52,11 @@ test('`bun src/cli.ts collect --stdio --demo` writes valid NDJSON: hello, snapsh
     }
   }
   expect(envs.length).toBeGreaterThanOrEqual(5);
-  expect(envs[0]).toMatchObject({ v: 1, host: 'demo-box', kind: 'hello', demo: true, seq: 1 });
+  expect(envs[0]).toMatchObject({ v: 1, host: 'demo-box', kind: 'hello', demo: true, seq: 0 });
   expect(envs[1]?.kind).toBe('snapshot');
   expect(envs.slice(2).some((e) => e.kind === 'agent.upsert')).toBe(true);
-  for (let i = 1; i < envs.length; i++) expect(envs[i]!.seq).toBeGreaterThan(envs[i - 1]!.seq);
+  expect(envs[1]!.seq).toBe(0);
+  for (let i = 2; i < envs.length; i++) expect(envs[i]!.seq).toBeGreaterThan(envs[i - 1]!.seq);
   proc.kill('SIGTERM');
   expect(await proc.exited).toBe(0);
 }, 30_000);
