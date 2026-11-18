@@ -1,0 +1,40 @@
+ AGENT VIEW  demo ● up  6 agents  5 working  53 calls/min  1 fault                                             23:05:16 
+                                                                                                                        
+ ┏━ Refactor drawer l… ━┓ ┌─ EDIT ──────────── 0.6s ─┐                                                                  
+ ┃   ▀▄▄▀    claude     ┃ │ colors.ts                │                                                                  
+ ┃  █▀▄▄▀█   • WORKING  ┃ │ src/viewer/              │                                                                  
+ ┃ ▄▄████▄▄  calls 11   ┃ │ started 23:05:16         │ ┌─ RUN ──────┐ ┌─ GREP ─────┐ ┌─ GREP ─────┐ ┌─ READ ─────┐      
+ ┃ ██ ▀▀ ██  fault 0    ┃ │                          │ │$ bun test …│ │mergeSegmen…│ │renderDrawer│ │schema.ts   │      
+ ┃           seen 18s   ┃ │ █░░░░░░░░░░░   | running │ │ok 2.5s     │ │ok 0.9s     │ │ok 0.5s     │ │ok 0.4s     │      
+ ┗━┳━━━━━━━━━━━━━━━━━━━━┛ └──────────────────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘      
+   │                      agent-view:src/viewer/ $ ▌                                                                    
+   │                                                                                                                    
+   │  ╭─ Review drawer sty… ─╮ ┌─ RUN ───────────── 2.8s ─┐                                                             
+   │  │   █▀▀█    claude sub │ │ $ git status --short     │                                                             
+   │  │ ██▀▀▀▀██  • THINKING │ │ shell · agent-view       │                                                             
+   ├──│   █▀▀█    calls 8    │ │ >  M src/viewer/drawer.… │ ┌─ GREP ─────┐ ┌─ GREP ─────┐ ┌─ RUN ──────┐ ┌─ GREP ─────┐ 
+   │  │  ██▀▀██   fault 0    │ │ > ?? test/viewer/drawer… │ │lingerMs    │ │lingerMs    │ │$ git statu…│ │lingerMs    │ 
+   │  │           seen 18s   │ │ [ OK ]                   │ │ok 0.5s     │ │ok 0.8s     │ │ok 3.6s     │ │ok 0.4s     │ 
+   │  ╰──────────────────────╯ └──────────────────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘ 
+   │                           agent-view:(shell) $ ▌                                                                   
+   │                                                                                                                    
+   │  ╭─ Update drawer tes… ─╮ ┌─ RUN ───────────── 2.1s ─┐                                                             
+   │  │ ▄ ▀██▀ ▄  claude sub │ │ $ bun test test/viewer   │                                                             
+   │  │  █▀▀▀▀█   • WORKING  │ │ shell · agent-view       │                                                             
+   └──│ ▄▀▀██▀▀▄  calls 9    │ │                          │ ┌─ RUN ──────┐ ┌─ READ ─────┐ ┌─ EDIT ─────┐ ┌─ GREP ─────┐ 
+      │ ▄▄█▀▀█▄▄  fault 1    │ │                          │ │$ bun run t…│ │state.ts    │ │drawer.t….ts│ │rankResults │ 
+      │           seen 18s   │ │ ███░░░░░░░░░   | running │ │fail 3.8s   │ │ok 0.7s     │ │ok 0.9s     │ │ok 0.7s     │ 
+      ╰──────────────────────╯ └──────────────────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘ 
+                               agent-view:(shell) $ ▌                                                                   
+ ┌─ events · tail -f ─────────────────────────────────────────────────────────────────────────────────────────────────┐ 
+ │ 23:05:13  Build workspace…  RUN   $ rg -n "renderDrawer" src                                           ok     0.5s │ 
+ │ 23:05:14  Index source fi…  RUN   $ rg -n "rankResults" src                                            ok     0.8s │ 
+ │ 23:05:14  Update drawer t…  RUN   $ bun run typecheck                                                  FAIL   3.8s │ 
+ │ 23:05:15  Build workspace…  EDIT  src/store/segments.ts                                                ok     1.1s │ 
+ │ 23:05:15  Index source fi…  EDIT  src/query/ranking.ts                                                 ok     1.0s │ 
+ │ 23:05:16  Refactor drawer…  RUN   $ bun test test/viewer                                               ok     2.5s │ 
+ │ 23:05:16  Build workspace…  RUN   $ sed -n '1,120p' /demo/search-service/src/query/parser.ts           ok     0.4s │ 
+ │ 23:05:16  Review drawer s…  RUN   $ git status --short                                                 ok     2.8s │ 
+ │ $ ▌                                                                                                                │ 
+ └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
+ space pause  j/k select  enter focus  esc clear  c coverage  l log  ? help  q quit                                     
