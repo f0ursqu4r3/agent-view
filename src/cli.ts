@@ -2,6 +2,8 @@
 import os from 'node:os';
 import path from 'node:path';
 import { Collector } from './collector/collector';
+import { Hub, LocalSource } from './hub/hub';
+import { startServer } from './hub/server';
 import { encodeLine } from './shared/ndjson';
 
 export type CliArgs = {
@@ -108,6 +110,58 @@ async function collectStdio(args: CliArgs): Promise<void> {
   await collector.start();
 }
 
+/** Opens the browser. Failures are ignored: the URL is on stdout. */
+function openBrowser(url: string): void {
+  const opener = process.platform === 'darwin' ? 'open' : process.platform === 'linux' ? 'xdg-open' : null;
+  if (!opener) return;
+  try {
+    const child = Bun.spawn([opener, url], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' });
+    child.exited.catch(() => {});
+    child.unref();
+  } catch {
+    // The opener is missing. Ignore.
+  }
+}
+
+/** Runs the hub: the local collector in-process, the HTTP and WebSocket server, and the browser. */
+async function runHub(args: CliArgs): Promise<void> {
+  if (args.remotes.length > 0) process.stderr.write('agent-view: remote collectors arrive in a later version\n');
+  const hub = new Hub({ lifecycle: { lingerMs: args.lingerMs } });
+  const label = hub.uniqueLabel(os.hostname().split('.')[0] || 'local');
+  const collector = new Collector({
+    host: label,
+    demo: args.demo,
+    demoScale: args.demoScale,
+    watch: args.watch,
+    lifecycle: { lingerMs: args.lingerMs },
+  });
+  const local = new LocalSource(collector, label);
+  hub.addSource(local);
+  let server: ReturnType<typeof startServer>;
+  try {
+    server = startServer({ hub, port: args.port });
+  } catch (e) {
+    process.stderr.write(`agent-view: cannot start the server on port ${args.port}: ${(e as Error).message}\n`);
+    await hub.stop();
+    process.exit(1);
+  }
+  let closing = false;
+  const shutdown = (): void => {
+    if (closing) return;
+    closing = true;
+    server.stop();
+    void hub.stop().finally(() => process.exit(0));
+  };
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, shutdown);
+  process.stdout.write(`Agent View: ${server.url}\n`);
+  if (args.open) openBrowser(server.url);
+  try {
+    await local.start();
+  } catch (e) {
+    process.stderr.write(`agent-view: local collector failed: ${(e as Error).message}\n`);
+  }
+}
+
 export async function main(argv: string[]): Promise<void> {
   let args: CliArgs;
   try {
@@ -118,8 +172,7 @@ export async function main(argv: string[]): Promise<void> {
     process.exit(2);
   }
   if (args.mode === 'collect') return collectStdio(args);
-  process.stderr.write('agent-view: hub mode not available yet\n');
-  process.exit(1);
+  return runHub(args);
 }
 
 if (import.meta.main) await main(process.argv.slice(2));

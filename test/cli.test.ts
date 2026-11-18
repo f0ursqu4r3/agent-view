@@ -85,3 +85,48 @@ test('usage errors print to stderr and exit with code 2', async () => {
     expect(await new Response(proc.stdout).text()).toBe('');
   }
 }, 30_000);
+
+/** Starts hub mode and resolves with the URL it prints. */
+async function startHub(extra: string[]) {
+  const proc = Bun.spawn(['bun', CLI, '--no-open', '--port', '0', ...extra], { stdout: 'pipe', stderr: 'pipe' });
+  const reader = proc.stdout.getReader();
+  const decoder = new TextDecoder();
+  let out = '';
+  const deadline = Date.now() + 15_000;
+  while (!/Agent View: \S+\n/.test(out) && Date.now() < deadline) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    out += decoder.decode(value);
+  }
+  const url = /Agent View: (\S+)\n/.exec(out)?.[1];
+  return { proc, url, out };
+}
+
+test('hub mode prints the URL, serves /api/snapshot with the local host up, and exits 0 on SIGTERM', async () => {
+  const { proc, url } = await startHub(['--demo']);
+  try {
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    const label = os.hostname().split('.')[0];
+    let body: { hosts: { label: string; kind: string; state: string }[]; envelopes: Envelope[] } | undefined;
+    for (let i = 0; i < 50; i++) {
+      body = await (await fetch(url + '/api/snapshot')).json() as typeof body;
+      if (body!.hosts[0]?.state === 'up') break;
+      await Bun.sleep(100);
+    }
+    expect(body!.hosts).toEqual([{ label, kind: 'local', state: 'up' }]);
+    expect(body!.envelopes[0]).toMatchObject({ host: label, kind: 'hello', demo: true });
+    expect(body!.envelopes[1]?.kind).toBe('snapshot');
+  } finally {
+    proc.kill('SIGTERM');
+  }
+  expect(await proc.exited).toBe(0);
+}, 30_000);
+
+test('hub mode: --remote prints one line on stderr and is otherwise ignored', async () => {
+  const { proc, url } = await startHub(['--demo', '--remote', 'box1', '--remote', 'box2']);
+  expect(url).toBeDefined();
+  proc.kill('SIGINT');
+  expect(await proc.exited).toBe(0);
+  const err = await new Response(proc.stderr).text();
+  expect(err.trim().split('\n')).toEqual(['agent-view: remote collectors arrive in a later version']);
+}, 30_000);
