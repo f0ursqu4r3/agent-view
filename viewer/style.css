@@ -1,0 +1,48 @@
+:root {
+  --bg: #04060b;
+  --text: #e6ebf5;
+  --muted: #8792a8;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 var(--sans);
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+}
+
+.stage-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.fps {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(7, 10, 17, 0.8);
+  color: var(--muted);
+  font: 11px/1.4 var(--mono);
+  pointer-events: none;
+  white-space: nowrap;
+}

@@ -1,22 +1,66 @@
-// Placeholder viewer. It is replaced by the stage and drawer in later tasks.
-export {};
-const status = document.getElementById('status')!;
-const hosts = new Set<string>();
-let events = 0;
+import { FpsMeter } from './fps';
+import { connectHub } from './socket';
+import type { HubSocket } from './socket';
+import { Stage } from './stage/stage';
+import { TreeModel } from './stage/tree-model';
+import { ViewerStore } from './store';
 
-const render = (): void => {
-  status.textContent = `Agent View: ${hosts.size} host(s), ${events} event(s)`;
-};
+const PRUNE_EVERY_MS = 5000;
+/** A frame step is capped, so a tab back from the background does not jump. */
+const MAX_DT_S = 0.05;
 
-const ws = new WebSocket(`ws://${location.host}/ws`);
-ws.onmessage = (m) => {
-  const msg = JSON.parse(String(m.data)) as { type?: string; host?: string; hosts?: { label: string }[] };
-  if (msg.type === 'hosts') {
-    for (const h of msg.hosts ?? []) hosts.add(h.label);
-  } else {
-    events++;
-    if (msg.host) hosts.add(msg.host);
-  }
-  render();
-};
-ws.onclose = () => { status.textContent = 'disconnected'; };
+export type FrameHook = (now: number, dt: number) => void;
+export type Viewer = { store: ViewerStore; tree: TreeModel; stage: Stage; socket: HubSocket; onFrame(fn: FrameHook): void };
+
+/** Creates the store, tree, stage, and hub socket, and starts the frame loop. */
+export async function boot(root: HTMLElement): Promise<Viewer> {
+  const store = new ViewerStore();
+  const tree = new TreeModel();
+  const stage = new Stage(root, store, tree);
+  await stage.start();
+
+  const socket = connectHub(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`, {
+    onEnvelope: (e) => store.apply(e),
+    onHosts: (h) => store.setHosts(h),
+  });
+
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  stage.setReducedMotion(motion.matches);
+  motion.addEventListener('change', (e) => stage.setReducedMotion(e.matches));
+
+  const fps = new URLSearchParams(location.search).get('fps') === '1' ? new FpsMeter(document.body, () => stage.rendererInfo()) : null;
+  const hooks: FrameHook[] = [];
+  const viewer: Viewer = { store, tree, stage, socket, onFrame: (fn) => hooks.push(fn) };
+  let exposed = false;
+  let lastT = performance.now();
+  let lastPrune = Date.now();
+
+  const frame = (t: number): void => {
+    const dt = Math.min(MAX_DT_S, Math.max(0, (t - lastT) / 1000));
+    lastT = t;
+    const now = Date.now();
+    if (store.takeResnapshotRequest(now)) socket.send({ type: 'resnapshot' });
+    for (const touch of store.takeTouches(now)) {
+      const node = tree.touch(touch);
+      if (node) stage.noteTouch(node, touch);
+    }
+    if (now - lastPrune >= PRUNE_EVERY_MS) {
+      lastPrune = now;
+      stage.fadeNodes(tree.prune(now), now);
+    }
+    tree.layout(dt);
+    stage.render(now, dt);
+    for (const h of hooks) h(now, dt);
+    fps?.tick(t);
+    if (!exposed && store.isDemo()) {
+      // Demo only: the smoke test reads the store through this.
+      exposed = true;
+      (window as unknown as { __agentView: unknown }).__agentView = { store, tree, stage };
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return viewer;
+}
+
+void boot(document.getElementById('stage')!);
