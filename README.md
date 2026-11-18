@@ -33,7 +33,7 @@ Add a directory to file monitoring:
 bun start -- --watch /abs/path
 ```
 
-Run the tests. They make no model calls:
+Run the tests. They make no model calls and run no `ssh`. The hub-mode CLI tests set `AGENT_VIEW_REMOTE_COMMAND`, a test-only variable that replaces the `ssh` command of each remote:
 
 ```bash
 bun test
@@ -60,7 +60,7 @@ bun run audit:live
 | `--demo` | Run a simulated event stream. |
 | `--demo-scale normal\|stress` | Size of the simulated stream. Default `normal`. |
 | `--watch <dir>` | Add a file-system root. Repeatable. |
-| `--linger <minutes>` | How long an agent stays on the stage after its last event. Default 10. |
+| `--linger <minutes>` | How long an agent stays on the stage and in the timeline after its last event. The hub sends it to the viewer. Default 10. |
 | `--remote <ssh-host>` | Add a remote machine over SSH. Repeatable. See Remote machines. |
 
 `agent-view collect --stdio [--label <name>]` runs a collector that writes one NDJSON event per line to stdout. It is the entry point for remote machines.
@@ -72,7 +72,7 @@ bun run audit:live
 - **Coverage.** Press `C`. The panel shows log roots, open logs, watched roots, malformed records, dropped file-system events, and degraded sources.
 - **Focus.** Click a lane or an agent dot to focus that agent. The stage dims the other agents, and the command list shows only that agent. Press `Esc` to clear the focus.
 
-A status corner shows each host with its connection state.
+A status corner shows each host with its connection state. When a source of a host is degraded or down, the host line says so, for example "2 sources degraded".
 
 ## Sources and limits
 
@@ -103,7 +103,9 @@ A source that fails reports `degraded` or `down`. It does not stop the collector
 
 The collector never watches the home directory or `/`. It skips `.git`, `node_modules`, build and cache folders, `.worktrees`, `.superpowers`, and paths that a project `.gitignore` ignores.
 
-Performance targets: 60 fps with 50 agents, 3,000 file nodes, and 200 events per second. The collector uses less than 2% of one core when agents are idle.
+Performance targets: 60 fps with 50 agents, 3,000 file nodes, and 200 events per second. The collector must use less than 2% of one core when agents are idle.
+
+Measured idle CPU (Apple M4 Max, 2026-11-17): the hub with its local collector on real log roots (2,497 Claude Code logs and 2,175 Codex logs), while the agents of the measuring session kept writing logs. CPU time divided by wall time was 0.22% of one core over 60 seconds, and 0.43% over 240 seconds, which includes the 120-second safety rescans. The build before the rescan change used 2.48% and 2.17% in the same run. With empty log roots the hub used 0.06%.
 
 ## Accuracy rules
 
@@ -121,15 +123,16 @@ Performance targets: 60 fps with 50 agents, 3,000 file nodes, and 200 events per
 ## Local access and privacy
 
 - The hub binds `127.0.0.1` only.
-- The hub checks `Host` and `Origin` on `/ws` and `/api/*`. Other values get `403`.
-- The viewer bundle at `/` holds no data. Bun serves it as an HTML route, which cannot run a check.
+- The data routes are `/ws` and `/api/snapshot`. The hub checks `Host` and `Origin` on them. Other values get `403`. Other `/api` paths get `404`.
+- The viewer bundle at `/` and its assets hold no data. In source runs (`bun start`), Bun's development server answers `403` to a foreign `Host` on `/`. The compiled binary serves `/` and its assets for any `Host`.
 - All routes are read-only. The hub serves no file paths.
 - Agent View never writes to agent settings, logs, or threads.
 - Command output and file paths stay on your machine.
 
 ## Known gaps
 
-- The Codex daemon source is skipped. The M0 spike found no loaded Codex thread, so attaching could not be proven free of side effects. Codex uses its session logs only. Nested Codex commands have no start events and no live output. They show as short bars that end when the log records them.- File watching can miss writes in the first moments after a watch root starts.
+- The Codex daemon source is skipped. The M0 spike found no loaded Codex thread, so attaching could not be proven free of side effects. Codex uses its session logs only. Nested Codex commands have no start events and no live output. They show as short bars that end when the log records them.
+- File watching can miss writes in the first moments after a watch root starts.
 - The Codex `exec` wrapper shows as `other`. The commands it runs arrive as their own command items.
 - Claude Code command output does not stream. It appears when the tool result is written.
 
