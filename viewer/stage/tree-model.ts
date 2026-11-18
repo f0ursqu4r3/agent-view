@@ -59,6 +59,10 @@ export class TreeModel {
   private readonly creations = new Map<string, number[]>();
   /** Leaves not yet placed by `layout`. They start at their target. */
   private readonly fresh = new Set<TreeNode>();
+  /** The path of each project node. */
+  private readonly roots = new Map<TreeNode, string>();
+  /** Containers removed by moves, reported by the next `prune`. */
+  private queued: TreeNode[] = [];
 
   constructor(opts: { fileTtlMs?: number; newNodesPerSecond?: number } = {}) {
     this.fileTtlMs = opts.fileTtlMs ?? DEFAULT_TTL_MS;
@@ -76,63 +80,36 @@ export class TreeModel {
   touch(t: Touch): TreeNode | null {
     const path = trimPath(t.path);
     const hs = this.hostState(t.host);
-    const confirmed = t.attribution === 'confirmed';
-    let root: string | null;
-    if (confirmed) {
-      const pr = t.projectRoot === null ? null : trimPath(t.projectRoot);
-      if (pr !== null) hs.projects.add(pr);
-      root = pr !== null && isUnder(pr, path) ? pr : null;
-    } else {
-      root = this.longestProject(hs, path);
+    if (t.attribution === 'confirmed' && t.projectRoot !== null) this.learnRoot(hs, t.host, trimPath(t.projectRoot), t.atMs);
+    // Placement is the same for every touch: the longest known project root, else `other`.
+    const root = this.longestProject(hs, path);
+    if (root !== null && path === root) return this.refresh(this.ensureProject(hs, t.host, root, t.atMs), t.atMs);
+    const existing = this.nodes.get(`${t.host}|${path}`);
+    if (existing) {
+      if (existing.kind === 'file' && this.rootOf(existing) !== root) {
+        this.unlink(existing);
+        this.cleanupEmpty(existing.parent);
+        this.attach(hs, t.host, path, root, t.atMs, existing);
+      }
+      return this.refresh(existing, t.atMs);
     }
-    const fileId = `${t.host}|${path}`;
-    if (!confirmed) {
-      // An unattributed touch of a known node only refreshes it, wherever it sits.
-      const known = this.nodes.get(fileId);
-      if (known) return this.refresh(known, t.atMs);
-    }
-    if (root !== null && path === root) return this.refresh(this.ensureProject(hs, t, root), t.atMs);
-    const capKey = `${t.host}|${root ?? OTHER}`;
-    if (!confirmed && !this.takeSlot(capKey, t.atMs)) return null;
-
-    if (root === null) {
-      const other = this.child(hs.root, `${t.host}|${OTHER}`, 'other', 'other', t.atMs);
-      const dir = parentPath(path);
-      const dirNode = this.child(other, `${t.host}|${OTHER}${dir}`, dir, 'dir', t.atMs);
-      return this.refresh(this.child(dirNode, fileId, lastSegment(path), 'file', t.atMs), t.atMs);
-    }
-    let parent = this.ensureProject(hs, t, root);
-    const rest = segments(path.slice(root === '/' ? 0 : root.length));
-    let acc = root === '/' ? '' : root;
-    for (let i = 0; i < rest.length; i++) {
-      acc += `/${rest[i]}`;
-      const kind = i === rest.length - 1 ? 'file' : 'dir';
-      parent = this.child(parent, `${t.host}|${acc}`, rest[i]!, kind, t.atMs);
-    }
-    return this.refresh(parent, t.atMs);
+    if (t.attribution === 'unattributed' && !this.takeSlot(`${t.host}|${root ?? OTHER}`, t.atMs)) return null;
+    return this.refresh(this.attach(hs, t.host, path, root, t.atMs), t.atMs);
   }
 
   prune(now: number): TreeNode[] {
     const removed: TreeNode[] = [];
-    const parents = new Set<TreeNode>();
     for (const n of this.nodes.values()) {
-      if (n.kind === 'file' && now - n.lastTouchAt >= this.fileTtlMs) {
-        removed.push(n);
-        if (n.parent) parents.add(n.parent);
-      }
+      if (n.kind === 'file' && now - n.lastTouchAt >= this.fileTtlMs) removed.push(n);
     }
+    const parents = removed.map((n) => n.parent);
     for (const n of removed) this.detach(n);
-    const empties = new Set<TreeNode>();
-    for (const p of parents) {
-      let c: TreeNode | null = p;
-      while (c && c.kind !== 'host' && c.children.length === 0) {
-        const up: TreeNode | null = c.parent;
-        this.detach(c);
-        empties.add(c);
-        c = up;
-      }
+    for (const p of parents) this.cleanupEmpty(p);
+    for (const n of [...this.nodes.values()]) {
+      if (n.kind !== 'host' && n.kind !== 'file' && n.children.length === 0 && this.nodes.get(n.id) === n) this.cleanupEmpty(n);
     }
-    removed.push(...empties);
+    removed.push(...this.queued);
+    this.queued = [];
     return removed;
   }
 
@@ -189,8 +166,81 @@ export class TreeModel {
     return best;
   }
 
-  private ensureProject(hs: HostState, t: Touch, root: string): TreeNode {
-    return this.child(hs.root, `${t.host}|${root}`, lastSegment(root), 'project', t.atMs);
+  private ensureProject(hs: HostState, host: string, root: string, atMs: number): TreeNode {
+    const n = this.child(hs.root, `${host}|${root}`, lastSegment(root), 'project', atMs);
+    this.roots.set(n, root);
+    return n;
+  }
+
+  /** The project root a node sits under, or null under `other`. */
+  private rootOf(n: TreeNode): string | null {
+    for (let c = n.parent; c; c = c.parent) {
+      if (c.kind === 'project') return this.roots.get(c) ?? null;
+      if (c.kind === 'other') return null;
+    }
+    return null;
+  }
+
+  /** Build the container chain for `path` and add the file (a new node, or `file` when it moves). */
+  private attach(hs: HostState, host: string, path: string, root: string | null, atMs: number, file?: TreeNode): TreeNode {
+    let parent: TreeNode;
+    let leafName: string;
+    if (root === null) {
+      const other = this.child(hs.root, `${host}|${OTHER}`, 'other', 'other', atMs);
+      const dir = parentPath(path);
+      parent = this.child(other, `${host}|${OTHER}${dir}`, dir, 'dir', atMs);
+      leafName = lastSegment(path);
+    } else {
+      parent = this.ensureProject(hs, host, root, atMs);
+      const rest = segments(path.slice(root === '/' ? 0 : root.length));
+      let acc = root === '/' ? '' : root;
+      for (let i = 0; i < rest.length - 1; i++) {
+        acc += `/${rest[i]}`;
+        parent = this.child(parent, `${host}|${acc}`, rest[i]!, 'dir', atMs);
+      }
+      leafName = rest.at(-1)!;
+    }
+    if (!file) return this.child(parent, `${host}|${path}`, leafName, 'file', atMs);
+    file.parent = parent;
+    file.depth = parent.depth + 1;
+    insertSorted(parent.children, file);
+    this.invalidate(file);
+    return file;
+  }
+
+  /** Register a project root. Files of the host whose longest root changed move under it. */
+  private learnRoot(hs: HostState, host: string, root: string, atMs: number): void {
+    if (hs.projects.has(root)) return;
+    hs.projects.add(root);
+    const moving: { n: TreeNode; path: string; root: string | null }[] = [];
+    const walk = (n: TreeNode): void => {
+      if (n.kind === 'file') {
+        const path = n.id.slice(host.length + 1);
+        const want = this.longestProject(hs, path);
+        if (want !== path && want !== this.rootOf(n)) moving.push({ n, path, root: want });
+      }
+      for (const c of n.children) walk(c);
+    };
+    walk(hs.root);
+    // Unlink all first, so an emptied directory frees its id before a project takes it.
+    for (const m of moving) {
+      this.unlink(m.n);
+      this.cleanupEmpty(m.n.parent);
+    }
+    for (const m of moving) {
+      this.attach(hs, host, m.path, m.root, atMs, m.n);
+      this.refresh(m.n, m.n.lastTouchAt);
+    }
+  }
+
+  /** Remove `n` and then each ancestor left without children. The host stays. */
+  private cleanupEmpty(n: TreeNode | null): void {
+    while (n && n.kind !== 'host' && n.kind !== 'file' && n.children.length === 0) {
+      const up: TreeNode | null = n.parent;
+      this.detach(n);
+      this.queued.push(n);
+      n = up;
+    }
   }
 
   /** Fixed budget over a sliding one-second window of the touches' own clock. */
@@ -240,11 +290,16 @@ export class TreeModel {
   private detach(n: TreeNode): void {
     this.nodes.delete(n.id);
     this.fresh.delete(n);
-    if (n.parent) {
-      const i = n.parent.children.indexOf(n);
-      if (i >= 0) n.parent.children.splice(i, 1);
-      this.invalidate(n.parent);
-    }
+    this.roots.delete(n);
+    this.unlink(n);
+  }
+
+  /** Take `n` out of its parent's children. It keeps its `parent` until it is attached again. */
+  private unlink(n: TreeNode): void {
+    if (!n.parent) return;
+    const i = n.parent.children.indexOf(n);
+    if (i >= 0) n.parent.children.splice(i, 1);
+    this.invalidate(n.parent);
   }
 
   private hostOf(n: TreeNode): HostState | undefined {

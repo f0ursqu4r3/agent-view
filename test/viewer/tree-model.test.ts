@@ -48,7 +48,9 @@ test('confirmed touch outside its projectRoot or with a null root goes under oth
   expect(a.parent!.parent!.id).toBe('h|<other>');
   expect(a.depth).toBe(3);
   const b = m.touch(conf('/p/x.ts', { projectRoot: null }))!;
-  expect(chain(b)).toEqual(['host:h', 'other:other', 'dir:/p', 'file:x.ts']);
+  expect(chain(b)).toEqual(['host:h', 'project:p', 'file:x.ts']); // /p is a known root now: placement ignores the touch's own root
+  const lone = new TreeModel().touch(conf('/p/x.ts', { projectRoot: null }))!;
+  expect(chain(lone)).toEqual(['host:h', 'other:other', 'dir:/p', 'file:x.ts']);
   const c = m.touch(conf('/pp/x.ts'))!; // not segment-aware prefix of /p
   expect(chain(c)).toEqual(['host:h', 'other:other', 'dir:/pp', 'file:x.ts']);
   // one dir node per parent path, deep paths stay bounded
@@ -190,12 +192,62 @@ test('same path on two hosts gives two nodes', () => {
   expect(m.hosts().map((h) => h.id)).toEqual(['h1|', 'h2|']);
 });
 
-test('nested project roots keep a unique id for a dir that is also a project', () => {
+test('nested project roots: the longest known root wins for every touch', () => {
   const m = new TreeModel();
   m.touch(conf('/p/sub/own.ts', { projectRoot: '/p/sub' }));
-  const f = m.touch(conf('/p/sub/x.ts'))!; // confirmed under the outer project
-  expect(chain(f)).toEqual(['host:h', 'project:p', 'dir:sub', 'file:x.ts']);
-  expect(f.parent!.id).not.toBe('h|/p/sub');
+  const f = m.touch(conf('/p/sub/x.ts'))!; // confirmed with the outer root
+  expect(chain(f)).toEqual(['host:h', 'project:sub', 'file:x.ts']);
   expect(m.find('h', '/p/sub')!.kind).toBe('project');
+  expect(m.find('h', '/p/sub')!.id).toBe('h|/p/sub');
   expect(m.find('h', '/p/sub/own.ts')!.parent).toBe(m.find('h', '/p/sub')!);
+});
+
+test('a file whose placement changes is moved, not duplicated; emptied parents are reported by prune', () => {
+  const m = new TreeModel();
+  const first = m.touch(unat('/p/f.ts', { atMs: T0 }))!;
+  expect(chain(first)).toEqual(['host:h', 'other:other', 'dir:/p', 'file:f.ts']);
+  const moved = m.touch(conf('/p/f.ts', { atMs: T0 + 10 }))!;
+  expect(moved).toBe(first);
+  expect(moved.id).toBe('h|/p/f.ts');
+  expect(chain(moved)).toEqual(['host:h', 'project:p', 'file:f.ts']);
+  expect(moved.depth).toBe(2);
+  expect(moved.bornAt).toBe(T0);
+  expect(m.find('h', '/p/f.ts')).toBe(first);
+  expect(leaves(m.hosts()[0]!).length).toBe(1);
+  expect(m.hosts()[0]!.children.map((c) => c.kind)).toEqual(['project']);
+  expect(m.prune(T0 + 20).map((n) => n.id).sort()).toEqual(['h|<other>', 'h|<other>/p']);
+  expect(m.prune(T0 + 30)).toEqual([]);
+  m.layout(0.1);
+  expect(m.find('h', '/p/f.ts')!.tgt).toBeCloseTo(-Math.PI / 2 + Math.PI, 10);
+});
+
+test('learning a nested project root re-places existing files under it', () => {
+  const m = new TreeModel();
+  const x = m.touch(conf('/p/sub/x.ts'))!;
+  const keep = m.touch(conf('/p/other.ts'))!;
+  expect(chain(x)).toEqual(['host:h', 'project:p', 'dir:sub', 'file:x.ts']);
+  m.touch(conf('/p/sub/y.ts', { projectRoot: '/p/sub' }));
+  expect(m.find('h', '/p/sub/x.ts')).toBe(x);
+  expect(chain(x)).toEqual(['host:h', 'project:sub', 'file:x.ts']);
+  expect(x.depth).toBe(2);
+  expect(m.find('h', '/p/sub')!.kind).toBe('project');
+  expect(m.find('h', '/p/sub')!.id).toBe('h|/p/sub');
+  expect(chain(m.find('h', '/p/sub/y.ts'))).toEqual(['host:h', 'project:sub', 'file:y.ts']);
+  expect(chain(keep)).toEqual(['host:h', 'project:p', 'file:other.ts']);
+  // the old dir under /p is gone and reported
+  const gone = m.prune(T0);
+  expect(gone.map((n) => `${n.kind}:${n.id}`)).toEqual(['dir:h|/p/sub']);
+  // an outer-root confirmed touch no longer pulls it back
+  m.touch(conf('/p/sub/x.ts', { atMs: T0 + 1 }));
+  expect(chain(x)).toEqual(['host:h', 'project:sub', 'file:x.ts']);
+  expect(leaves(m.hosts()[0]!).length).toBe(3);
+});
+
+test('prune sweeps an empty project node', () => {
+  const m = new TreeModel();
+  const p = m.touch(conf('/p'))!;
+  expect(p.kind).toBe('project');
+  expect(m.prune(T0).map((n) => n.id)).toEqual(['h|/p']);
+  expect(m.find('h', '/p')).toBeUndefined();
+  expect(m.hosts()[0]!.children).toEqual([]);
 });
