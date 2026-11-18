@@ -58,7 +58,7 @@ export function barLabel(c: ViewCall): string {
 }
 
 export function agentColor(a: { provider: ViewAgent['provider'] }): string {
-  return PROVIDER_COLORS[a.provider][0]!;
+  return (PROVIDER_COLORS[a.provider] ?? PROVIDER_COLORS.claude)[0]!;
 }
 
 function laneStatus(a: ViewAgent): { label: string; color: string } {
@@ -161,7 +161,7 @@ export function drawTimeline(
     const x2 = X(Math.min(c.endMs ?? now, now));
     if (x2 <= L + 1) continue;
     const y = top + i * lane + lane / 2;
-    const col = CATEGORY_COLORS[c.category];
+    const col = CATEGORY_COLORS[c.category] ?? CATEGORY_COLORS.other;
     const bw = Math.max(3, x2 - x1);
     const dim = focus !== null && focus !== c.agentId ? 0.22 : 1;
     ctx.fillStyle = hexA(col, (running ? 0.92 : 0.5) * dim);

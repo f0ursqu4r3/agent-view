@@ -22,7 +22,7 @@ type State = {
   id: string; host: string; x: number; y: number;
   trail: Float32Array; trailLen: number; trailHead: number;
   firstMs: number; goneMs: number | null; goneAlpha: number; status: string; flashMs: number;
-  color: number; alpha: number; busy: boolean;
+  color: number; alpha: number; busy: boolean; stale: boolean;
   parentId: string | null; link: ViewAgent['link']; project: string | null;
 };
 
@@ -42,6 +42,22 @@ const mix = (a: number, b: number, t: number): number => {
   const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t) << s;
   return ch(16) | ch(8) | ch(0);
 };
+
+/**
+ * The sub-agent of `parentId` that a spawn link points to: the only drawn child that appeared near or after
+ * `sinceMs`. Null when there is no such child or more than one (parallel spawns): a guessed link would be wrong.
+ */
+export function soleChild<T extends { parentId: string | null; firstMs: number; goneMs: number | null }>(
+  drawn: readonly T[], parentId: string, sinceMs: number,
+): T | null {
+  let found: T | null = null;
+  for (const s of drawn) {
+    if (s.parentId !== parentId || s.goneMs !== null || s.firstMs < sinceMs - 2000) continue;
+    if (found) return null;
+    found = s;
+  }
+  return found;
+}
 
 /** Orange tones for Claude Code, blue for Codex: index 0 for a main agent, lighter tones for sub-agents. */
 export function agentColor(a: ViewAgent, siblingIndex: number): string {
@@ -84,13 +100,15 @@ export class AgentsView {
     return this.states.get(id)?.alpha ?? 0;
   }
 
-  /** The newest sub-agent of `id` that appeared near or after `sinceMs`, if drawn. */
+  /** The only sub-agent of `id` that appeared near or after `sinceMs`, if drawn. See `soleChild`. */
   childOf(id: string, sinceMs: number): Pt | null {
-    let best: State | null = null;
-    for (const s of this.drawn) {
-      if (s.parentId === id && s.goneMs === null && s.firstMs >= sinceMs - 2000 && (!best || s.firstMs > best.firstMs)) best = s;
-    }
-    return best;
+    return soleChild(this.drawn, id, sinceMs);
+  }
+
+  /** True while the drawn agent is stale: it shows only its dim, slow pulse. */
+  isStale(id: string): boolean {
+    const s = this.states.get(id);
+    return s !== undefined && s.goneMs === null && s.stale;
   }
 
   /** The nearest drawn agent within `radius` pixels. */
@@ -135,7 +153,7 @@ export class AgentsView {
         const start = parent && parent.goneMs === null ? parent : home;
         s = {
           id: a.id, host: a.host, x: start.x, y: start.y, trail: new Float32Array(TRAIL * 2), trailLen: 0, trailHead: 0,
-          firstMs: now, goneMs: null, goneAlpha: 0, status: a.status, flashMs: 0, color: 0, alpha: 0, busy: false,
+          firstMs: now, goneMs: null, goneAlpha: 0, status: a.status, flashMs: 0, color: 0, alpha: 0, busy: false, stale: false,
           parentId: a.parentId, link: a.link, project: a.projectRoot,
         };
         // An agent that arrives already interrupted flashes only when that just happened.
@@ -150,6 +168,7 @@ export class AgentsView {
       s.link = a.link;
       s.project = a.projectRoot;
       s.busy = call !== undefined;
+      s.stale = a.stale;
       let sib = 0;
       if (a.parentId !== null) {
         sib = siblings.get(a.parentId) ?? 0;

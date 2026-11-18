@@ -11,6 +11,16 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
   return e;
 }
 
+/** A short note on the sources of one host that are not ok, such as `1 source down, 2 sources degraded`. Null when all are ok. */
+export function sourceSummary(c: Coverage | undefined): string | null {
+  if (!c) return null;
+  const counts = { down: 0, degraded: 0 };
+  for (const s of Object.values(c.sources)) if (s.state === 'down' || s.state === 'degraded') counts[s.state]++;
+  const parts = (['down', 'degraded'] as const).filter((k) => counts[k] > 0)
+    .map((k) => `${counts[k]} source${counts[k] === 1 ? '' : 's'} ${k}`);
+  return parts.length > 0 ? parts.join(', ') : null;
+}
+
 function row(label: string, value: string): HTMLElement {
   const r = el('div', 'cov-row');
   r.append(el('span', 'cov-key', label), el('span', 'cov-val', value));
@@ -28,7 +38,7 @@ function list(label: string, items: string[]): HTMLElement {
 }
 
 /**
- * The corner HUD: one line per host with its state, `SIMULATED` in demo mode,
+ * The corner HUD: one line per host with its state and a note on sources that are not ok, `SIMULATED` in demo mode,
  * and the `#coverage` panel (key `C`). Every string from agent data goes through `textContent`.
  */
 export class Hud {
@@ -60,24 +70,27 @@ export class Hud {
   render(): void {
     const hosts = this.store.hosts();
     const demo = this.store.isDemo();
-    const sig = `${demo}|${JSON.stringify(hosts)}`;
+    const notes = hosts.map((h) => sourceSummary(this.store.coverage(h.label)));
+    const sig = `${demo}|${JSON.stringify(hosts)}|${JSON.stringify(notes)}`;
     if (sig !== this.hostsSig) {
       this.hostsSig = sig;
       this.badge.hidden = !demo;
-      this.renderHosts(hosts);
+      this.renderHosts(hosts, notes);
     }
     if (this.coverageOpen) this.renderCoverage(hosts);
   }
 
-  private renderHosts(hosts: HostStatus[]): void {
+  private renderHosts(hosts: HostStatus[], notes: (string | null)[]): void {
     if (hosts.length === 0) {
       this.hosts.replaceChildren(el('div', 'hud-host', 'connecting'));
       return;
     }
-    this.hosts.replaceChildren(...hosts.map((h) => {
+    this.hosts.replaceChildren(...hosts.map((h, i) => {
       const line = el('div', `hud-host ${h.state}`);
       line.append(el('i', 'dot'), el('span', 'hud-label', h.label), el('span', 'hud-state', h.state));
       if (h.state === 'down' && h.detail) line.appendChild(el('span', 'hud-detail', h.detail));
+      const note = notes[i];
+      if (note) line.appendChild(el('span', 'hud-sources', note));
       return line;
     }));
   }

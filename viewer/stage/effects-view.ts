@@ -26,7 +26,10 @@ const MAX_TARGETS = 3;
 const FORGET_MS = 5000;
 const hex = (s: string): number => parseInt(s.slice(1), 16);
 
-/** Draws one effect per recent call (`effectFor`) between its agent and the files the call names. */
+/**
+ * Draws one effect per recent call (`effectFor`) between its agent and the files the call names.
+ * A stale agent draws none: it shows only its dim, slow pulse.
+ */
 export class EffectsView {
   /** When each call was first drawn, by host, agent and call id (calls are replaced on a snapshot). */
   private readonly first = new Map<string, { at: number; seen: number }>();
@@ -37,6 +40,7 @@ export class EffectsView {
 
   draw(now: number, store: ViewerStore, tree: TreeModel, view: TreeView, agents: AgentsView, reduced: boolean): void {
     for (const call of store.calls(now, EFFECT_TAIL_MS)) {
+      if (agents.isStale(call.agentId)) continue;
       const key = `${call.host}\u0000${call.agentId}\u0000${call.callId}`;
       let rec = this.first.get(key);
       if (!rec) {

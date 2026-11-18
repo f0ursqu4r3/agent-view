@@ -3,7 +3,11 @@ import { CATEGORY_COLORS } from '../../src/shared/schema';
 import type { Category } from '../../src/shared/schema';
 import { EFFECT_MS, effectFade, effectFor } from '../../viewer/stage/effects';
 import type { EffectType } from '../../viewer/stage/effects';
-import type { ViewCall } from '../../viewer/store';
+import type { AgentsView } from '../../viewer/stage/agents-view';
+import { EffectsView } from '../../viewer/stage/effects-view';
+import { TreeModel } from '../../viewer/stage/tree-model';
+import type { TreeView } from '../../viewer/stage/tree-view';
+import type { ViewCall, ViewerStore } from '../../viewer/store';
 
 const NOW = Date.parse('2026-01-01T01:00:00.000Z');
 
@@ -88,4 +92,20 @@ test('effectFade is 1 while the call is open and falls to 0 over 1.5 s after the
   expect(effectFade({ ...call, endMs: NOW - 750 }, NOW)).toBeCloseTo(0.5, 6);
   expect(effectFade({ ...call, endMs: NOW - 1_500 }, NOW)).toBe(0);
   expect(effectFade({ ...call, endMs: NOW - 9_000 }, NOW)).toBe(0);
+});
+
+test('Minor 4: an open call of a stale agent draws no beam, particles or sweep; a fresh agent draws them', () => {
+  const tree = new TreeModel();
+  tree.touch({ host: 'local', path: '/p/src/a.ts', projectRoot: '/p', attribution: 'confirmed', agentId: 'a', atMs: NOW - 100 });
+  const view = { pos: (n: unknown) => (n ? { x: 100, y: 100 } : null) } as unknown as TreeView;
+  const store = { calls: () => [call, { ...call, callId: 's1', category: 'search', rawName: 'Grep' }] } as unknown as ViewerStore;
+  const drawsFor = (stale: boolean): number => {
+    let n = 0;
+    const layer = { line: () => n++, dashed: () => n++, put: () => n++, ring: () => n++ };
+    const agents = { pos: () => ({ x: 0, y: 0 }), alphaOf: () => 1, projectOf: () => '/p', isStale: () => stale } as unknown as AgentsView;
+    new EffectsView({ lines: layer, glowLines: layer, sparks: layer, rings: layer } as never).draw(NOW, store, tree, view, agents, false);
+    return n;
+  };
+  expect(drawsFor(false)).toBeGreaterThan(0);
+  expect(drawsFor(true)).toBe(0);
 });

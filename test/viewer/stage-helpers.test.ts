@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { activityText, agentColor } from '../../viewer/stage/agents-view';
+import { activityText, agentColor, soleChild } from '../../viewer/stage/agents-view';
 import { hostOrder } from '../../viewer/stage/stage';
 import { TreeModel } from '../../viewer/stage/tree-model';
 import { fileColor, findNear } from '../../viewer/stage/tree-view';
@@ -58,4 +58,14 @@ test('file colors follow the extension', () => {
   expect(fileColor('a.ts')).toBe(0x4f8cff);
   expect(fileColor('README.MD')).toBe(0xe9e9f2);
   expect(fileColor('Makefile')).toBe(0xaab0c0);
+});
+
+test('Minor 3: the spawn link points to the only new child; none or several candidates give no link', () => {
+  const kid = (parentId: string | null, firstMs: number, goneMs: number | null = null) => ({ parentId, firstMs, goneMs });
+  const only = kid('p', 1000);
+  expect(soleChild([only, kid('other', 1000), kid('p', -5000)], 'p', 1000)).toBe(only);
+  // Parallel Agent calls: two candidates, so the link would be a guess.
+  expect(soleChild([kid('p', 1000), kid('p', 1200)], 'p', 1000)).toBeNull();
+  expect(soleChild([kid('p', -5000)], 'p', 1000)).toBeNull();
+  expect(soleChild([kid('p', 1000, 1500)], 'p', 1000)).toBeNull();
 });

@@ -1,5 +1,6 @@
 import { Drawer, toggleFocus } from './drawer/drawer';
 import { FpsMeter } from './fps';
+import { makeGuard } from './guard';
 import { Hud } from './hud';
 import { connectHub } from './socket';
 import type { HubSocket } from './socket';
@@ -50,32 +51,38 @@ export async function boot(root: HTMLElement): Promise<Viewer> {
   let exposed = false;
   let lastT = performance.now();
   let lastPrune = Date.now();
+  const guard = makeGuard();
 
   const frame = (t: number): void => {
+    // The next frame is booked first, and each subsystem runs guarded: one exception never freezes the viewer.
+    requestAnimationFrame(frame);
     const dt = Math.min(MAX_DT_S, Math.max(0, (t - lastT) / 1000));
     lastT = t;
     const now = Date.now();
-    if (store.takeResnapshotRequest(now)) socket.send({ type: 'resnapshot' });
-    for (const touch of store.takeTouches(now)) {
-      const node = tree.touch(touch);
-      if (node) stage.noteTouch(node, touch);
+    guard('resnapshot', () => { if (store.takeResnapshotRequest(now)) socket.send({ type: 'resnapshot' }); });
+    let touches: ReturnType<ViewerStore['takeTouches']> = [];
+    guard('store', () => { touches = store.takeTouches(now); });
+    for (const touch of touches) {
+      guard('tree', () => {
+        const node = tree.touch(touch);
+        if (node) stage.noteTouch(node, touch);
+      });
     }
     if (now - lastPrune >= PRUNE_EVERY_MS) {
       lastPrune = now;
-      stage.fadeNodes(tree.prune(now), now);
+      guard('prune', () => stage.fadeNodes(tree.prune(now), now));
     }
-    tree.layout(dt);
-    stage.render(now, dt);
-    drawer?.render(now);
-    hud?.render();
-    for (const h of hooks) h(now, dt);
-    fps?.tick(t);
+    guard('layout', () => tree.layout(dt));
+    guard('stage', () => stage.render(now, dt));
+    guard('drawer', () => drawer?.render(now));
+    guard('hud', () => hud?.render());
+    for (const h of hooks) guard('hook', () => h(now, dt));
+    guard('fps', () => fps?.tick(t));
     if (!exposed && store.isDemo()) {
       // Demo only: the smoke test reads the store through this.
       exposed = true;
       (window as unknown as { __agentView: unknown }).__agentView = { store, tree, stage };
     }
-    requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
   return viewer;

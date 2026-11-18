@@ -110,6 +110,10 @@ body {
   color: #ff9d9d;
 }
 
+.hud-sources {
+  color: #ffc58a;
+}
+
 .coverage {
   margin-top: 8px;
   max-height: calc(100vh - 80px);
