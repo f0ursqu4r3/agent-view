@@ -2,19 +2,21 @@
 // For each class and mode: write 1,000 files in 2 s (10 subdirs x 100 files), report events, missed files, p95 latency.
 import { watch, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync, type FSWatcher } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 
 const FILES = 1000, SUBDIRS = 10, WRITE_MS = 2000, SETTLE_MS = 1500, RUNS = Number(process.env.RUNS ?? 3)
 const repoTmp = resolve(import.meta.dir, '../test/.tmp')
 mkdirSync(repoTmp, { recursive: true })
 const tag = `probe-${process.pid}`
 
-type Class = { name: string; opts?: Opts; make: () => { watchPath: string; cleanup: () => void } }
+type Class = { name: string; opts?: Opts; modes?: ('recursive' | 'per-dir')[]; make: () => { watchPath: string; cleanup: () => void } }
 const classes: Class[] = [
   { name: 'home', make: () => { const d = join(repoTmp, `${tag}-home`); mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'tmpdir', make: () => { const d = join(realpathSync(tmpdir()), `av-${tag}`); mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'private-tmp', make: () => { const d = `/private/tmp/av-${tag}`; mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'private-tmp+late-subdirs', opts: { lateDirs: true }, make: () => { const d = `/private/tmp/av-${tag}-late`; mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
+  // Root-watch variant: the watcher sits on /private/tmp itself (shared, busy root); files are written in a sub-directory of it.
+  { name: 'private-tmp-ROOT-watch', opts: { watchParent: true }, modes: ['recursive'], make: () => { const d = `/private/tmp/av-${tag}-rootwatch`; mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'private-tmp+external-writer', opts: { external: true }, make: () => { const d = `/private/tmp/av-${tag}-ext`; mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'tmp-symlinked-path', make: () => { const d = `/tmp/av-${tag}-lnk`; mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
   { name: 'home+external-writer', opts: { external: true }, make: () => { const d = join(repoTmp, `${tag}-hext`); mkdirSync(d, { recursive: true }); return { watchPath: d, cleanup: () => rmSync(d, { recursive: true, force: true }) } } },
@@ -27,7 +29,7 @@ const classes: Class[] = [
 
 const p95 = (a: number[]) => a.length ? [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * 0.95))] : null
 
-type Opts = { lateDirs?: boolean; external?: boolean }
+type Opts = { lateDirs?: boolean; external?: boolean; watchParent?: boolean }
 async function run(root: string, mode: 'recursive' | 'per-dir', opts: Opts = {}) {
   const subs = Array.from({ length: SUBDIRS }, (_, i) => `d${i}`)
   if (!opts.lateDirs || mode === 'per-dir') for (const s of subs) mkdirSync(join(root, s), { recursive: true })
@@ -37,10 +39,11 @@ async function run(root: string, mode: 'recursive' | 'per-dir', opts: Opts = {})
   const watchers: FSWatcher[] = []
   const onEvent = (prefix: string) => (_t: string, name: string | Buffer | null) => {
     events++
-    const rel = name == null ? null : (prefix ? `${prefix}/${name}` : String(name))
+    let rel = name == null ? null : (prefix ? `${prefix}/${name}` : String(name))
+    if (rel && opts.watchParent && rel.startsWith(`${basename(root)}/`)) rel = rel.slice(basename(root).length + 1) // root-watch: strip the sub-directory name
     if (rel && wrote.has(rel)) { if (!first.has(rel)) first.set(rel, performance.now()) } else unknown++
   }
-  if (mode === 'recursive') watchers.push(watch(root, { recursive: true }, onEvent('')))
+  if (mode === 'recursive') watchers.push(watch(opts.watchParent ? dirname(root) : root, { recursive: true }, onEvent('')))
   else { watchers.push(watch(root, onEvent(''))); for (const s of subs) watchers.push(watch(join(root, s), onEvent(s))) }
   await Bun.sleep(300) // let the watchers arm
   if (opts.lateDirs && mode === 'recursive') for (const s of subs) mkdirSync(join(root, s), { recursive: true })
@@ -71,7 +74,8 @@ async function run(root: string, mode: 'recursive' | 'per-dir', opts: Opts = {})
 
 const results: any[] = []
 for (const cls of classes) {
-  for (const mode of ['recursive', 'per-dir'] as const) {
+  if (process.env.ONLY && !cls.name.includes(process.env.ONLY)) continue
+  for (const mode of cls.modes ?? (['recursive', 'per-dir'] as const)) {
     for (let r = 0; r < RUNS; r++) {
       const { watchPath, cleanup } = cls.make()
       try { results.push({ class: cls.name, mode, run: r + 1, ...(await run(watchPath, mode, cls.opts)) }) }

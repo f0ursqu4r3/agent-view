@@ -96,8 +96,8 @@ async function connect(): Promise<void> {
       stderrBytes: () => errBytes,
     }
   } else {
-    const v = JSON.parse(await Bun.$`codex app-server daemon version`.text())
-    const sock = await Bun.connect({ unix: v.socketPath, socket: {
+    const socketPath = process.env.SOCKET_PATH ?? JSON.parse(await Bun.$`codex app-server daemon version`.text()).socketPath // SOCKET_PATH only for the offline fake-server check
+    const sock = await Bun.connect({ unix: socketPath, socket: {
       data: (_s, d) => onBytes(new Uint8Array(d)),
       open() {}, close() {}, error() {},
     } })
@@ -124,11 +124,14 @@ function write(obj: any) {
   if (!ALLOWED.has(method)) throw new Error(`refusing to send ${method}`)
   sendJson(obj)
 }
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS ?? 10_000)
 function request(method: string, params?: unknown): Promise<any> {
   const id = nextId++
-  return new Promise((resolve) => {
-    pending.set(id, { method, sent: performance.now(), resolve })
-    write({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`request timeout: ${method}`)) }, REQUEST_TIMEOUT_MS)
+    pending.set(id, { method, sent: performance.now(), resolve: (m) => { clearTimeout(timer); resolve(m) } })
+    try { write({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) }) }
+    catch (e) { clearTimeout(timer); pending.delete(id); reject(e) }
   })
 }
 function note(method: string, params?: unknown) { write({ jsonrpc: '2.0', method, ...(params === undefined ? {} : { params }) }) }
@@ -162,7 +165,8 @@ function handle(msg: any) {
 async function cleanup() {
   if (unsubscribed) return
   unsubscribed = true
-  for (const id of resumed) {
+  // Unsubscribe every thread the probe began to handle (resume may be in flight or its reply lost).
+  for (const id of new Set([...resumed, ...loadedAtResume])) {
     try { await Promise.race([request('thread/unsubscribe', { threadId: id }), Bun.sleep(3000)]) } catch {}
   }
   try { duplex.send(frame(0x8, new Uint8Array([0x03, 0xe8]))) } catch {}
@@ -208,8 +212,8 @@ try {
   for (const id of ids) {
     loadedAtResume.add(id)
     before[id] = settingsFingerprint(await request('thread/read', { threadId: id }))
+    resumed.push(id) // before sending: cleanup must unsubscribe even if the reply never arrives
     const r = await request('thread/resume', { threadId: id })
-    resumed.push(id)
     after[id] = settingsFingerprint(await request('thread/read', { threadId: id }))
     out.threads.push({
       resumeOk: !r.error,
