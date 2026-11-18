@@ -277,10 +277,10 @@ Category mapping:
 | `read` | `Read` | — |
 | `edit` | `Edit`, `MultiEdit`, `NotebookEdit` | file change |
 | `write` | `Write` | — |
-| `command` | `Bash` | command execution, `exec` |
+| `command` | `Bash` | command execution |
 | `search` | `Grep`, `Glob` | — |
 | `agent` | `Agent`, `Task` | sub-agent spawn |
-| `other` | everything else, including MCP tools | everything else, including MCP tools |
+| `other` | everything else, including MCP tools | everything else, including MCP tools and the `exec` wrapper. The commands that `exec` runs arrive as their own command-execution items, so mapping `exec` to `command` would draw each command twice. |
 
 Rules:
 
