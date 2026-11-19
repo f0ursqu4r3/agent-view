@@ -1,7 +1,6 @@
 package logs
 
 import (
-	"container/list"
 	"regexp"
 	"strings"
 
@@ -12,88 +11,11 @@ import (
 // sub-agent id. As in JavaScript, "." excludes every line terminator.
 var subagentFile = regexp.MustCompile(`[/\\]subagents[/\\]agent-([^\n\r\x{2028}\x{2029}]+)\.jsonl$`)
 
-// identity is what an agent.upsert carries besides the fixed fields.
-type identity struct {
-	name     string
-	role     string
-	parentID *string
-	link     string
-	cwd      *string
-	model    string // empty when absent
-}
-
-func samePtr(a, b *string) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-func (i identity) equal(o identity) bool {
-	return i.name == o.name && i.role == o.role && samePtr(i.parentID, o.parentID) &&
-		i.link == o.link && samePtr(i.cwd, o.cwd) && i.model == o.model
-}
-
-type agentState struct {
-	identity
-	status      string
-	lastEventAt string
-}
-
-// emittedState is what the downstream consumer last saw for an agent.
-type emittedState struct {
-	identity identity
-	status   string
-}
-
 type pendingCall struct {
 	category string
 	input    *Obj
 	files    []string
 	writes   bool // a successful end claims an "edit" write on every file
-}
-
-// pendingMap is a map that keeps insertion order, like a JavaScript Map.
-type pendingMap struct {
-	idx     map[string]*list.Element
-	entries list.List
-}
-
-type pendingEntry struct {
-	key  string
-	call pendingCall
-}
-
-func (p *pendingMap) get(key string) (pendingCall, bool) {
-	if e, ok := p.idx[key]; ok {
-		return e.Value.(*pendingEntry).call, true
-	}
-	return pendingCall{}, false
-}
-
-func (p *pendingMap) has(key string) bool {
-	_, ok := p.idx[key]
-	return ok
-}
-
-// add appends a new key. The caller checks has first.
-func (p *pendingMap) add(key string, call pendingCall) {
-	p.idx[key] = p.entries.PushBack(&pendingEntry{key, call})
-}
-
-func (p *pendingMap) delete(key string) {
-	if e, ok := p.idx[key]; ok {
-		p.entries.Remove(e)
-		delete(p.idx, key)
-	}
-}
-
-func (p *pendingMap) len() int { return len(p.idx) }
-
-func (p *pendingMap) deleteOldest() {
-	if e := p.entries.Front(); e != nil {
-		p.delete(e.Value.(*pendingEntry).key)
-	}
 }
 
 // ClaudeAdapter turns Claude Code transcript records into normalized events.
@@ -102,7 +24,7 @@ type ClaudeAdapter struct {
 	host    string
 	agents  map[string]*agentState
 	emitted map[string]*emittedState
-	pending pendingMap
+	pending *orderedMap[pendingCall]
 }
 
 // NewClaudeAdapter returns an adapter whose agent ids start with host.
@@ -111,7 +33,7 @@ func NewClaudeAdapter(host string) *ClaudeAdapter {
 		host:    host,
 		agents:  map[string]*agentState{},
 		emitted: map[string]*emittedState{},
-		pending: pendingMap{idx: map[string]*list.Element{}},
+		pending: newOrderedMap[pendingCall](),
 	}
 }
 
@@ -258,30 +180,11 @@ func (a *ClaudeAdapter) touch(id, ts string, fields identity) *agentState {
 // flushAgent emits agent.upsert when an identity field differs from what was
 // last emitted.
 func (a *ClaudeAdapter) flushAgent(id string, s *agentState, ts string, out *[]wire.SourceEvent) {
-	prev := a.emitted[id]
-	ident := s.identity
-	if prev != nil && prev.identity.equal(ident) {
-		return
-	}
-	// The status in an upsert is the one the consumer will hold afterwards.
-	status := "idle"
-	if prev != nil {
-		status = prev.status
-	}
-	a.emitted[id] = &emittedState{identity: ident, status: status}
-	*out = append(*out, wire.SourceEvent{Ts: ts, Ev: wire.AgentUpsert{Agent: wire.Agent{
-		ID: id, Provider: "claude", Name: ident.name, Role: ident.role, ParentID: ident.parentID,
-		Link: ident.link, Cwd: ident.cwd, Model: ident.model, Status: status, LastEventAt: s.lastEventAt,
-	}}})
+	flushAgent(a.emitted, "claude", id, s, ts, out)
 }
 
 func (a *ClaudeAdapter) flushStatus(id string, s *agentState, ts string, out *[]wire.SourceEvent) {
-	prev := a.emitted[id]
-	if prev == nil || prev.status == s.status {
-		return
-	}
-	prev.status = s.status
-	*out = append(*out, wire.SourceEvent{Ts: ts, Ev: wire.AgentStatusChange{AgentID: id, Status: s.status}})
+	flushStatus(a.emitted, id, s, ts, out)
 }
 
 // callFiles names the files of a call. Only explicit file tools claim files.
@@ -343,7 +246,7 @@ func (a *ClaudeAdapter) toolUse(agent *agentState, agentID string, cwd *string, 
 	input := obj(b.Get("input")) // nil reads as an empty object
 	category := wire.CategoryFor("claude", name)
 	files, writes := callFiles(name, category, input, cwd)
-	a.pending.add(key, pendingCall{category: category, input: input, files: files, writes: writes})
+	a.pending.set(key, pendingCall{category: category, input: input, files: files, writes: writes})
 	if a.pending.len() > MaxPending {
 		a.pending.deleteOldest()
 	}
