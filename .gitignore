@@ -4,6 +4,6 @@ work/
 .serena/
 .DS_Store
 .superpowers/
-dist/
+/dist/
 test/.tmp/
 /agent-view
