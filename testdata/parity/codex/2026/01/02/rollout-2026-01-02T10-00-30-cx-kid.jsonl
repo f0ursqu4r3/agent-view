@@ -1,0 +1,7 @@
+{"timestamp":"2026-01-02T10:00:30.000Z","type":"session_meta","payload":{"id":"cx-kid","cwd":"/p/beta","source":{"subagent":{"thread_spawn":{"parent_thread_id":"cx-main","depth":1,"agent_path":"root/explorer","agent_role":"explorer"}}}}}
+{"timestamp":"2026-01-02T10:00:31.000Z","type":"turn_context","payload":{"cwd":"/p/beta/sub","model":"gpt-5.5-codex"}}
+{"timestamp":"2026-01-02T10:00:32.000Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-01-02T10:00:33.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"k1","arguments":"{\"cmd\":\"rg -n parser src\"}"}}
+{"timestamp":"2026-01-02T10:00:34.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"k1","output":"src/parser.ts:1:export function parse() {}\n"}}
+{"timestamp":"2026-01-02T10:00:35.000Z","type":"event_msg","payload":{"type":"item_completed","thread_id":"cx-main","completed_at_ms":1767348035000,"item":{"type":"CommandExecution","id":"n-other","status":"completed","command":"true","exit_code":0}}}
+{"timestamp":"2026-01-02T10:00:36.000Z","type":"event_msg","payload":{"type":"task_complete"}}

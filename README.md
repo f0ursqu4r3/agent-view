@@ -98,6 +98,20 @@ AGENT_VIEW_COLLECTOR='["./agent-view","collect","--stdio"]' ./agent-view
 AGENT_VIEW_COLLECTOR='["./agent-view","collect","--stdio","--demo"]' ./agent-view
 ```
 
+#### Parity
+
+The parity test runs the Go collector and the TypeScript collector on the same logs and compares their NDJSON streams. It needs Bun; without Bun every parity test skips. It removes `seq`, `ts`, and the `hello` fields `now`, `collectorVersion`, and `platform`. It removes a `command` or `pattern` that is the empty string from a call: TypeScript writes `""` and Go leaves the key out. It compares `source.status` envelopes and timed-out `tool.end` envelopes (`ok: null`) without their order, and only the last `coverage` envelope. It compares all other envelopes in order. It also compares the demo events on a virtual clock, and the gitignore matcher on every row of `testdata/gitignore-cases.json`. The fixture logs are `test/fixtures/` and `testdata/parity/`. The test takes about 6 s:
+
+```bash
+go test -count=1 ./internal/parity/
+```
+
+The local mode is opt-in. It copies your newest 120 logs (from the last 23 hours) to a temporary home and compares the two collectors on the copy. It does not compare `fs.change`, `fs:` statuses, or the watch roots, because the copied logs name real projects. On a mismatch it prints only the index, the kind, the agent ID, and the call ID, never log content. It removes the copy at the end:
+
+```bash
+AGENT_VIEW_PARITY_LOCAL=1 go test -count=1 -run TestParityLocal ./internal/parity/
+```
+
 Measured on 2026-11-18 on an Apple M4 Max (Go 1.27.3, macOS arm64):
 
 | Check | Target | Result |
