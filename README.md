@@ -61,6 +61,8 @@ Build it:
 go build -o agent-view ./cmd/agent-view
 ```
 
+On macOS the build needs a C toolchain (the Xcode Command Line Tools), because the FSEvents file watcher uses cgo. On Linux it builds with `CGO_ENABLED=0`.
+
 Run it with a simulated event stream:
 
 ```bash
@@ -89,7 +91,7 @@ Set `AGENT_VIEW_COLLECTOR` to a JSON array of strings to replace the collector c
 
 Flags: `--label <name>` (the host name in the envelopes; the default is the machine's host name), `--demo`, `--demo-scale normal|stress`, `--watch <dir>` (repeatable), and `--linger <minutes>`. `collect` must be the first argument and needs `--stdio`. `--remote`, `--port`, and `--reduced-motion` are usage errors with `collect`. Usage errors print to stderr and exit with code 2.
 
-SIGINT, SIGTERM, and SIGHUP stop the collector with exit code 0. If the reader of stdout goes away, the first failed write stops it, also with exit code 0. The process exits within 2 s.
+SIGINT, SIGTERM, and SIGHUP stop the collector with exit code 0. If the reader of stdout goes away, the first failed write stops it, also with exit code 0. The process exits within 2 s of the signal or of the failed write. An idle collector writes a coverage line every 5 s, so the first failed write can come up to 5 s after the reader goes away.
 
 To run the TUI on the Go collector, set `AGENT_VIEW_COLLECTOR` to a JSON array of strings. The array replaces the whole collector command, so the TUI flags (`--demo`, `--watch`, `--linger`) do not reach the collector. Put them in the array:
 
