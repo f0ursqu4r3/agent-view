@@ -84,9 +84,12 @@ func TestNewStackInvalidRemote(t *testing.T) {
 }
 
 // A remote child that ignores SIGTERM does not hold stop beyond its bound:
-// stop(1.5 s) returns within 2 s, sends SIGKILL to the child's group, and no
-// marked process is left.
+// stop(300 ms) returns within 1 s, and its own SIGKILL of the child's group
+// (Kill) ends the marked processes within 700 ms of the return. The Remote
+// sends its own SIGKILL only 2 s after its SIGTERM, so a child gone before
+// 1.5 s was ended by stop, not by the Remote.
 func TestStackStopBound(t *testing.T) {
+	const bound = 300 * time.Millisecond
 	marker := fmt.Sprintf("sleep 985.%d", time.Now().UnixNano()%1_000_000)
 	// The shell and its sleep both ignore SIGTERM, and both command lines hold
 	// the marker.
@@ -111,20 +114,20 @@ func TestStackStopBound(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	began := time.Now()
-	s.stop(1500 * time.Millisecond)
-	took := time.Since(began)
-	if took < 1400*time.Millisecond || took > 2*time.Second {
-		t.Fatalf("stop took %v, want its 1.5 s bound (the child ignores SIGTERM)", took)
+	s.stop(bound)
+	returned := time.Now()
+	if took := returned.Sub(began); took < bound-50*time.Millisecond || took > time.Second {
+		t.Fatalf("stop took %v, want its %v bound (the child ignores SIGTERM)", took, bound)
 	}
-	for i := 0; ; i++ {
-		n := pgrepCount(t, marker)
-		if n == 0 {
-			break
+	deadline := returned.Add(700 * time.Millisecond)
+	for n := pgrepCount(t, marker); n != 0; n = pgrepCount(t, marker) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d marked processes left %v after stop returned: stop did not send SIGKILL", n, time.Since(returned))
 		}
-		if i == 10 {
-			t.Fatalf("%d marked processes left 1 s after stop", n)
-		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
+	}
+	if gone := time.Since(began); gone > 1500*time.Millisecond {
+		t.Fatalf("marked processes gone %v after stop began: too late to tell stop from the Remote's own SIGKILL", gone)
 	}
 	if got := errs.all(); len(got) != 0 {
 		t.Fatalf("onErr got %q, want nothing", got)
