@@ -28,7 +28,9 @@ func localLabel() string {
 // runServe ports runHub of src/cli.ts: the local collector, the remotes and
 // the snapshot server behind one hub. It returns the exit code: 0 after a
 // signal on signals, 1 when the server cannot start, 2 for a bad
-// AGENT_VIEW_REMOTE_COMMAND.
+// AGENT_VIEW_REMOTE_COMMAND. After a signal it stops the server and the hub;
+// when the hub has not stopped within stopWait, it sends SIGKILL to every
+// remote child and returns.
 func runServe(args cli.Args, stdout, stderr io.Writer, signals <-chan os.Signal) int {
 	override, err := cli.RemoteCommandOverride(os.Getenv("AGENT_VIEW_REMOTE_COMMAND"))
 	if err != nil {
@@ -103,6 +105,11 @@ func runServe(args cli.Args, stdout, stderr io.Writer, signals <-chan os.Signal)
 	select {
 	case <-stopped:
 	case <-time.After(stopWait):
+		// A remote child that ignores SIGTERM gets SIGKILL from its Remote
+		// only 2 s after SIGTERM, when this process has already exited.
+		for _, r := range remotes {
+			r.Kill()
+		}
 	}
 	return 0
 }

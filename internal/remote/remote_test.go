@@ -665,3 +665,161 @@ func TestRemoteInHub(t *testing.T) {
 		t.Errorf("state = %q, want down", s)
 	}
 }
+
+// sent records the signals a Remote sends to its child's process group, and
+// sends them.
+type sent struct {
+	mu   sync.Mutex
+	sigs []string // "pid:SIGNAME"
+}
+
+func (s *sent) signal(pid int, sig syscall.Signal) {
+	s.mu.Lock()
+	s.sigs = append(s.sigs, strconv.Itoa(pid)+":"+unixSignalName(sig))
+	s.mu.Unlock()
+	killGroup(pid, sig)
+}
+
+func (s *sent) all() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.sigs)
+}
+
+func unixSignalName(sig syscall.Signal) string {
+	switch sig {
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	case syscall.SIGKILL:
+		return "SIGKILL"
+	}
+	return strconv.Itoa(int(sig))
+}
+
+// Kill sends SIGKILL to the group of a child that ignores SIGTERM at once: a
+// Stop in flight returns long before its own SIGKILL, no process of the group
+// is left, and no child starts again.
+func TestRemoteKillEndsStubbornChild(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	script := "trap '' TERM; sleep 30 & echo $$ $! > " + shellQuote(pidFile) + "; " +
+		printLines(helloLine("devbox")) + "wait"
+	var sp spawns
+	r := newRemote(t, Options{Command: sp.command(fixed("sh", "-c", script))})
+	start(t, r)
+	until(t, wait, "up", func() bool { return r.Status().State == "up" })
+	ps := pids(t, pidFile)
+	if len(ps) != 2 {
+		t.Fatalf("pids = %v, want the child and the grandchild", ps)
+	}
+	began := time.Now()
+	stopped := make(chan struct{})
+	go func() {
+		r.Stop()
+		close(stopped)
+	}()
+	time.Sleep(300 * time.Millisecond)
+	r.Kill()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+	if took := time.Since(began); took >= 1500*time.Millisecond {
+		t.Errorf("Stop took %v after Kill, want well under the 2s SIGKILL", took)
+	}
+	for _, pid := range ps {
+		waitGone(t, pid, time.Second)
+	}
+	if s := r.Status().State; s != "down" {
+		t.Errorf("state = %q, want down", s)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if n := sp.count(); n != 1 {
+		t.Errorf("%d spawns, want 1", n)
+	}
+}
+
+// Kill with no child sends no signal: not before Start (and Start then starts
+// nothing), and not to a child that has exited and been reaped. Kill cancels
+// the retry, so no child starts after it.
+func TestRemoteKillWithoutChild(t *testing.T) {
+	var sp spawns
+	var sig sent
+	idle := newRemote(t, Options{Command: sp.command(fixed("sh", "-c", "exec sleep 30"))})
+	idle.signal = sig.signal
+	idle.Kill()
+	start(t, idle)
+	time.Sleep(200 * time.Millisecond)
+	if n := sp.count(); n != 0 {
+		t.Errorf("%d spawns after Kill and Start, want 0", n)
+	}
+	if s := sig.all(); len(s) != 0 {
+		t.Errorf("signals = %q, want none", s)
+	}
+
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	var sp2 spawns
+	var sig2 sent
+	r := newRemote(t, Options{
+		Command:   sp2.command(fixed("sh", "-c", "echo $$ >> "+shellQuote(pidFile)+"; exit 0")),
+		BackoffMs: [2]int64{300, 300},
+	})
+	r.signal = sig2.signal
+	w := watch(r)
+	start(t, r)
+	// down comes after run has returned: the child is reaped.
+	until(t, wait, "down", func() bool { return slices.Contains(w.seen(), "down:collector exited 0") })
+	first := pids(t, pidFile)[0]
+	before := len(sig2.all())
+	r.Kill()
+	n := sp2.count()
+	for _, s := range sig2.all()[before:] {
+		if s == strconv.Itoa(first)+":SIGKILL" {
+			t.Errorf("Kill sent %s to the reaped child", s)
+		}
+	}
+	time.Sleep(600 * time.Millisecond)
+	if got := sp2.count(); got != n {
+		t.Errorf("%d spawns after Kill, want %d", got, n)
+	}
+}
+
+// Kill and Stop called together, while children start and exit quickly,
+// neither panic nor hang, and every signal reaches a child that was not yet
+// reaped.
+func TestRemoteKillRacesStopAndExit(t *testing.T) {
+	var sig sent
+	for i := 0; i < 20; i++ {
+		r := newRemote(t, Options{
+			Command:   func(string, string) []string { return []string{"sh", "-c", "exit 0"} },
+			BackoffMs: [2]int64{1, 2},
+		})
+		r.signal = func(pid int, s syscall.Signal) {
+			// signal runs under the Remote's lock, so child is stable here.
+			if r.child != pid {
+				t.Errorf("signal %d to %d, but the current child is %d", s, pid, r.child)
+			}
+			// A zombie still has its pid; a reaped child does not.
+			if err := syscall.Kill(pid, 0); err != nil {
+				t.Errorf("signal %d to %d after its reap: %v", s, pid, err)
+			}
+			sig.signal(pid, s)
+		}
+		start(t, r)
+		time.Sleep(time.Duration(i%7) * time.Millisecond)
+		done := make(chan struct{}, 2)
+		go func() { r.Kill(); done <- struct{}{} }()
+		go func() { r.Stop(); done <- struct{}{} }()
+		for j := 0; j < 2; j++ {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("round %d: Kill or Stop did not return", i)
+			}
+		}
+		r.Kill() // after Stop: no child, nothing to do
+	}
+	if len(sig.all()) == 0 {
+		t.Fatal("no signal was sent: the test checked nothing")
+	}
+}

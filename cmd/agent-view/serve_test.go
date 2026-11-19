@@ -221,6 +221,42 @@ func TestServePortInUse(t *testing.T) {
 	}
 }
 
+// A remote child that ignores SIGTERM does not outlive serve: when its stop
+// bound runs out, serve sends SIGKILL to the child's process group and exits
+// 0 within 2.5 s, and no marked process is left.
+func TestServeKillsStubbornRemote(t *testing.T) {
+	marker := fmt.Sprintf("sleep 986.%d", time.Now().UnixNano()%1_000_000)
+	t.Cleanup(func() { _ = exec.Command("pkill", "-KILL", "-f", marker).Run() })
+	// The shell and its sleep both ignore SIGTERM, and both command lines
+	// hold the marker.
+	env := []string{`AGENT_VIEW_REMOTE_COMMAND=["sh","-c","trap '' TERM; ` + marker + ` & wait"]`}
+	c, _ := startServe(t, env, "--demo", "--remote", "box1.invalid")
+	for i := 0; pgrepCount(t, marker) != 2; i++ {
+		if i == 50 {
+			t.Fatalf("%d marked processes, want 2", pgrepCount(t, marker))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	began := time.Now()
+	c.cmd.Process.Signal(syscall.SIGTERM)
+	if code := c.waitExit(t, 2500*time.Millisecond); code != 0 {
+		t.Fatalf("exit code = %d, stderr %q", code, c.stderr.String())
+	}
+	if took := time.Since(began); took < 1400*time.Millisecond {
+		t.Fatalf("serve exited after %v: the child did not ignore SIGTERM", took)
+	}
+	for i := 0; ; i++ {
+		n := pgrepCount(t, marker)
+		if n == 0 {
+			break
+		}
+		if i == 10 {
+			t.Fatalf("%d marked processes left 1 s after serve exited", n)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 type auditReport struct {
 	Counts map[string]struct {
 		Agents int `json:"agents"`

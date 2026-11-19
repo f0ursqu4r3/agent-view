@@ -101,6 +101,9 @@ type Remote struct {
 	maxLineBytes int
 	// stableUp is defaultStableUp; tests shorten it before Start.
 	stableUp time.Duration
+	// signal sends a signal to a process group, with mu held. It is
+	// killGroup; tests replace it before Start.
+	signal func(pid int, sig syscall.Signal)
 
 	malformed atomic.Int64
 
@@ -111,8 +114,15 @@ type Remote struct {
 	listeners []*listener
 	started   bool
 	stopped   bool
-	stopCh    chan struct{} // closed by the first Stop
+	stopCh    chan struct{} // closed by the first Stop or Kill
 	done      chan struct{} // closed when the loop has ended
+	// child is the pid of the current child until it has exited, and 0 when
+	// there is none. Its group gets a signal only under mu while child holds
+	// its pid. Where waitExit works, the child is reaped only after child is
+	// 0 (see run), so no signal reaches a reused pid.
+	child int
+	// killed is set by Kill: a child that starts after it gets SIGKILL.
+	killed bool
 }
 
 type subscriber struct {
@@ -136,6 +146,7 @@ func New(o Options) (*Remote, error) {
 		maxDelay:     time.Duration(o.BackoffMs[1]) * time.Millisecond,
 		maxLineBytes: o.MaxLineBytes,
 		stableUp:     defaultStableUp,
+		signal:       killGroup,
 		state:        "connecting",
 		stopCh:       make(chan struct{}),
 		done:         make(chan struct{}),
@@ -232,6 +243,25 @@ func (r *Remote) Stop() {
 	r.change("down", "", true)
 }
 
+// Kill ends the remote at once, for a caller that cannot wait for the SIGKILL
+// that Stop sends 2 s after SIGTERM. It cancels the retry, as Stop does, and
+// sends SIGKILL to the process group of the current child, if one runs; a
+// child that starts after Kill gets SIGKILL at once. It never starts a child.
+// It does not wait and does not set the status: Stop, called before or after
+// Kill, does both. It is safe to call at any time, also during Stop.
+func (r *Remote) Kill() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.stopped {
+		r.stopped = true
+		close(r.stopCh)
+	}
+	r.killed = true
+	if r.child != 0 {
+		r.signal(r.child, syscall.SIGKILL)
+	}
+}
+
 // loop runs children until Stop. The retry delay starts at firstDelay and
 // doubles after each exit, up to maxDelay; a child that stays up for stableUp
 // after its hello starts it over.
@@ -259,9 +289,9 @@ func (r *Remote) loop() {
 // to firstDelay when the child stays up for stableUp after its hello.
 //
 // The child leads its own process group, and its stdin is /dev/null. Once the
-// child is reaped, what is left of its group gets SIGKILL. A process outside
-// the group can still hold the pipes: killAfter after the reap, the read ends
-// are closed.
+// child has exited, what is left of its group gets SIGKILL, then the child is
+// reaped. A process outside the group can still hold the pipes: killAfter
+// after the reap, the read ends are closed.
 func (r *Remote) run(delay *time.Duration) string {
 	c, err := spawn(r.command(r.sshHost, r.label))
 	if err != nil {
@@ -270,11 +300,25 @@ func (r *Remote) run(delay *time.Duration) string {
 	defer c.stdout.Close()
 	defer c.stderr.Close()
 	pid := c.cmd.Process.Pid
+	r.mu.Lock()
+	r.child = pid
+	if r.killed {
+		r.signal(pid, syscall.SIGKILL)
+	}
+	r.mu.Unlock()
 
 	exited := make(chan struct{})
 	go func() {
+		// Until the reap, the pid names this child and its group only.
+		// When waitExit cannot tell, the child is ended after the reap.
+		exact := waitExit(pid)
+		if exact {
+			r.endChild(pid)
+		}
 		_ = c.cmd.Wait()
-		killGroup(pid, syscall.SIGKILL)
+		if !exact {
+			r.endChild(pid)
+		}
 		close(exited)
 	}()
 
@@ -328,11 +372,11 @@ func (r *Remote) run(delay *time.Duration) string {
 			*delay = r.firstDelay
 		case <-stopC:
 			stopC = nil
-			killGroup(pid, syscall.SIGTERM)
+			r.signalChild(pid, syscall.SIGTERM)
 			killC = arm(killAfter)
 		case <-killC:
 			killC = nil
-			killGroup(pid, syscall.SIGKILL)
+			r.signalChild(pid, syscall.SIGKILL)
 		case <-graceC:
 			graceC = nil
 			_ = c.stdout.Close()
@@ -405,6 +449,25 @@ func spawn(argv []string) (*child, error) {
 // killGroup sends sig to the process group of pid. An error (ESRCH when no
 // member is left) is ignored.
 func killGroup(pid int, sig syscall.Signal) { _ = syscall.Kill(-pid, sig) }
+
+// signalChild sends sig to the process group of the child pid while it is
+// the current child and has not exited.
+func (r *Remote) signalChild(pid int, sig syscall.Signal) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.child == pid {
+		r.signal(pid, sig)
+	}
+}
+
+// endChild sends SIGKILL to what is left of the group of the child pid, which
+// has exited, and forgets the child: its group gets no signal after this.
+func (r *Remote) endChild(pid int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.signal(pid, syscall.SIGKILL)
+	r.child = 0
+}
 
 // readStdout delivers each envelope line of f until the end of f, and closes
 // hello after the first hello that set the status up. A line that is not an
