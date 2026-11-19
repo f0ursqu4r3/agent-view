@@ -176,8 +176,9 @@ func pgrepCount(t *testing.T, pattern string) int {
 	return len(strings.Fields(string(out)))
 }
 
-// A listener holds the port: serve exits 1 within 3 s with the message, and
-// the hub's local collector and remotes are stopped (no child stays).
+// A listener holds the port: serve exits 1 within 3 s with the message and
+// nothing on stdout. The remotes start only after the server binds, so no
+// remote child may appear: the marker check guards that start order.
 func TestServePortInUse(t *testing.T) {
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
