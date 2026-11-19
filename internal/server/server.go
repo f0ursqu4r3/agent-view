@@ -94,7 +94,9 @@ func (s *Server) handler(h *hub.Hub) http.HandlerFunc {
 		return false
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/snapshot" {
+		// The escaped path, as TypeScript's URL pathname: a percent-encoded
+		// route is a different path.
+		if r.URL.EscapedPath() != "/api/snapshot" {
 			reply(w, http.StatusNotFound, "not found")
 			return
 		}

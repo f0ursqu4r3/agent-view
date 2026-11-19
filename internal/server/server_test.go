@@ -255,9 +255,12 @@ func TestNonGETGets405(t *testing.T) {
 }
 
 // unknown paths get 404 and the server binds 127.0.0.1 only
+//
+// The path is matched as sent: a percent-encoded /api/snapshot is not the
+// route, as in TypeScript.
 func TestUnknownPathsGet404AndBindLoopbackOnly(t *testing.T) {
 	_, _, srv := setup(t, "alpha")
-	for _, p := range []string{"/nope", "/api/other"} {
+	for _, p := range []string{"/nope", "/api/other", "/api/%73napshot"} {
 		res := do(t, "GET", srv.URL+p, "", "")
 		if res.StatusCode != 404 {
 			t.Errorf("%s: status = %d, want 404", p, res.StatusCode)
