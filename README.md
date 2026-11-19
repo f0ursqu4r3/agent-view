@@ -83,12 +83,14 @@ Measured on 2026-11-18 on an Apple M4 Max (Go 1.27.3, macOS arm64):
 
 | Check | Target | Result |
 |---|---|---|
-| Frame, 50 agents, 200 envelopes per frame, 200 × 60 (`go test ./internal/tui/ -bench ComposeStress -benchtime 200x`) | under 4 ms | 3.6 ms with the envelopes, 2.0 ms for the frame alone |
+| Frame, 50 agents, 200 envelopes per frame, 200 × 60 (`go test ./internal/tui/ -run '^$' -bench ComposeStress -benchtime 200x`) | under 4 ms | 3.8 ms with the envelopes (3.5 to 3.9 ms at 50, 200, and 1000 iterations), 2.1 ms for the frame alone |
 | Binary, `-trimpath -ldflags "-s -w"` | under 20 MB | 4.8 MB (linux/amd64), 4.6 MB (darwin/arm64) |
 | Idle CPU of the Go process, 60 s, no events | under 2% of one core | 0.3% |
-| Memory (RSS) of the Go process, real logs, 60 s | under 150 MB | 26 MB |
+| Memory (RSS) of the Go process, real logs, at 60 s | under 150 MB | 26 MB (peak seen: 40 MB, 8 s after start) |
 
-With three agents working, the Go process used 3.5% of one core over 60 s, because the spinner redraws 8 times per second while a call is open.
+The frame time is the time of `Compose`. It does not include the Bubble Tea render.
+
+With three agents working, the Go process used 3.5% of one core over 60 s. This is probably the spinner, which redraws 8 times per second while a call is open. It was not profiled.
 
 | Key | Action |
 |---|---|

@@ -20,6 +20,7 @@ type stress struct {
 	seq    int64
 	agents []string
 	call   int
+	open   []int // calls the last batch left open
 }
 
 var stressCats = []string{"read", "edit", "write", "command", "search", "agent", "other"}
@@ -104,9 +105,17 @@ func (st *stress) end(n int) {
 	st.apply(e)
 }
 
-// batch applies 200 envelopes: 50 calls, each started, updated, given output,
-// and ended in the same batch; the calls overlap, so some are open at the end.
+// batch applies exactly 200 envelopes: it ends the 10 calls the previous batch
+// left open, then starts 50 calls, updates each, gives each output, and ends 40
+// of them. Every fifth call stays open so rows show live cards. The store stays
+// at about 10 open calls and a full host of ended calls, whatever b.N is.
 func (st *stress) batch() {
+	const total = 200
+	from := st.seq
+	for _, n := range st.open {
+		st.end(n)
+	}
+	st.open = st.open[:0]
 	base := st.call
 	for i := 0; i < 50; i++ {
 		st.start(base + i)
@@ -115,17 +124,19 @@ func (st *stress) batch() {
 		st.update(base + i)
 		st.output(base + i)
 	}
-	// Leave every fifth call open so rows show live cards.
-	ended := 0
 	for i := 0; i < 50; i++ {
-		if i%5 != 0 {
+		if i%5 == 0 {
+			st.open = append(st.open, base+i)
+		} else {
 			st.end(base + i)
-			ended++
 		}
 	}
-	// Reach 200 envelopes with output chunks on the open calls.
-	for i := 0; 50+100+ended+i < 200; i++ {
-		st.output(base + (i*5)%50)
+	// Pad to 200 with output chunks on the open calls.
+	for i := 0; st.seq-from < total; i++ {
+		st.output(st.open[i%len(st.open)])
+	}
+	if st.seq-from != total {
+		panic("batch is not 200 envelopes")
 	}
 	st.call += 50
 	st.clock += 1000
@@ -145,6 +156,12 @@ func BenchmarkComposeStress(b *testing.B) {
 		Status: Status{Hosts: []HostStatus{{Label: "devbox", State: "up"}}, Agents: 50, Working: 50, Clock: "01:00:00"},
 	}
 	var composeNs int64
+	// Outside the timed loop: the frame must draw real rows.
+	st.batch()
+	in.Now = st.clock
+	if g, hits := Compose(in); g.W != 200 || g.H != 60 || len(hits) == 0 {
+		b.Fatalf("Compose drew no rows: %dx%d, %d hits", g.W, g.H, len(hits))
+	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -160,5 +177,13 @@ func BenchmarkComposeStress(b *testing.B) {
 	b.ReportMetric(float64(composeNs)/float64(b.N), "compose-ns/op")
 	if st.s.Panics != 0 {
 		b.Fatalf("Apply recovered %d panic(s)", st.s.Panics)
+	}
+	// The store must not drift with b.N: about 10 open calls, a full host of calls.
+	open := 0
+	for _, id := range st.agents {
+		open += len(st.s.OpenCalls(id))
+	}
+	if _, calls := st.s.HostStats("devbox"); open != 10 || calls < 2000 {
+		b.Fatalf("store drifted: %d open calls, %d calls", open, calls)
 	}
 }
