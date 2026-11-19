@@ -1,7 +1,7 @@
 # Agent View v2 — Design
 
 Date: 2026-11-17
-Status: approved 2026-11-17
+Status: Superseded in part by 2026-11-18-agent-view-tui-design.md
 
 ## Intent
 
@@ -43,7 +43,9 @@ These make the tool a failure even if it works:
 ## Constraints
 
 - Runtime and toolchain: Bun, version 1.4 or later, with TypeScript.
+  > Superseded by 2026-11-18-agent-view-tui-design.md
 - Viewer: runs in a browser. The stage uses WebGL through PixiJS.
+  > Superseded by 2026-11-18-agent-view-tui-design.md
 - Platform: the local hub targets macOS. The collector must also run on Linux, because remote machines are often Linux.
 - Read-only access to agent data in v2.
 - Agent log formats are internal and change between releases. Adapters must fail soft and report a degraded state.
@@ -123,6 +125,8 @@ Settled after the builder review. These are design calls for the owner to check:
 
 ## Architecture
 
+> Superseded by 2026-11-18-agent-view-tui-design.md
+
 ```
  per machine                                  local Mac only
 ┌────────────────────────────┐   NDJSON    ┌──────────────────────┐   WebSocket   ┌──────────────┐
@@ -141,6 +145,8 @@ Settled after the builder review. These are design calls for the owner to check:
 - **Viewer.** A browser page with two parts: the PixiJS stage, and the drawer (DOM plus canvas). It keeps a client-side copy of the state, built from the snapshot and the deltas.
 
 ### Command-line interface
+
+> Superseded by 2026-11-18-agent-view-tui-design.md
 
 - `agent-view`: starts the hub and the local collector, then opens the browser.
 - `agent-view --remote <ssh-host>`: adds a remote machine. Repeatable. The `<ssh-host>` value uses the owner's SSH config.
@@ -293,7 +299,11 @@ Rules:
 
 ## Viewer
 
+> Superseded by 2026-11-18-agent-view-tui-design.md
+
 ### Stage (PixiJS, full screen)
+
+> Superseded by 2026-11-18-agent-view-tui-design.md
 
 - **Tree:** a radial tree in the style of Gource.
   - One root per host, labeled with the host name. Several hosts sit side by side.
@@ -330,6 +340,8 @@ Rules:
 
 ### Drawer
 
+> Superseded by 2026-11-18-agent-view-tui-design.md
+
 - **Opening:** it slides up from the bottom when you press `T` or click the handle. It is closed by default and covers about 35% of the height.
 - **Left side:** one lane per agent.
   - Sub-agents are nested under their parent. Lanes follow the order of the tree.
@@ -341,6 +353,8 @@ Rules:
   - `Esc` clears the focus.
 
 ### Heads-up display
+
+> Superseded by 2026-11-18-agent-view-tui-design.md
 
 - A small status corner shows each host with its connection state and source states.
 - `C` opens a coverage panel: log roots, open logs, watched roots, parse errors, and degraded sources. It carries over the prototype's coverage panel.
@@ -367,6 +381,8 @@ These rules are kept from the prototype:
 
 ## Performance targets
 
+> Superseded by 2026-11-18-agent-view-tui-design.md
+
 - 60 fps on an Apple Silicon Mac with:
   - 50 agents,
   - 3,000 visible file nodes,
@@ -377,11 +393,15 @@ These rules are kept from the prototype:
 
 ## Packaging
 
+> Superseded by 2026-11-18-agent-view-tui-design.md
+
 - `bun build --compile` targets: `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`.
 - The viewer assets are embedded in the binary.
 - In M2, a remote machine needs only the binary on its `PATH`. A helper command to copy it there is optional.
 
 ## Milestones
+
+> Superseded by 2026-11-18-agent-view-tui-design.md
 
 **M0 — Spikes.** Each ends with a short written result.
 
@@ -423,6 +443,7 @@ The hooks add precision for MCP tools and sub-agent identity. They need explicit
 - **Schema:** golden NDJSON files go through the normalizer and the state model. Snapshot plus deltas must give the same result as replaying the full stream.
 - **Transport:** a hub test with a fake collector child process covers disconnect, reconnect, and resnapshot.
 - **Viewer:** a deterministic demo stream drives a headless smoke test. It checks that the page renders, that there are no console errors, and that the drawer toggles. The builder decides how far visual testing goes.
+  > Superseded by 2026-11-18-agent-view-tui-design.md
 - **Live audit:** like `test/live-audit.mjs`, it runs against real local data and prints counts only.
 
 ## Risks
