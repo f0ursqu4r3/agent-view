@@ -53,7 +53,7 @@ bun run audit:live
 
 ## Go TUI (phase 1)
 
-A terminal viewer in Go is in progress. It draws each agent as a row of text cards. In phase 1 it starts the TypeScript collector as a child process, so Bun is still required. Run it from the repository root.
+A terminal viewer in Go is in progress. It draws each agent as a row of text cards. By default it starts the TypeScript collector as a child process, so Bun is still required. Run it from the repository root. The same binary also contains a Go collector (`collect --stdio`, below).
 
 Build it:
 
@@ -73,11 +73,30 @@ Run it against your real sessions:
 ./agent-view
 ```
 
-Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--reduced-motion` turns animation off. `--remote`, `serve`, and `collect` come in phase 2. The TUI needs a terminal. Without one, it exits with code 2.
+Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--linger` takes decimal minutes above 0, for example `1.5`. `--reduced-motion` turns animation off. `--remote` and `serve` come in phase 2. The TUI needs a terminal. Without one, it exits with code 2.
 
 Set `NO_COLOR` to any non-empty value (`1`, `yes`, even `0`) to turn color off. Bold and inverse still apply, and dim text uses the terminal's faint style.
 
 Set `AGENT_VIEW_COLLECTOR` to a JSON array of strings to replace the collector command, flags included. For example, `AGENT_VIEW_COLLECTOR='["./my-collector","--stdio"]' ./agent-view`.
+
+### Go collector: `collect --stdio`
+
+`agent-view collect --stdio` runs the Go collector. It writes one NDJSON envelope per line to stdout, as `bun src/cli.ts collect --stdio` does. It needs no terminal and no Bun. A remote machine runs it over SSH.
+
+```bash
+./agent-view collect --stdio --label devbox
+```
+
+Flags: `--label <name>` (the host name in the envelopes; the default is the machine's host name), `--demo`, `--demo-scale normal|stress`, `--watch <dir>` (repeatable), and `--linger <minutes>`. `collect` must be the first argument and needs `--stdio`. `--remote`, `--port`, and `--reduced-motion` are usage errors with `collect`. Usage errors print to stderr and exit with code 2.
+
+SIGINT, SIGTERM, and SIGHUP stop the collector with exit code 0. If the reader of stdout goes away, the first failed write stops it, also with exit code 0. The process exits within 2 s.
+
+To run the TUI on the Go collector, set `AGENT_VIEW_COLLECTOR` to a JSON array of strings. The array replaces the whole collector command, so the TUI flags (`--demo`, `--watch`, `--linger`) do not reach the collector. Put them in the array:
+
+```bash
+AGENT_VIEW_COLLECTOR='["./agent-view","collect","--stdio"]' ./agent-view
+AGENT_VIEW_COLLECTOR='["./agent-view","collect","--stdio","--demo"]' ./agent-view
+```
 
 Measured on 2026-11-18 on an Apple M4 Max (Go 1.27.3, macOS arm64):
 

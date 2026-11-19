@@ -1,5 +1,6 @@
 // Command agent-view shows what the coding agents on this machine do, in a
 // terminal. Phase 1 reads the TypeScript collector as a child process.
+// "agent-view collect --stdio" runs the Go collector and writes NDJSON.
 package main
 
 import (
@@ -85,6 +86,11 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 1
 	}
+	if args.Mode == "collect" {
+		signals, stop := collectSignals()
+		defer stop()
+		return runCollect(args, stdout, stderr, signals)
+	}
 	if !bothTerminals(stdin, stdout, term.IsTerminal) {
 		fmt.Fprintln(stderr, notTerminal)
 		return 2
@@ -99,9 +105,9 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 	diag := newDiagWriter()
 	log.SetOutput(diag)
 
-	st := store.New(store.Options{LingerMs: int64(args.LingerMin) * 60_000})
+	st := store.New(store.Options{LingerMs: args.LingerMs})
 	model := tui.NewModel(tui.Config{
-		Store: st, Reduced: args.Reduced, NoColor: noColor(), LingerMs: int64(args.LingerMin) * 60_000,
+		Store: st, Reduced: args.Reduced, NoColor: noColor(), LingerMs: args.LingerMs,
 	})
 	p := tea.NewProgram(model, tea.WithFPS(20))
 
