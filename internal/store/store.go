@@ -108,15 +108,14 @@ type hostState struct {
 	agents   *omap[string, *agentEntry]
 	// order is the first-appearance rank of every agent seen on this host, except
 	// dormant agents, whose record holds it. It survives snapshots.
-	order       map[string]int
-	dormant     *omap[string, *dormantRecord]
-	calls       *omap[callKey, *ViewCall]
-	openByAgent map[string]map[string]*ViewCall
-	pending     map[callKey]*ViewCall  // calls restored from a replayed tool.start, waiting for their replayed tool.end
-	nextSeq     uint64                 // seq of the next stored call
-	held        []heldTouch            // unattributed touches
-	recent      *omap[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
-	presence    *presence              // present agents for one (version, now)
+	order    map[string]int
+	dormant  *omap[string, *dormantRecord]
+	calls    *callTable
+	pending  map[callKey]*ViewCall  // calls restored from a replayed tool.start, waiting for their replayed tool.end
+	nextSeq  uint64                 // seq of the next stored call
+	held     []heldTouch            // unattributed touches
+	recent   *omap[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
+	presence *presence              // present agents for one (version, now)
 }
 
 type presence struct {
@@ -252,7 +251,7 @@ func (s *Store) host(label string) *hostState {
 	if h == nil {
 		h = &hostState{
 			agents: newOmap[string, *agentEntry](), order: map[string]int{}, dormant: newOmap[string, *dormantRecord](),
-			calls: newOmap[callKey, *ViewCall](), openByAgent: map[string]map[string]*ViewCall{}, pending: map[callKey]*ViewCall{},
+			calls: newCallTable(), pending: map[callKey]*ViewCall{},
 			recent: newOmap[string, []int64](),
 		}
 		s.hosts[label] = h
@@ -339,7 +338,6 @@ func toDormant(h *hostState, id string, a *agentEntry) {
 		h.dormant.delete(oldest)
 	}
 	delete(h.order, id)
-	delete(h.openByAgent, id)
 }
 
 // wake removes a dormant record and gives the agent its rank back.

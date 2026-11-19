@@ -105,8 +105,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			endTally(a.tally, e)
 			if call, ok := h.calls.get(callKey{e.AgentID, e.CallID}); ok && !call.Ended {
 				end := endMs(a, call, e, at)
-				endCall(call, e, end)
-				closeOpen(h, call)
+				h.calls.end(call, e, end)
 				em.add(CallEnded, e.AgentID, e.CallID, "", end)
 			}
 		}
@@ -157,8 +156,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 	}
 	oldAgents, oldCalls := h.agents, h.calls
 	h.agents = newOmap[string, *agentEntry]()
-	h.calls = newOmap[callKey, *ViewCall]()
-	h.openByAgent = map[string]map[string]*ViewCall{}
+	h.calls = newCallTable()
 	h.pending = map[callKey]*ViewCall{}
 	for _, a := range e.Agents {
 		if a.ID == "" {
@@ -247,7 +245,7 @@ func newCall(host string, c schema.Call, startMs int64) *ViewCall {
 func storeCall(h *hostState, call *ViewCall) {
 	call.seq = h.nextSeq
 	h.nextSeq++
-	h.calls.set(callKey{call.AgentID, call.CallID}, call)
+	h.calls.set(call)
 }
 
 // callFor returns a stored call, or a restored call waiting for its replayed tool.end.
@@ -309,26 +307,7 @@ func setStatus(a *agentEntry, id, status string, atMs int64, em *emitter) {
 func addCall(h *hostState, host string, c schema.Call, startMs int64) *ViewCall {
 	call := newCall(host, c, startMs)
 	storeCall(h, call)
-	open := h.openByAgent[c.AgentID]
-	if open == nil {
-		open = map[string]*ViewCall{}
-		h.openByAgent[c.AgentID] = open
-	}
-	open[c.CallID] = call
 	return call
-}
-
-func closeOpen(h *hostState, call *ViewCall) {
-	open := h.openByAgent[call.AgentID]
-	if open == nil {
-		return
-	}
-	if open[call.CallID] == call {
-		delete(open, call.CallID)
-	}
-	if len(open) == 0 {
-		delete(h.openByAgent, call.AgentID)
-	}
 }
 
 // trimCalls drops the oldest ended calls past the cap. Open calls are never dropped here.

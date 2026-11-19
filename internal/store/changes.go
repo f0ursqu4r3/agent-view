@@ -2,7 +2,6 @@ package store
 
 import (
 	"cmp"
-	"maps"
 	"slices"
 
 	"agent-view/internal/lifecycle"
@@ -200,9 +199,7 @@ func (s *Store) OpenCalls(agentID string) []*ViewCall {
 	if h == nil {
 		return nil
 	}
-	out := slices.Collect(maps.Values(h.openByAgent[agentID]))
-	slices.SortFunc(out, newestFirst(func(c *ViewCall) int64 { return c.StartMs }))
-	return out
+	return slices.Clone(h.calls.open[agentID])
 }
 
 // RecentEnded returns at most n ended calls of a stored agent, newest EndMs
@@ -212,14 +209,8 @@ func (s *Store) RecentEnded(agentID string, n int) []*ViewCall {
 	if h == nil || n <= 0 {
 		return nil
 	}
-	var out []*ViewCall
-	for _, c := range h.calls.all() {
-		if c.Ended && c.AgentID == agentID {
-			out = append(out, c)
-		}
-	}
-	slices.SortFunc(out, newestFirst(func(c *ViewCall) int64 { return c.EndMs }))
-	return out[:min(n, len(out))]
+	ended := h.calls.ended[agentID]
+	return slices.Clone(ended[:min(n, len(ended))])
 }
 
 // newestFirst orders calls by a time, newest first; on equal times, the last stored first.
