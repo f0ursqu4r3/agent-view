@@ -127,12 +127,18 @@ AGENT_VIEW_COLLECTOR='["./agent-view","collect","--stdio","--demo"]' ./agent-vie
 
 #### Parity
 
-The parity test runs the Go collector and the TypeScript collector on the same logs and compares their NDJSON streams. It needs Bun; without Bun every parity test skips. It removes `seq`, `ts`, and the `hello` fields `now`, `collectorVersion`, and `platform`. It removes a `command` or `pattern` that is the empty string from a call: TypeScript writes `""` and Go leaves the key out. It compares `source.status` envelopes and timed-out `tool.end` envelopes (`ok: null`) without their order, and only the last `coverage` envelope. It compares all other envelopes in order. It also compares the demo events on a virtual clock, and the gitignore matcher on every row of `testdata/gitignore-cases.json`. The fixture logs are `test/fixtures/` and `testdata/parity/`.
+The parity test runs the Go collector and the TypeScript collector on the same logs and compares their NDJSON streams. It needs Bun; without Bun every live parity test (`TestParity…`) skips. It removes `seq`, `ts`, and the `hello` fields `now`, `collectorVersion`, and `platform`. It removes a `command` or `pattern` that is the empty string from a call: TypeScript writes `""` and Go leaves the key out. It compares `source.status` envelopes and timed-out `tool.end` envelopes (`ok: null`) without their order, and only the last `coverage` envelope. It compares all other envelopes in order. It also compares the demo events on a virtual clock, and the gitignore matcher on every row of `testdata/gitignore-cases.json`. The fixture logs are `test/fixtures/` and `testdata/parity/`.
 
 The hub parity test runs `agent-view serve --port 0` and `bun src/cli.ts --no-open --port 0` on the same inputs: a temporary home with one Claude log and one Codex log from the last minute, and one fake remote (`--remote fakehost`, set with `AGENT_VIEW_REMOTE_COMMAND`) that prints a fixed stream. It waits until both hubs show both hosts `up` and their bodies stay the same for 3 s. Then it compares the `/api/snapshot` bodies: `hosts` exactly, and every envelope in order, each host's `coverage` included. It removes the same fields and empty strings as above. It also runs `agent-view audit` and `bun test/live-audit.ts` on the Go hub and compares the two reports. The tests take about 12 s:
 
 ```bash
 go test -count=1 ./internal/parity/
+```
+
+The golden tests (`TestGolden…`) need no Bun. They compare the Go side with the TypeScript results stored in `testdata/golden/parity/`: the fixtures stream (`fixtures.json`), the two demo traces (`demo-normal-60000.ndjson`, `demo-stress-10000.ndjson`), the hub snapshot (`hub.json`), and the audit report (`audit.json`). The stored files have sorted keys. The temporary home is stored as `<HOME>`, the hub's local host label as `<LOCAL>`, and every hub time as `T+<ms>` after the time the test writes its first log. To write the files again from a live run (needs Bun and the TypeScript code; the files are written only when the live comparison passes):
+
+```bash
+PARITY_WRITE_GOLDEN=1 go test -count=1 -run TestParity ./internal/parity/
 ```
 
 The local mode is opt-in. It copies your newest 120 logs (from the last 23 hours) to a temporary home and compares the two collectors on the copy. It does not compare `fs.change`, `fs:` statuses, or the watch roots, because the copied logs name real projects. On a mismatch it prints only the index, the kind, the agent ID, and the call ID, never log content. It removes the copy at the end:

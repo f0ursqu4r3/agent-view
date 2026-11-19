@@ -1,5 +1,7 @@
 // Package parity compares the Go collector and hub with the TypeScript
-// collector and hub (src/). Every test runs Bun and skips when Bun is missing.
+// collector and hub (src/). The TestParity tests run Bun and skip when Bun is
+// missing. The TestGolden tests compare the Go side with the TypeScript
+// results stored in testdata/golden/parity/ and need no Bun.
 package parity
 
 import (
@@ -48,7 +50,7 @@ var (
 	repoRoot string
 	// bunPath is the real Bun executable, or "" when Bun is missing.
 	bunPath string
-	// goBin is the agent-view binary that TestMain builds when Bun exists.
+	// goBin is the agent-view binary that TestMain builds.
 	goBin string
 )
 
@@ -63,10 +65,7 @@ func testMain(m *testing.M) int {
 		return 1
 	}
 	repoRoot = root
-	bunPath = findBun()
-	if bunPath == "" {
-		return m.Run() // every test skips
-	}
+	bunPath = findBun() // "" makes every TestParity test skip
 	dir, err := os.MkdirTemp("", "agent-view-parity-bin")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -401,6 +400,7 @@ func TestParityFixtures(t *testing.T) {
 	if len(tsS.statuses) == 0 || len(tsS.timeouts) == 0 {
 		t.Errorf("statuses %d, timeouts %d: want both above 0", len(tsS.statuses), len(tsS.timeouts))
 	}
+	writeGoldenJSON(t, "fixtures.json", toFile(nil, newFreezer(t, home, time.Time{}).stream(tsS)))
 }
 
 // localRoot is where a real log root goes inside the temporary HOME, so the
@@ -506,14 +506,30 @@ func eventValue(t *testing.T, e wire.SourceEvent) envelope {
 	return v
 }
 
+// goDemoTrace runs the Go demo on a FakeScheduler for ms and returns its
+// events as the TypeScript script prints them.
+func goDemoTrace(t *testing.T, scale string, ms float64) []envelope {
+	t.Helper()
+	var emitted []wire.SourceEvent
+	sched := demo.NewFakeScheduler(demoStartMs)
+	src := demo.New(demo.Options{Host: "parity", Scale: scale, Sched: sched, Emit: func(batch []wire.SourceEvent) {
+		emitted = append(emitted, batch...)
+	}})
+	src.Start()
+	sched.Advance(ms)
+	src.Stop()
+	var events []envelope
+	for _, e := range emitted {
+		events = append(events, eventValue(t, e))
+	}
+	return events
+}
+
 // The Go demo on a FakeScheduler emits the same events as the TypeScript
 // DemoSource on a virtual clock, ts included.
 func TestParityDemoTrace(t *testing.T) {
 	requireBun(t)
-	for _, c := range []struct {
-		scale string
-		ms    float64
-	}{{"normal", 60_000}, {"stress", 10_000}} {
+	for _, c := range demoCases {
 		t.Run(c.scale, func(t *testing.T) {
 			var tsEvents []envelope
 			for i, line := range runBun(t, "test/parity/demo-trace.ts", c.scale, strconv.FormatFloat(c.ms, 'f', -1, 64)) {
@@ -524,18 +540,7 @@ func TestParityDemoTrace(t *testing.T) {
 				tsEvents = append(tsEvents, v)
 			}
 
-			var emitted []wire.SourceEvent
-			sched := demo.NewFakeScheduler(demoStartMs)
-			src := demo.New(demo.Options{Host: "parity", Scale: c.scale, Sched: sched, Emit: func(batch []wire.SourceEvent) {
-				emitted = append(emitted, batch...)
-			}})
-			src.Start()
-			sched.Advance(c.ms)
-			src.Stop()
-			var goEvents []envelope
-			for _, e := range emitted {
-				goEvents = append(goEvents, eventValue(t, e))
-			}
+			goEvents := goDemoTrace(t, c.scale, c.ms)
 
 			if len(goEvents) != len(tsEvents) {
 				t.Errorf("events: Go %d, TypeScript %d", len(goEvents), len(tsEvents))
@@ -554,6 +559,7 @@ func TestParityDemoTrace(t *testing.T) {
 				t.Errorf("only %d events in the TypeScript trace", len(tsEvents))
 			}
 			t.Logf("compared %d events", len(tsEvents))
+			writeGoldenNDJSON(t, demoGoldenName(c.scale, c.ms), tsEvents)
 		})
 	}
 }

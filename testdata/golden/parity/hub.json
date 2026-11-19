@@ -1,0 +1,195 @@
+{
+  "hosts": [
+    {
+      "kind": "local",
+      "label": "<LOCAL>",
+      "state": "up"
+    },
+    {
+      "kind": "remote",
+      "label": "fakehost",
+      "state": "up"
+    }
+  ],
+  "ordered": [
+    {
+      "host": "<LOCAL>",
+      "kind": "hello",
+      "v": 1
+    },
+    {
+      "agents": [
+        {
+          "cwd": "/p/hub",
+          "id": "<LOCAL>/claude:default:hub-session",
+          "lastEventAt": "T+3000",
+          "link": "root",
+          "model": "m-1",
+          "name": "Claude Code session",
+          "parentId": null,
+          "projectRoot": null,
+          "provider": "claude",
+          "role": "main",
+          "status": "working"
+        },
+        {
+          "cwd": "/p/hub",
+          "id": "<LOCAL>/codex:default:hub-thread",
+          "lastEventAt": "T+6000",
+          "link": "root",
+          "model": "m-2",
+          "name": "Codex session",
+          "parentId": null,
+          "projectRoot": null,
+          "provider": "codex",
+          "role": "main",
+          "status": "working"
+        }
+      ],
+      "files": [
+        {
+          "agentId": "<LOCAL>/codex:default:hub-thread",
+          "attribution": "confirmed",
+          "lastTouchAt": "T+6000",
+          "path": "/p/hub/hello.txt"
+        },
+        {
+          "agentId": "<LOCAL>/claude:default:hub-session",
+          "attribution": "confirmed",
+          "lastTouchAt": "T+2000",
+          "path": "/p/hub/out.txt"
+        }
+      ],
+      "host": "<LOCAL>",
+      "kind": "snapshot",
+      "openCalls": [
+        {
+          "agentId": "<LOCAL>/claude:default:hub-session",
+          "callId": "t2",
+          "category": "command",
+          "command": "make test",
+          "rawName": "Bash",
+          "startedAt": "T+3000"
+        }
+      ],
+      "v": 1
+    },
+    {
+      "coverage": {
+        "fsDropped": 0,
+        "logRoots": [
+          "<HOME>/.codex/sessions",
+          "<HOME>/.claude/projects"
+        ],
+        "logsDiscovered": 2,
+        "logsOpen": 2,
+        "malformedRecords": 0,
+        "sources": {
+          "logs:<HOME>/.claude/projects": {
+            "state": "ok"
+          },
+          "logs:<HOME>/.codex/sessions": {
+            "state": "ok"
+          }
+        },
+        "watchRoots": []
+      },
+      "host": "<LOCAL>",
+      "kind": "coverage",
+      "v": 1
+    },
+    {
+      "host": "fakehost",
+      "kind": "hello",
+      "v": 1
+    },
+    {
+      "agents": [
+        {
+          "cwd": "/srv/tool",
+          "id": "remote-codex",
+          "lastEventAt": "T+13000",
+          "link": "root",
+          "name": "Remote rollout",
+          "parentId": null,
+          "projectRoot": null,
+          "provider": "codex",
+          "role": "main",
+          "status": "idle"
+        },
+        {
+          "cwd": "/srv/app",
+          "id": "remote-main",
+          "lastEventAt": "T+14000",
+          "link": "root",
+          "model": "m-1",
+          "name": "Remote session",
+          "parentId": null,
+          "projectRoot": "/srv/app",
+          "provider": "claude",
+          "role": "main",
+          "status": "working"
+        },
+        {
+          "cwd": "/srv/app",
+          "id": "remote-sub",
+          "lastEventAt": "T+16000",
+          "link": "confirmed",
+          "name": "Remote helper",
+          "parentId": "remote-main",
+          "projectRoot": "/srv/app",
+          "provider": "claude",
+          "role": "sub-agent",
+          "status": "working"
+        }
+      ],
+      "files": [
+        {
+          "agentId": "remote-sub",
+          "attribution": "confirmed",
+          "lastTouchAt": "T+16000",
+          "path": "/srv/app/notes.md"
+        }
+      ],
+      "host": "fakehost",
+      "kind": "snapshot",
+      "openCalls": [
+        {
+          "agentId": "remote-main",
+          "callId": "rc1",
+          "category": "command",
+          "command": "make test",
+          "rawName": "Bash",
+          "startedAt": "T+14000"
+        }
+      ],
+      "v": 1
+    },
+    {
+      "coverage": {
+        "fsDropped": 0,
+        "logRoots": [
+          "/home/dev/.claude/projects"
+        ],
+        "logsDiscovered": 3,
+        "logsOpen": 2,
+        "malformedRecords": 1,
+        "sources": {
+          "fs:/srv/app": {
+            "detail": "watch limit reached",
+            "state": "degraded"
+          },
+          "logs:/home/dev/.claude/projects": {
+            "state": "ok"
+          }
+        },
+        "watchRoots": []
+      },
+      "host": "fakehost",
+      "kind": "coverage",
+      "v": 1
+    }
+  ],
+  "statuses": [],
+  "timeouts": []
+}

@@ -1,0 +1,452 @@
+{"agent":{"cwd":"/demo/agent-view","id":"parity/claude:demo:session-1","lastEventAt":"2026-01-01T00:00:00.000Z","link":"root","model":"claude-sonnet-5-5","name":"Refactor drawer layout","parentId":null,"projectRoot":"/demo/agent-view","provider":"claude","role":"main","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"agent":{"cwd":"/demo/agent-view","id":"parity/claude:demo:session-1:review","lastEventAt":"2026-01-01T00:00:00.000Z","link":"confirmed","model":"claude-sonnet-5-5","name":"Review drawer styles","parentId":"parity/claude:demo:session-1","projectRoot":"/demo/agent-view","provider":"claude","role":"sub-agent","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"agent":{"cwd":"/demo/agent-view","id":"parity/claude:demo:session-1:tests","lastEventAt":"2026-01-01T00:00:00.000Z","link":"confirmed","model":"claude-sonnet-5-5","name":"Update drawer tests","parentId":"parity/claude:demo:session-1","projectRoot":"/demo/agent-view","provider":"claude","role":"sub-agent","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"agent":{"cwd":"/demo/search-service","id":"parity/codex:demo:thread-1","lastEventAt":"2026-01-01T00:00:00.000Z","link":"root","model":"gpt-5-codex","name":"Build workspace search","parentId":null,"projectRoot":"/demo/search-service","provider":"codex","role":"main","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"agent":{"cwd":"/demo/search-service","id":"parity/codex:demo:thread-1:index","lastEventAt":"2026-01-01T00:00:00.000Z","link":"confirmed","model":"gpt-5-codex","name":"Index source files","parentId":"parity/codex:demo:thread-1","projectRoot":"/demo/search-service","provider":"codex","role":"sub-agent","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"agent":{"cwd":"/demo/search-service","id":"parity/codex:demo:thread-1:ranking","lastEventAt":"2026-01-01T00:00:00.000Z","link":"confirmed","model":"gpt-5-codex","name":"Check ranking results","parentId":"parity/codex:demo:thread-1","projectRoot":"/demo/search-service","provider":"codex","role":"sub-agent","status":"working"},"kind":"agent.upsert","ts":"2026-01-01T00:00:00.000Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d1","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:00.000Z"},"kind":"tool.start","ts":"2026-01-01T00:00:00.000Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d2","category":"read","files":["/demo/agent-view/public/index.html"],"rawName":"Read","startedAt":"2026-01-01T00:00:00.222Z"},"kind":"tool.start","ts":"2026-01-01T00:00:00.222Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d1","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:00.497Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d3","category":"edit","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:00.574Z"},"kind":"tool.start","ts":"2026-01-01T00:00:00.574Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d4","category":"command","command":"rg -n \"lingerMs\" src","rawName":"shell","startedAt":"2026-01-01T00:00:00.863Z"},"kind":"tool.start","ts":"2026-01-01T00:00:00.863Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d2","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:00.934Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d5","category":"command","command":"bun run build","rawName":"shell","startedAt":"2026-01-01T00:00:01.025Z"},"kind":"tool.start","ts":"2026-01-01T00:00:01.025Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d4","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:01.324Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d3","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:01.332Z","writes":[{"op":"edit","path":"/demo/agent-view/test/viewer/drawer.test.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d6","category":"command","command":"git status --short","rawName":"shell","startedAt":"2026-01-01T00:00:01.332Z"},"kind":"tool.start","ts":"2026-01-01T00:00:01.332Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d7","category":"read","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:01.538Z"},"kind":"tool.start","ts":"2026-01-01T00:00:01.538Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d8","category":"read","files":["/demo/agent-view/src/shared/schema.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:01.990Z"},"kind":"tool.start","ts":"2026-01-01T00:00:01.990Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/tree.ts","ts":"2026-01-01T00:00:01.990Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d7","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:02.188Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d6","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:02.266Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d9","category":"read","files":["/demo/agent-view/src/viewer/colors.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:02.369Z"},"kind":"tool.start","ts":"2026-01-01T00:00:02.369Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d10","category":"command","command":"bun test test/viewer","rawName":"shell","startedAt":"2026-01-01T00:00:02.607Z"},"kind":"tool.start","ts":"2026-01-01T00:00:02.607Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d5","chunk":"bundled 128 modules in 84ms\ndist/index.js  412 KB\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:02.637Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d8","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:02.846Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d9","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:02.957Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d6","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:03.030Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:03.030Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d11","category":"read","files":["/demo/agent-view/src/viewer/tree.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:03.063Z"},"kind":"tool.start","ts":"2026-01-01T00:00:03.063Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d12","category":"edit","files":["/demo/agent-view/src/viewer/stage.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:03.427Z"},"kind":"tool.start","ts":"2026-01-01T00:00:03.427Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d13","category":"read","files":["/demo/agent-view/src/viewer/drawer.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:03.684Z"},"kind":"tool.start","ts":"2026-01-01T00:00:03.684Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d11","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:03.792Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d5","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:03.957Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d14","category":"command","command":"sed -n '1,120p' /demo/search-service/README.md","rawName":"shell","startedAt":"2026-01-01T00:00:04.051Z"},"kind":"tool.start","ts":"2026-01-01T00:00:04.051Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d15","category":"read","files":["/demo/agent-view/public/index.html"],"rawName":"Read","startedAt":"2026-01-01T00:00:04.460Z"},"kind":"tool.start","ts":"2026-01-01T00:00:04.460Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d13","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:04.479Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d10","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:04.606Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d16","category":"search","pattern":"TODO","rawName":"Grep","startedAt":"2026-01-01T00:00:04.657Z"},"kind":"tool.start","ts":"2026-01-01T00:00:04.657Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/stage.ts","ts":"2026-01-01T00:00:04.657Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d14","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:04.676Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:04.676Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d15","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:04.933Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d12","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:05.025Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/stage.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d17","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:05.282Z"},"kind":"tool.start","ts":"2026-01-01T00:00:05.282Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d16","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:05.450Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:05.450Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d18","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:05.564Z"},"kind":"tool.start","ts":"2026-01-01T00:00:05.564Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:05.725Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d19","category":"command","command":"sed -n '1,120p' /demo/search-service/test/ranking.test.ts","rawName":"shell","startedAt":"2026-01-01T00:00:05.725Z"},"kind":"tool.start","ts":"2026-01-01T00:00:05.725Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d18","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:06.040Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d19","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:06.075Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d10","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:06.241Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d20","category":"command","command":"git status --short","rawName":"Bash","startedAt":"2026-01-01T00:00:06.491Z"},"kind":"tool.start","ts":"2026-01-01T00:00:06.491Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d21","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:06.826Z"},"kind":"tool.start","ts":"2026-01-01T00:00:06.826Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d22","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/merge.ts","rawName":"shell","startedAt":"2026-01-01T00:00:07.132Z"},"kind":"tool.start","ts":"2026-01-01T00:00:07.132Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:07.509Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d23","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/segments.ts","rawName":"shell","startedAt":"2026-01-01T00:00:07.509Z"},"kind":"tool.start","ts":"2026-01-01T00:00:07.509Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d17","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:07.650Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d17","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:07.650Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d24","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:07.690Z"},"kind":"tool.start","ts":"2026-01-01T00:00:07.690Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/tree.ts","ts":"2026-01-01T00:00:07.690Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d22","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:07.930Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d21","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:07.936Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:07.936Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d23","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:07.997Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:08.037Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d25","category":"search","pattern":"rankResults","rawName":"Grep","startedAt":"2026-01-01T00:00:08.037Z"},"kind":"tool.start","ts":"2026-01-01T00:00:08.037Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d26","category":"edit","files":["/demo/search-service/src/query/ranking.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:08.225Z"},"kind":"tool.start","ts":"2026-01-01T00:00:08.225Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d27","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/parser.ts","rawName":"shell","startedAt":"2026-01-01T00:00:08.436Z"},"kind":"tool.start","ts":"2026-01-01T00:00:08.436Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d24","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:08.490Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:08.490Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d25","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:08.800Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d27","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:08.911Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d26","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:08.960Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/ranking.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d28","category":"edit","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:09.169Z"},"kind":"tool.start","ts":"2026-01-01T00:00:09.169Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d29","category":"command","command":"sed -n '1,120p' /demo/search-service/src/index.ts","rawName":"shell","startedAt":"2026-01-01T00:00:09.416Z"},"kind":"tool.start","ts":"2026-01-01T00:00:09.416Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d30","category":"edit","files":["/demo/search-service/README.md"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:09.811Z"},"kind":"tool.start","ts":"2026-01-01T00:00:09.811Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d28","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:10.086Z","writes":[{"op":"edit","path":"/demo/agent-view/test/viewer/drawer.test.ts"}]}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d20","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:10.108Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d20","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:10.108Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:10.108Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d29","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:10.120Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d31","category":"read","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:10.504Z"},"kind":"tool.start","ts":"2026-01-01T00:00:10.504Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d30","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:10.539Z","writes":[{"op":"edit","path":"/demo/search-service/README.md"}]}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:10.889Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d32","category":"command","command":"sed -n '1,120p' /demo/search-service/test/ranking.test.ts","rawName":"shell","startedAt":"2026-01-01T00:00:10.889Z"},"kind":"tool.start","ts":"2026-01-01T00:00:10.889Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/README.md","ts":"2026-01-01T00:00:10.889Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d33","category":"command","command":"bun run build","rawName":"shell","startedAt":"2026-01-01T00:00:11.201Z"},"kind":"tool.start","ts":"2026-01-01T00:00:11.201Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d31","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:11.231Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d32","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:11.554Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d34","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:11.565Z"},"kind":"tool.start","ts":"2026-01-01T00:00:11.565Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:11.942Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d35","category":"read","files":["/demo/agent-view/src/shared/schema.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:11.942Z"},"kind":"tool.start","ts":"2026-01-01T00:00:11.942Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d36","category":"command","command":"bun run typecheck","rawName":"Bash","startedAt":"2026-01-01T00:00:12.188Z"},"kind":"tool.start","ts":"2026-01-01T00:00:12.188Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d35","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:12.424Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d37","category":"edit","files":["/demo/search-service/src/store/merge.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:12.450Z"},"kind":"tool.start","ts":"2026-01-01T00:00:12.450Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d38","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:12.630Z"},"kind":"tool.start","ts":"2026-01-01T00:00:12.630Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d34","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:12.632Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d33","chunk":"bundled 128 modules in 84ms\ndist/index.js  412 KB\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:12.911Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:12.927Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d39","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:12.927Z"},"kind":"tool.start","ts":"2026-01-01T00:00:12.927Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d38","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:13.218Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d40","category":"command","command":"rg -n \"TODO\" src","rawName":"shell","startedAt":"2026-01-01T00:00:13.360Z"},"kind":"tool.start","ts":"2026-01-01T00:00:13.360Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/store/merge.ts","ts":"2026-01-01T00:00:13.360Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d39","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:13.758Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d41","category":"search","pattern":"mergeSegments","rawName":"Grep","startedAt":"2026-01-01T00:00:13.813Z"},"kind":"tool.start","ts":"2026-01-01T00:00:13.813Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d37","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:13.887Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/merge.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d40","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:14.213Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:14.213Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d42","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:14.291Z"},"kind":"tool.start","ts":"2026-01-01T00:00:14.291Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d33","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:14.310Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d41","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:14.763Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d43","category":"command","command":"rg -n \"renderDrawer\" src","rawName":"shell","startedAt":"2026-01-01T00:00:14.770Z"},"kind":"tool.start","ts":"2026-01-01T00:00:14.770Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d42","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:14.861Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d44","category":"command","command":"rg -n \"rankResults\" src","rawName":"shell","startedAt":"2026-01-01T00:00:15.000Z"},"kind":"tool.start","ts":"2026-01-01T00:00:15.000Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d45","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:15.234Z"},"kind":"tool.start","ts":"2026-01-01T00:00:15.234Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d43","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:15.307Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d46","category":"command","command":"git status --short","rawName":"Bash","startedAt":"2026-01-01T00:00:15.668Z"},"kind":"tool.start","ts":"2026-01-01T00:00:15.668Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d44","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:15.850Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d47","category":"edit","files":["/demo/search-service/src/store/segments.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:15.883Z"},"kind":"tool.start","ts":"2026-01-01T00:00:15.883Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d36","chunk":"$ tsc --noEmit\nFound 0 errors.\nsrc/viewer/drawer.ts(41,9): error TS2322\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:16.054Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d36","exitCode":1,"kind":"tool.end","ok":false,"ts":"2026-01-01T00:00:16.054Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d48","category":"edit","files":["/demo/search-service/src/query/ranking.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:16.289Z"},"kind":"tool.start","ts":"2026-01-01T00:00:16.289Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/query/ranking.ts","ts":"2026-01-01T00:00:16.289Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d49","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:16.465Z"},"kind":"tool.start","ts":"2026-01-01T00:00:16.465Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d47","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:17.069Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/segments.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d50","category":"command","command":"rg -n \"rankResults\" src","rawName":"shell","startedAt":"2026-01-01T00:00:17.113Z"},"kind":"tool.start","ts":"2026-01-01T00:00:17.113Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d48","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:17.372Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/ranking.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:17.372Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:17.467Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d51","category":"command","command":"rg -n \"rankResults\" src","rawName":"shell","startedAt":"2026-01-01T00:00:17.467Z"},"kind":"tool.start","ts":"2026-01-01T00:00:17.467Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d45","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:17.747Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d45","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:17.747Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d52","category":"search","pattern":"SourceEvent","rawName":"Grep","startedAt":"2026-01-01T00:00:17.809Z"},"kind":"tool.start","ts":"2026-01-01T00:00:17.809Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d50","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:17.974Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d51","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:18.056Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d53","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/parser.ts","rawName":"shell","startedAt":"2026-01-01T00:00:18.214Z"},"kind":"tool.start","ts":"2026-01-01T00:00:18.214Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d52","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:18.462Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d46","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:18.525Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d46","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:18.525Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d54","category":"command","command":"sed -n '1,120p' /demo/search-service/src/index.ts","rawName":"shell","startedAt":"2026-01-01T00:00:18.550Z"},"kind":"tool.start","ts":"2026-01-01T00:00:18.550Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d54","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:18.997Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d55","category":"read","files":["/demo/agent-view/src/viewer/colors.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:19.007Z"},"kind":"tool.start","ts":"2026-01-01T00:00:19.007Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d53","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:19.067Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:19.067Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d56","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:19.200Z"},"kind":"tool.start","ts":"2026-01-01T00:00:19.200Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/tree.ts","ts":"2026-01-01T00:00:19.200Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d57","category":"edit","files":["/demo/search-service/README.md"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:19.466Z"},"kind":"tool.start","ts":"2026-01-01T00:00:19.466Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d55","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:19.565Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:19.565Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d56","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:19.780Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d49","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n 1 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:19.967Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d49","exitCode":1,"kind":"tool.end","ok":false,"ts":"2026-01-01T00:00:19.967Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d58","category":"read","files":["/demo/agent-view/src/viewer/tree.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:20.031Z"},"kind":"tool.start","ts":"2026-01-01T00:00:20.031Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d59","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:20.367Z"},"kind":"tool.start","ts":"2026-01-01T00:00:20.367Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d57","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:20.495Z","writes":[{"op":"edit","path":"/demo/search-service/README.md"}]}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d58","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:20.657Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:20.712Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d60","category":"edit","files":["/demo/search-service/test/ranking.test.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:20.712Z"},"kind":"tool.start","ts":"2026-01-01T00:00:20.712Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d59","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:20.878Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:20.878Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d61","category":"command","command":"rg -n \"rankResults\" src","rawName":"shell","startedAt":"2026-01-01T00:00:21.159Z"},"kind":"tool.start","ts":"2026-01-01T00:00:21.159Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d62","category":"command","command":"bun run build","rawName":"Bash","startedAt":"2026-01-01T00:00:21.562Z"},"kind":"tool.start","ts":"2026-01-01T00:00:21.562Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d60","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:21.599Z","writes":[{"op":"edit","path":"/demo/search-service/test/ranking.test.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d61","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:21.914Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:22.030Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d63","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:22.030Z"},"kind":"tool.start","ts":"2026-01-01T00:00:22.030Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d64","category":"command","command":"rg -n \"mergeSegments\" src","rawName":"shell","startedAt":"2026-01-01T00:00:22.368Z"},"kind":"tool.start","ts":"2026-01-01T00:00:22.368Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/api/routes.ts","ts":"2026-01-01T00:00:22.368Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d65","category":"command","command":"rg -n \"SourceEvent\" src","rawName":"shell","startedAt":"2026-01-01T00:00:22.543Z"},"kind":"tool.start","ts":"2026-01-01T00:00:22.543Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:22.756Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d66","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:22.756Z"},"kind":"tool.start","ts":"2026-01-01T00:00:22.756Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d63","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:22.945Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d64","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:23.069Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d67","category":"command","command":"git status --short","rawName":"shell","startedAt":"2026-01-01T00:00:23.234Z"},"kind":"tool.start","ts":"2026-01-01T00:00:23.234Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d65","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:23.456Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d68","category":"edit","files":["/demo/search-service/src/store/merge.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:23.623Z"},"kind":"tool.start","ts":"2026-01-01T00:00:23.623Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d69","category":"edit","files":["/demo/search-service/src/store/segments.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:23.788Z"},"kind":"tool.start","ts":"2026-01-01T00:00:23.788Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:24.010Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d70","category":"search","pattern":"SourceEvent","rawName":"Grep","startedAt":"2026-01-01T00:00:24.010Z"},"kind":"tool.start","ts":"2026-01-01T00:00:24.010Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d67","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:24.375Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d62","chunk":"bundled 128 modules in 84ms\ndist/index.js  412 KB\nerror: could not resolve \"./missing\"\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:24.499Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d62","exitCode":1,"kind":"tool.end","ok":false,"ts":"2026-01-01T00:00:24.499Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:24.499Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d69","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:24.522Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/segments.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:24.522Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d70","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:24.806Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d71","category":"search","pattern":"mergeSegments","rawName":"Grep","startedAt":"2026-01-01T00:00:24.890Z"},"kind":"tool.start","ts":"2026-01-01T00:00:24.890Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d68","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:25.123Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/merge.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d72","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/ranking.ts","rawName":"shell","startedAt":"2026-01-01T00:00:25.221Z"},"kind":"tool.start","ts":"2026-01-01T00:00:25.221Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/index.ts","ts":"2026-01-01T00:00:25.221Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d67","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:25.309Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d73","category":"command","command":"bun test test/viewer","rawName":"shell","startedAt":"2026-01-01T00:00:25.509Z"},"kind":"tool.start","ts":"2026-01-01T00:00:25.509Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d71","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:25.806Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d72","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:25.828Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d74","category":"edit","files":["/demo/search-service/src/query/parser.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:26.039Z"},"kind":"tool.start","ts":"2026-01-01T00:00:26.039Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d75","category":"search","pattern":"SourceEvent","rawName":"Grep","startedAt":"2026-01-01T00:00:26.350Z"},"kind":"tool.start","ts":"2026-01-01T00:00:26.350Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d66","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:26.454Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d66","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:26.454Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d73","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:26.505Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d76","category":"command","command":"bun run typecheck","rawName":"Bash","startedAt":"2026-01-01T00:00:26.620Z"},"kind":"tool.start","ts":"2026-01-01T00:00:26.620Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d75","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:26.924Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:27.236Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d77","category":"read","files":["/demo/agent-view/src/viewer/stage.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:27.236Z"},"kind":"tool.start","ts":"2026-01-01T00:00:27.236Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d73","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:27.321Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d78","category":"read","files":["/demo/agent-view/src/viewer/drawer.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:27.439Z"},"kind":"tool.start","ts":"2026-01-01T00:00:27.439Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d74","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:27.445Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/parser.ts"}]}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d77","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:27.690Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d79","category":"edit","files":["/demo/search-service/src/index.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:27.813Z"},"kind":"tool.start","ts":"2026-01-01T00:00:27.813Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d78","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:27.842Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d80","category":"command","command":"rg -n \"mergeSegments\" src","rawName":"shell","startedAt":"2026-01-01T00:00:27.990Z"},"kind":"tool.start","ts":"2026-01-01T00:00:27.990Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/api/routes.ts","ts":"2026-01-01T00:00:27.990Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:28.462Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d81","category":"command","command":"bun run build","rawName":"shell","startedAt":"2026-01-01T00:00:28.462Z"},"kind":"tool.start","ts":"2026-01-01T00:00:28.462Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d80","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:28.622Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:28.622Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d82","category":"command","command":"bun run typecheck","rawName":"Bash","startedAt":"2026-01-01T00:00:28.654Z"},"kind":"tool.start","ts":"2026-01-01T00:00:28.654Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d83","category":"edit","files":["/demo/agent-view/public/index.html"],"rawName":"Edit","startedAt":"2026-01-01T00:00:29.000Z"},"kind":"tool.start","ts":"2026-01-01T00:00:29.000Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d79","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:29.378Z","writes":[{"op":"edit","path":"/demo/search-service/src/index.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d84","category":"command","command":"sed -n '1,120p' /demo/search-service/README.md","rawName":"shell","startedAt":"2026-01-01T00:00:29.437Z"},"kind":"tool.start","ts":"2026-01-01T00:00:29.437Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d81","chunk":"bundled 128 modules in 84ms\ndist/index.js  412 KB\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:29.462Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d83","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:30.024Z","writes":[{"op":"edit","path":"/demo/agent-view/public/index.html"}]}
+{"agentId":"parity/codex:demo:thread-1","callId":"d84","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:30.228Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d81","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:30.281Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d85","category":"edit","files":["/demo/search-service/test/ranking.test.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:30.306Z"},"kind":"tool.start","ts":"2026-01-01T00:00:30.306Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d82","chunk":"$ tsc --noEmit\nFound 0 errors.\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:30.364Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d82","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:30.364Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d86","category":"search","pattern":"mergeSegments","rawName":"Grep","startedAt":"2026-01-01T00:00:30.639Z"},"kind":"tool.start","ts":"2026-01-01T00:00:30.639Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d76","chunk":"$ tsc --noEmit\nFound 0 errors.\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:30.749Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d76","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:30.749Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d87","category":"read","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:30.980Z"},"kind":"tool.start","ts":"2026-01-01T00:00:30.980Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d86","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:31.421Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d88","category":"command","command":"rg -n \"TODO\" src","rawName":"shell","startedAt":"2026-01-01T00:00:31.426Z"},"kind":"tool.start","ts":"2026-01-01T00:00:31.426Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/store/segments.ts","ts":"2026-01-01T00:00:31.426Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:31.649Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d89","category":"command","command":"bun run typecheck","rawName":"shell","startedAt":"2026-01-01T00:00:31.649Z"},"kind":"tool.start","ts":"2026-01-01T00:00:31.649Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d87","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:31.748Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:31.748Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d85","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:31.771Z","writes":[{"op":"edit","path":"/demo/search-service/test/ranking.test.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d90","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:32.093Z"},"kind":"tool.start","ts":"2026-01-01T00:00:32.093Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d91","category":"edit","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:32.271Z"},"kind":"tool.start","ts":"2026-01-01T00:00:32.271Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d88","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:32.395Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:32.395Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d92","category":"search","pattern":"rankResults","rawName":"Grep","startedAt":"2026-01-01T00:00:32.632Z"},"kind":"tool.start","ts":"2026-01-01T00:00:32.632Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d90","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:32.796Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d93","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/merge.ts","rawName":"shell","startedAt":"2026-01-01T00:00:32.860Z"},"kind":"tool.start","ts":"2026-01-01T00:00:32.860Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d89","chunk":"$ tsc --noEmit\nFound 0 errors.\nsrc/viewer/drawer.ts(41,9): error TS2322\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:33.013Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d91","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:33.222Z","writes":[{"op":"edit","path":"/demo/agent-view/src/collector/state.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d94","category":"edit","files":["/demo/agent-view/src/shared/schema.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:33.326Z"},"kind":"tool.start","ts":"2026-01-01T00:00:33.326Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d92","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:33.359Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d95","category":"read","files":["/demo/agent-view/src/viewer/colors.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:33.631Z"},"kind":"tool.start","ts":"2026-01-01T00:00:33.631Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d93","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:33.643Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d96","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/segments.ts","rawName":"shell","startedAt":"2026-01-01T00:00:33.934Z"},"kind":"tool.start","ts":"2026-01-01T00:00:33.934Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/store/segments.ts","ts":"2026-01-01T00:00:33.934Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d95","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:34.000Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d89","exitCode":1,"kind":"tool.end","ok":false,"ts":"2026-01-01T00:00:34.129Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d97","category":"command","command":"bun run typecheck","rawName":"Bash","startedAt":"2026-01-01T00:00:34.297Z"},"kind":"tool.start","ts":"2026-01-01T00:00:34.297Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d96","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:34.331Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d94","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:34.527Z","writes":[{"op":"edit","path":"/demo/agent-view/src/shared/schema.ts"}]}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:34.558Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d98","category":"read","files":["/demo/agent-view/src/viewer/tree.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:34.558Z"},"kind":"tool.start","ts":"2026-01-01T00:00:34.558Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:34.993Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d99","category":"edit","files":["/demo/search-service/src/query/ranking.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:34.993Z"},"kind":"tool.start","ts":"2026-01-01T00:00:34.993Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d98","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:35.051Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d100","category":"command","command":"rg -n \"renderDrawer\" src","rawName":"shell","startedAt":"2026-01-01T00:00:35.209Z"},"kind":"tool.start","ts":"2026-01-01T00:00:35.209Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d101","category":"edit","files":["/demo/search-service/src/query/parser.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:35.636Z"},"kind":"tool.start","ts":"2026-01-01T00:00:35.636Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d99","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:35.827Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/ranking.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d100","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:36.087Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d102","category":"command","command":"git status --short","rawName":"Bash","startedAt":"2026-01-01T00:00:36.091Z"},"kind":"tool.start","ts":"2026-01-01T00:00:36.091Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d103","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:36.356Z"},"kind":"tool.start","ts":"2026-01-01T00:00:36.356Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d104","category":"command","command":"sed -n '1,120p' /demo/search-service/src/index.ts","rawName":"shell","startedAt":"2026-01-01T00:00:36.707Z"},"kind":"tool.start","ts":"2026-01-01T00:00:36.707Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/store/segments.ts","ts":"2026-01-01T00:00:36.707Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d101","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:36.913Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/parser.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:36.913Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d105","category":"command","command":"sed -n '1,120p' /demo/search-service/README.md","rawName":"shell","startedAt":"2026-01-01T00:00:37.017Z"},"kind":"tool.start","ts":"2026-01-01T00:00:37.017Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d104","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:37.584Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d97","chunk":"$ tsc --noEmit\nFound 0 errors.\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:37.747Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d97","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:37.747Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:37.747Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d105","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:37.841Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d106","category":"command","command":"sed -n '1,120p' /demo/search-service/test/ranking.test.ts","rawName":"shell","startedAt":"2026-01-01T00:00:37.854Z"},"kind":"tool.start","ts":"2026-01-01T00:00:37.854Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d107","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:38.224Z"},"kind":"tool.start","ts":"2026-01-01T00:00:38.224Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d106","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:38.427Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d108","category":"edit","files":["/demo/search-service/src/store/merge.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:38.543Z"},"kind":"tool.start","ts":"2026-01-01T00:00:38.543Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d102","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:38.790Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d102","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:38.790Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d109","category":"edit","files":["/demo/agent-view/src/viewer/stage.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:38.921Z"},"kind":"tool.start","ts":"2026-01-01T00:00:38.921Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d107","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:39.222Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d110","category":"edit","files":["/demo/search-service/src/store/segments.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:39.247Z"},"kind":"tool.start","ts":"2026-01-01T00:00:39.247Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:39.445Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d111","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/ranking.ts","rawName":"shell","startedAt":"2026-01-01T00:00:39.445Z"},"kind":"tool.start","ts":"2026-01-01T00:00:39.445Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d108","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:39.584Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/merge.ts"}]}
+{"agentId":"parity/claude:demo:session-1","callId":"d109","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:39.658Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/stage.ts"}]}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:39.658Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d112","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/parser.ts","rawName":"shell","startedAt":"2026-01-01T00:00:39.743Z"},"kind":"tool.start","ts":"2026-01-01T00:00:39.743Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/src/api/routes.ts","ts":"2026-01-01T00:00:39.743Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d111","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:39.951Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d113","category":"command","command":"sed -n '1,120p' /demo/search-service/src/index.ts","rawName":"shell","startedAt":"2026-01-01T00:00:40.185Z"},"kind":"tool.start","ts":"2026-01-01T00:00:40.185Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:40.428Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d114","category":"command","command":"bun run typecheck","rawName":"Bash","startedAt":"2026-01-01T00:00:40.428Z"},"kind":"tool.start","ts":"2026-01-01T00:00:40.428Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d112","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:40.434Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d103","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:40.552Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d103","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:40.552Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d115","category":"edit","files":["/demo/agent-view/src/viewer/drawer.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:40.648Z"},"kind":"tool.start","ts":"2026-01-01T00:00:40.648Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d110","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:40.834Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/segments.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d113","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:41.006Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d116","category":"command","command":"rg -n \"rankResults\" src","rawName":"shell","startedAt":"2026-01-01T00:00:41.077Z"},"kind":"tool.start","ts":"2026-01-01T00:00:41.077Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d117","category":"command","command":"rg -n \"renderDrawer\" src","rawName":"shell","startedAt":"2026-01-01T00:00:41.413Z"},"kind":"tool.start","ts":"2026-01-01T00:00:41.413Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d116","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:41.689Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:41.689Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d118","category":"edit","files":["/demo/search-service/README.md"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:41.690Z"},"kind":"tool.start","ts":"2026-01-01T00:00:41.690Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d115","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:42.025Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/drawer.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d119","category":"read","files":["/demo/agent-view/public/index.html"],"rawName":"Read","startedAt":"2026-01-01T00:00:42.038Z"},"kind":"tool.start","ts":"2026-01-01T00:00:42.038Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d117","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:42.175Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:42.175Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:42.349Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d120","category":"search","pattern":"lingerMs","rawName":"Grep","startedAt":"2026-01-01T00:00:42.349Z"},"kind":"tool.start","ts":"2026-01-01T00:00:42.349Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/stage.ts","ts":"2026-01-01T00:00:42.349Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d119","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:42.897Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d121","category":"read","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:42.913Z"},"kind":"tool.start","ts":"2026-01-01T00:00:42.913Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d118","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:42.962Z","writes":[{"op":"edit","path":"/demo/search-service/README.md"}]}
+{"agentId":"parity/claude:demo:session-1","callId":"d120","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:43.191Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d121","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:43.295Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d122","category":"command","command":"sed -n '1,120p' /demo/search-service/test/ranking.test.ts","rawName":"shell","startedAt":"2026-01-01T00:00:43.316Z"},"kind":"tool.start","ts":"2026-01-01T00:00:43.316Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d123","category":"edit","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:43.600Z"},"kind":"tool.start","ts":"2026-01-01T00:00:43.600Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d124","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:43.942Z"},"kind":"tool.start","ts":"2026-01-01T00:00:43.942Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d122","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:44.094Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d125","category":"edit","files":["/demo/search-service/src/api/routes.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:44.127Z"},"kind":"tool.start","ts":"2026-01-01T00:00:44.127Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:44.401Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d126","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/merge.ts","rawName":"shell","startedAt":"2026-01-01T00:00:44.401Z"},"kind":"tool.start","ts":"2026-01-01T00:00:44.401Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d114","chunk":"$ tsc --noEmit\nFound 0 errors.\nsrc/viewer/drawer.ts(41,9): error TS2322\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:44.618Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d114","exitCode":1,"kind":"tool.end","ok":false,"ts":"2026-01-01T00:00:44.618Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:44.710Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d127","category":"edit","files":["/demo/search-service/src/store/segments.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:44.710Z"},"kind":"tool.start","ts":"2026-01-01T00:00:44.710Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d123","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:44.814Z","writes":[{"op":"edit","path":"/demo/agent-view/src/collector/state.ts"}]}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d124","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:44.908Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:44.908Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d128","category":"edit","files":["/demo/agent-view/src/shared/schema.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:45.093Z"},"kind":"tool.start","ts":"2026-01-01T00:00:45.093Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/viewer/tree.ts","ts":"2026-01-01T00:00:45.093Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d126","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:45.248Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d125","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:45.418Z","writes":[{"op":"edit","path":"/demo/search-service/src/api/routes.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d129","category":"command","command":"git status --short","rawName":"Bash","startedAt":"2026-01-01T00:00:45.554Z"},"kind":"tool.start","ts":"2026-01-01T00:00:45.554Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d130","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/ranking.ts","rawName":"shell","startedAt":"2026-01-01T00:00:45.830Z"},"kind":"tool.start","ts":"2026-01-01T00:00:45.830Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d131","category":"command","command":"bun test test/viewer","rawName":"shell","startedAt":"2026-01-01T00:00:46.010Z"},"kind":"tool.start","ts":"2026-01-01T00:00:46.010Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d128","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:46.051Z","writes":[{"op":"edit","path":"/demo/agent-view/src/shared/schema.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d127","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:46.117Z","writes":[{"op":"edit","path":"/demo/search-service/src/store/segments.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d132","category":"edit","files":["/demo/agent-view/src/viewer/colors.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:46.390Z"},"kind":"tool.start","ts":"2026-01-01T00:00:46.390Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d130","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:46.613Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d133","category":"edit","files":["/demo/search-service/src/query/parser.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:46.768Z"},"kind":"tool.start","ts":"2026-01-01T00:00:46.768Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d134","category":"edit","files":["/demo/search-service/src/index.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:47.062Z"},"kind":"tool.start","ts":"2026-01-01T00:00:47.062Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d131","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:47.225Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:47.731Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d135","category":"read","files":["/demo/agent-view/src/viewer/tree.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:47.731Z"},"kind":"tool.start","ts":"2026-01-01T00:00:47.731Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d132","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:47.733Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/colors.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d136","category":"read","files":["/demo/agent-view/src/viewer/stage.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:48.074Z"},"kind":"tool.start","ts":"2026-01-01T00:00:48.074Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/collector/state.ts","ts":"2026-01-01T00:00:48.074Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d134","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.122Z","writes":[{"op":"edit","path":"/demo/search-service/src/index.ts"}]}
+{"agentId":"parity/codex:demo:thread-1","callId":"d133","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.158Z","writes":[{"op":"edit","path":"/demo/search-service/src/query/parser.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d131","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.219Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:48.219Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d137","category":"command","command":"git status --short","rawName":"shell","startedAt":"2026-01-01T00:00:48.391Z"},"kind":"tool.start","ts":"2026-01-01T00:00:48.391Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d135","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.456Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d129","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:48.547Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d129","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.547Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d138","category":"edit","files":["/demo/search-service/README.md"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:48.556Z"},"kind":"tool.start","ts":"2026-01-01T00:00:48.556Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d136","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:48.680Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d139","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:48.772Z"},"kind":"tool.start","ts":"2026-01-01T00:00:48.772Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d140","category":"read","files":["/demo/agent-view/src/viewer/drawer.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:49.085Z"},"kind":"tool.start","ts":"2026-01-01T00:00:49.085Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d141","category":"read","files":["/demo/agent-view/public/index.html"],"rawName":"Read","startedAt":"2026-01-01T00:00:49.330Z"},"kind":"tool.start","ts":"2026-01-01T00:00:49.330Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d139","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:49.509Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:49.509Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d140","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:49.606Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d141","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:49.862Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d142","category":"read","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:49.891Z"},"kind":"tool.start","ts":"2026-01-01T00:00:49.891Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d143","category":"read","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:50.073Z"},"kind":"tool.start","ts":"2026-01-01T00:00:50.073Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d138","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:50.107Z","writes":[{"op":"edit","path":"/demo/search-service/README.md"}]}
+{"agentId":"parity/codex:demo:thread-1","callId":"d137","chunk":" M src/viewer/drawer.ts\n?? test/viewer/drawer.test.ts\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:50.310Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d144","category":"command","command":"rg -n \"mergeSegments\" src","rawName":"shell","startedAt":"2026-01-01T00:00:50.443Z"},"kind":"tool.start","ts":"2026-01-01T00:00:50.443Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/test/ranking.test.ts","ts":"2026-01-01T00:00:50.443Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d142","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:50.617Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d145","category":"read","files":["/demo/agent-view/src/shared/schema.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:50.678Z"},"kind":"tool.start","ts":"2026-01-01T00:00:50.678Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d143","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:50.962Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d146","category":"search","pattern":"mergeSegments","rawName":"Grep","startedAt":"2026-01-01T00:00:50.991Z"},"kind":"tool.start","ts":"2026-01-01T00:00:50.991Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d144","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:51.040Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d145","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:51.092Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d147","category":"edit","files":["/demo/search-service/test/ranking.test.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:51.468Z"},"kind":"tool.start","ts":"2026-01-01T00:00:51.468Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:51.713Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d148","category":"command","command":"sed -n '1,120p' /demo/search-service/src/api/routes.ts","rawName":"shell","startedAt":"2026-01-01T00:00:51.713Z"},"kind":"tool.start","ts":"2026-01-01T00:00:51.713Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d146","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:51.752Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d137","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:51.881Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:52.024Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d149","category":"edit","files":["/demo/agent-view/src/viewer/colors.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:52.024Z"},"kind":"tool.start","ts":"2026-01-01T00:00:52.024Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d150","category":"search","pattern":"TODO","rawName":"Grep","startedAt":"2026-01-01T00:00:52.231Z"},"kind":"tool.start","ts":"2026-01-01T00:00:52.231Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d147","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:52.243Z","writes":[{"op":"edit","path":"/demo/search-service/test/ranking.test.ts"}]}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d148","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:52.397Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d151","category":"search","pattern":"renderDrawer","rawName":"Grep","startedAt":"2026-01-01T00:00:52.432Z"},"kind":"tool.start","ts":"2026-01-01T00:00:52.432Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d152","category":"command","command":"rg -n \"renderDrawer\" src","rawName":"shell","startedAt":"2026-01-01T00:00:52.605Z"},"kind":"tool.start","ts":"2026-01-01T00:00:52.605Z"}
+{"kind":"fs.change","op":"change","path":"/demo/search-service/test/ranking.test.ts","ts":"2026-01-01T00:00:52.605Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d153","category":"command","command":"bun test test/viewer","rawName":"shell","startedAt":"2026-01-01T00:00:52.845Z"},"kind":"tool.start","ts":"2026-01-01T00:00:52.845Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d150","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:53.118Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:53.118Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d152","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:53.251Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d149","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:53.257Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/colors.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d154","category":"command","command":"bun run build","rawName":"shell","startedAt":"2026-01-01T00:00:53.261Z"},"kind":"tool.start","ts":"2026-01-01T00:00:53.261Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d151","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:53.268Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d155","category":"edit","files":["/demo/agent-view/src/viewer/tree.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:53.701Z"},"kind":"tool.start","ts":"2026-01-01T00:00:53.701Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d156","category":"edit","files":["/demo/agent-view/src/viewer/stage.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:53.911Z"},"kind":"tool.start","ts":"2026-01-01T00:00:53.911Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d153","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:53.978Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d157","category":"command","command":"rg -n \"renderDrawer\" src","rawName":"shell","startedAt":"2026-01-01T00:00:54.074Z"},"kind":"tool.start","ts":"2026-01-01T00:00:54.074Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d155","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:54.630Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/tree.ts"}]}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d158","category":"read","files":["/demo/agent-view/src/viewer/drawer.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:54.712Z"},"kind":"tool.start","ts":"2026-01-01T00:00:54.712Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d154","chunk":"bundled 128 modules in 84ms\ndist/index.js  412 KB\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:54.777Z"}
+{"agentId":"parity/codex:demo:thread-1","callId":"d157","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:54.842Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:54.842Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d153","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:54.904Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:54.904Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d156","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:54.974Z","writes":[{"op":"edit","path":"/demo/agent-view/src/viewer/stage.ts"}]}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:54.974Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d158","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:55.281Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d159","category":"read","files":["/demo/agent-view/public/index.html"],"rawName":"Read","startedAt":"2026-01-01T00:00:55.428Z"},"kind":"tool.start","ts":"2026-01-01T00:00:55.428Z"}
+{"agentId":"parity/claude:demo:session-1:review","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:55.665Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:review","callId":"d160","category":"command","command":"bun test test/viewer","rawName":"Bash","startedAt":"2026-01-01T00:00:55.665Z"},"kind":"tool.start","ts":"2026-01-01T00:00:55.665Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/src/shared/schema.ts","ts":"2026-01-01T00:00:55.665Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d159","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:56.011Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d154","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:56.018Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d161","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/merge.ts","rawName":"shell","startedAt":"2026-01-01T00:00:56.026Z"},"kind":"tool.start","ts":"2026-01-01T00:00:56.026Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d162","category":"edit","files":["/demo/agent-view/test/viewer/drawer.test.ts"],"rawName":"Edit","startedAt":"2026-01-01T00:00:56.415Z"},"kind":"tool.start","ts":"2026-01-01T00:00:56.415Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d161","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:56.687Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d163","category":"command","command":"sed -n '1,120p' /demo/search-service/src/store/segments.ts","rawName":"shell","startedAt":"2026-01-01T00:00:56.779Z"},"kind":"tool.start","ts":"2026-01-01T00:00:56.779Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d163","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:57.185Z"}
+{"agentId":"parity/codex:demo:thread-1","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:57.385Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d164","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/ranking.ts","rawName":"shell","startedAt":"2026-01-01T00:00:57.385Z"},"kind":"tool.start","ts":"2026-01-01T00:00:57.385Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d162","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:57.609Z","writes":[{"op":"edit","path":"/demo/agent-view/test/viewer/drawer.test.ts"}]}
+{"agentId":"parity/codex:demo:thread-1","callId":"d164","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:57.762Z"}
+{"agentId":"parity/codex:demo:thread-1:index","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:57.789Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d165","category":"command","command":"sed -n '1,120p' /demo/search-service/src/query/parser.ts","rawName":"shell","startedAt":"2026-01-01T00:00:57.789Z"},"kind":"tool.start","ts":"2026-01-01T00:00:57.789Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d166","category":"edit","files":["/demo/search-service/src/index.ts"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:58.146Z"},"kind":"tool.start","ts":"2026-01-01T00:00:58.146Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d165","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:58.286Z"}
+{"call":{"agentId":"parity/claude:demo:session-1","callId":"d167","category":"search","pattern":"SourceEvent","rawName":"Grep","startedAt":"2026-01-01T00:00:58.339Z"},"kind":"tool.start","ts":"2026-01-01T00:00:58.339Z"}
+{"agentId":"parity/claude:demo:session-1:tests","kind":"agent.status","status":"working","ts":"2026-01-01T00:00:58.671Z"}
+{"call":{"agentId":"parity/claude:demo:session-1:tests","callId":"d168","category":"read","files":["/demo/agent-view/src/collector/state.ts"],"rawName":"Read","startedAt":"2026-01-01T00:00:58.671Z"},"kind":"tool.start","ts":"2026-01-01T00:00:58.671Z"}
+{"kind":"fs.change","op":"change","path":"/demo/agent-view/test/viewer/drawer.test.ts","ts":"2026-01-01T00:00:58.671Z"}
+{"agentId":"parity/claude:demo:session-1","callId":"d167","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:58.912Z"}
+{"agentId":"parity/claude:demo:session-1","kind":"agent.status","status":"idle","ts":"2026-01-01T00:00:58.912Z"}
+{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d166","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:58.930Z","writes":[{"op":"edit","path":"/demo/search-service/src/index.ts"}]}
+{"call":{"agentId":"parity/codex:demo:thread-1","callId":"d169","category":"edit","files":["/demo/search-service/README.md"],"rawName":"apply_patch","startedAt":"2026-01-01T00:00:59.071Z"},"kind":"tool.start","ts":"2026-01-01T00:00:59.071Z"}
+{"agentId":"parity/claude:demo:session-1:tests","callId":"d168","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:59.201Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d160","chunk":"bun test v1.4.4\n  drawer renders open calls (12ms)\n  drawer keeps 16 seconds of history (9ms)\n 14 pass\n 0 fail\n","kind":"tool.output","truncated":false,"ts":"2026-01-01T00:00:59.359Z"}
+{"agentId":"parity/claude:demo:session-1:review","callId":"d160","exitCode":0,"kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:59.359Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:index","callId":"d170","category":"command","command":"sed -n '1,120p' /demo/search-service/test/ranking.test.ts","rawName":"shell","startedAt":"2026-01-01T00:00:59.400Z"},"kind":"tool.start","ts":"2026-01-01T00:00:59.400Z"}
+{"call":{"agentId":"parity/codex:demo:thread-1:ranking","callId":"d171","category":"command","command":"sed -n '1,120p' /demo/search-service/src/api/routes.ts","rawName":"shell","startedAt":"2026-01-01T00:00:59.699Z"},"kind":"tool.start","ts":"2026-01-01T00:00:59.699Z"}
+{"agentId":"parity/codex:demo:thread-1:index","callId":"d170","kind":"tool.end","ok":true,"ts":"2026-01-01T00:00:59.793Z"}

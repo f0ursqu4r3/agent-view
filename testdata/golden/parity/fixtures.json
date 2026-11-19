@@ -1,0 +1,1712 @@
+{
+  "coverage": {
+    "coverage": {
+      "fsDropped": 0,
+      "logRoots": [
+        "<HOME>/.codex/sessions",
+        "<HOME>/.claude/projects"
+      ],
+      "logsDiscovered": 9,
+      "logsOpen": 9,
+      "malformedRecords": 2,
+      "sources": {
+        "logs:<HOME>/.claude/projects": {
+          "state": "ok"
+        },
+        "logs:<HOME>/.codex/sessions": {
+          "state": "ok"
+        }
+      },
+      "watchRoots": []
+    },
+    "host": "parity",
+    "kind": "coverage",
+    "v": 1
+  },
+  "ordered": [
+    {
+      "host": "parity",
+      "kind": "hello",
+      "v": 1
+    },
+    {
+      "agents": [],
+      "files": [],
+      "host": "parity",
+      "kind": "snapshot",
+      "openCalls": [],
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/claude:default:s1",
+        "lastEventAt": "2026-01-01T00:00:00.000Z",
+        "link": "root",
+        "name": "Claude Code session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/claude:default:s1",
+        "lastEventAt": "2026-01-01T00:00:01.000Z",
+        "link": "root",
+        "model": "m-1",
+        "name": "Claude Code session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1",
+        "callId": "t1",
+        "category": "read",
+        "files": [
+          "/p/proj/src/a.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-01T00:00:01.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1",
+        "callId": "t2",
+        "category": "command",
+        "command": "echo x",
+        "rawName": "Bash",
+        "startedAt": "2026-01-01T00:00:03.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t2",
+      "chunk": "x",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t2",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1",
+        "callId": "t3",
+        "category": "write",
+        "files": [
+          "/p/proj/out.txt"
+        ],
+        "rawName": "Write",
+        "startedAt": "2026-01-01T00:00:05.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t3",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/proj/out.txt"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1",
+        "callId": "t4",
+        "category": "search",
+        "files": [
+          "/p/proj/src"
+        ],
+        "pattern": "x",
+        "rawName": "Grep",
+        "startedAt": "2026-01-01T00:00:07.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t4",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1",
+        "callId": "t5",
+        "category": "edit",
+        "files": [
+          "/p/proj/bad.txt"
+        ],
+        "rawName": "Edit",
+        "startedAt": "2026-01-01T00:00:09.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "callId": "t5",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/claude:default:s1:sub1",
+        "lastEventAt": "2026-01-01T00:00:20.000Z",
+        "link": "session",
+        "name": "Sub-agent sub1",
+        "parentId": "parity/claude:default:s1",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/claude:default:s1:sub1",
+        "lastEventAt": "2026-01-01T00:00:21.000Z",
+        "link": "session",
+        "model": "m-1",
+        "name": "Sub-agent sub1",
+        "parentId": "parity/claude:default:s1",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1:sub1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:s1:sub1",
+        "callId": "u1",
+        "category": "read",
+        "files": [
+          "/p/proj/b.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-01T00:00:21.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1:sub1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/codex:default:th-kid",
+        "lastEventAt": "2026-01-01T00:00:00.500Z",
+        "link": "confirmed",
+        "name": "reviewer",
+        "parentId": "parity/codex:default:th-main",
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-kid",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-kid",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "interrupted",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/codex:default:th-main",
+        "lastEventAt": "2026-01-01T00:00:00.000Z",
+        "link": "root",
+        "name": "Codex session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/proj",
+        "id": "parity/codex:default:th-main",
+        "lastEventAt": "2026-01-01T00:00:01.000Z",
+        "link": "root",
+        "model": "m-1",
+        "name": "Codex session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:th-main",
+        "callId": "c1",
+        "category": "command",
+        "command": "echo x",
+        "rawName": "exec_command",
+        "startedAt": "2026-01-01T00:00:03.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "c1",
+      "chunk": "x",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "c1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:th-main",
+        "callId": "p1",
+        "category": "edit",
+        "files": [
+          "/p/proj/hello.txt"
+        ],
+        "rawName": "apply_patch",
+        "startedAt": "2026-01-01T00:00:05.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "p1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "create",
+          "path": "/p/proj/hello.txt"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:th-main",
+        "callId": "outer",
+        "category": "other",
+        "rawName": "exec",
+        "startedAt": "2026-01-01T00:00:07.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:th-main",
+        "callId": "n1",
+        "category": "command",
+        "command": "sh -c echo y",
+        "rawName": "CommandExecution",
+        "startedAt": "2026-01-01T00:00:08.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "n1",
+      "chunk": "y\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "n1",
+      "exitCode": 0,
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:th-main",
+        "callId": "n2",
+        "category": "edit",
+        "files": [
+          "/p/proj/a.txt"
+        ],
+        "rawName": "FileChange",
+        "startedAt": "2026-01-01T00:00:09.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "n2",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/proj/a.txt"
+        }
+      ]
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "callId": "outer",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:th-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa",
+        "lastEventAt": "2026-01-02T10:00:00.000Z",
+        "link": "root",
+        "name": "Claude Code session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa",
+        "lastEventAt": "2026-01-02T10:00:01.000Z",
+        "link": "root",
+        "name": "Parity custom title",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa",
+        "lastEventAt": "2026-01-02T10:00:02.000Z",
+        "link": "root",
+        "model": "claude-opus-5-5",
+        "name": "Parity agent name",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "b-long",
+        "category": "command",
+        "command": "echo é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀abc é😀",
+        "rawName": "Bash",
+        "startedAt": "2026-01-02T10:00:02.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "chunk": "€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0032 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0033 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0034 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0035 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0036 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0037 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0038 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0039 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0040 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0041 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0042 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0043 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0044 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0045 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0046 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0047 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0048 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0049 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0050 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0051 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0052 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0053 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0054 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0055 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0056 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0057 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0058 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0059 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0060 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0061 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0062 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0063 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0064 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0065 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "chunk": "€😀éx\n0066 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0067 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0068 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0069 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0070 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0071 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0072 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0073 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0074 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0075 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0076 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0077 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0078 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0079 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0080 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0081 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0082 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0083 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0084 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0085 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0086 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0087 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0088 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0089 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0090 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0091 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0092 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0093 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0094 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0095 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0096 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0097 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0098 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0099 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0100 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "chunk": "€€😀éx€€€😀éx€€€😀éx\n0101 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0102 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0103 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0104 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0105 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0106 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0107 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0108 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0109 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0110 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0111 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0112 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0113 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0114 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0115 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0116 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0117 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0118 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0119 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0120 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0121 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0122 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0123 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0124 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0125 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0126 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0127 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0128 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0129 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0130 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0131 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0132 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0133 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0134 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0135 €€€😀éx€€€😀éx",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "chunk": "€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0136 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0137 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0138 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0139 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0140 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0141 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0142 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0143 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0144 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0145 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0146 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0147 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0148 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0149 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0150 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0151 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0152 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0153 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0154 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0155 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0156 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0157 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0158 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0159 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0160 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0161 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0162 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0163 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0164 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0165 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0166 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0167 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0168 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0169 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\ndon",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "chunk": "e",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-long",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "w1",
+        "category": "write",
+        "files": [
+          "/p/alpha/out/w.txt"
+        ],
+        "rawName": "Write",
+        "startedAt": "2026-01-02T10:00:05.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "w1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/alpha/out/w.txt"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "m1",
+        "category": "edit",
+        "files": [
+          "/p/alpha/src/m.ts"
+        ],
+        "rawName": "MultiEdit",
+        "startedAt": "2026-01-02T10:00:07.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "m1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/alpha/src/m.ts"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "n1",
+        "category": "edit",
+        "files": [
+          "/p/alpha/nb/a.ipynb"
+        ],
+        "rawName": "NotebookEdit",
+        "startedAt": "2026-01-02T10:00:09.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "n1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/alpha/nb/a.ipynb"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "e0",
+        "category": "edit",
+        "rawName": "Edit",
+        "startedAt": "2026-01-02T10:00:11.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "e0",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "g1",
+        "category": "search",
+        "files": [
+          "/p/alpha/src"
+        ],
+        "pattern": "needle",
+        "rawName": "Grep",
+        "startedAt": "2026-01-02T10:00:13.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "g2",
+        "category": "search",
+        "rawName": "Grep",
+        "startedAt": "2026-01-02T10:00:13.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "g1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "g2",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "b-empty",
+        "category": "command",
+        "rawName": "Bash",
+        "startedAt": "2026-01-02T10:00:15.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-empty",
+      "chunk": "Error: empty command",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "b-empty",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa",
+        "lastEventAt": "2026-01-02T10:00:17.000Z",
+        "link": "root",
+        "model": "claude-haiku-5",
+        "name": "Parity agent name",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "main",
+        "status": "working"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "ag1",
+        "category": "agent",
+        "rawName": "Agent",
+        "startedAt": "2026-01-02T10:00:17.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa:kid1",
+        "lastEventAt": "2026-01-02T10:00:18.000Z",
+        "link": "confirmed",
+        "name": "Review the parser",
+        "parentId": "parity/claude:default:pa",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "ag1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "r-open",
+        "category": "read",
+        "files": [
+          "/p/alpha/open.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-02T10:00:19.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "r2",
+        "category": "read",
+        "files": [
+          "/p/alpha/src/r2.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-02T10:00:23.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa",
+        "callId": "r3",
+        "category": "read",
+        "files": [
+          "/p/alpha/src/r3.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-02T10:00:23.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "r2",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "r3",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa:kid2",
+        "lastEventAt": "2026-01-02T10:00:26.000Z",
+        "link": "session",
+        "name": "Sub-agent kid2",
+        "parentId": "parity/claude:default:pa",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa:kid2",
+        "lastEventAt": "2026-01-02T10:00:27.000Z",
+        "link": "session",
+        "model": "claude-haiku-5",
+        "name": "Sub-agent kid2",
+        "parentId": "parity/claude:default:pa",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid2",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa:kid2",
+        "callId": "k2-r",
+        "category": "read",
+        "files": [
+          "/p/alpha/side.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-02T10:00:27.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/alpha",
+        "id": "parity/claude:default:pa:kid1",
+        "lastEventAt": "2026-01-02T10:00:31.000Z",
+        "link": "confirmed",
+        "model": "claude-haiku-5",
+        "name": "Review the parser",
+        "parentId": "parity/claude:default:pa",
+        "projectRoot": null,
+        "provider": "claude",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa:kid1",
+        "callId": "k-r1",
+        "category": "read",
+        "files": [
+          "/p/alpha/src/parser.ts"
+        ],
+        "rawName": "Read",
+        "startedAt": "2026-01-02T10:00:31.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid1",
+      "callId": "k-r1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/claude:default:pa:kid1",
+        "callId": "k-g1",
+        "category": "search",
+        "files": [
+          "/p/alpha/src"
+        ],
+        "pattern": "parse",
+        "rawName": "Grep",
+        "startedAt": "2026-01-02T10:00:33.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid1",
+      "callId": "k-g1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid1",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta",
+        "id": "parity/codex:default:cx-main",
+        "lastEventAt": "2026-01-02T10:00:00.000Z",
+        "link": "root",
+        "name": "Codex session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta",
+        "id": "parity/codex:default:cx-main",
+        "lastEventAt": "2026-01-02T10:00:01.000Z",
+        "link": "root",
+        "model": "gpt-5.5-codex",
+        "name": "Codex session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "x1",
+        "category": "command",
+        "command": "bash -lc ls -la",
+        "rawName": "exec_command",
+        "startedAt": "2026-01-02T10:00:03.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x1",
+      "chunk": "total 0\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x1",
+      "exitCode": 1,
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "x2",
+        "category": "command",
+        "command": "bash -lc make test",
+        "rawName": "shell",
+        "startedAt": "2026-01-02T10:00:05.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x2",
+      "chunk": "Exit code: 2\nWall time: 1 seconds\nProcess exited with code 2\nOutput:\nboom\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x2",
+      "exitCode": 2,
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "x3",
+        "category": "command",
+        "command": "echo wrong-type",
+        "rawName": "shell",
+        "startedAt": "2026-01-02T10:00:07.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x3",
+      "chunk": "wrong-type\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x3",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "p-ok",
+        "category": "edit",
+        "files": [
+          "/p/beta/docs/new.md",
+          "/p/beta/src/a.ts",
+          "/p/beta/old.txt",
+          "/p/beta/src/from.ts",
+          "/p/beta/src/to.ts"
+        ],
+        "rawName": "apply_patch",
+        "startedAt": "2026-01-02T10:00:09.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "p-ok",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "create",
+          "path": "/p/beta/docs/new.md"
+        },
+        {
+          "op": "edit",
+          "path": "/p/beta/src/a.ts"
+        },
+        {
+          "op": "delete",
+          "path": "/p/beta/old.txt"
+        },
+        {
+          "op": "edit",
+          "path": "/p/beta/src/from.ts"
+        },
+        {
+          "op": "move",
+          "path": "/p/beta/src/to.ts"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "p-bad",
+        "category": "edit",
+        "files": [
+          "/p/beta/src/missing.ts"
+        ],
+        "rawName": "apply_patch",
+        "startedAt": "2026-01-02T10:00:11.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "p-bad",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "p-ns",
+        "category": "edit",
+        "files": [
+          "/p/beta/src/ns.ts"
+        ],
+        "rawName": "functions.apply_patch",
+        "startedAt": "2026-01-02T10:00:13.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "p-ns",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "edit",
+          "path": "/p/beta/src/ns.ts"
+        }
+      ]
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "n-cmd",
+        "category": "command",
+        "command": "zsh -lc go test ./...",
+        "rawName": "CommandExecution",
+        "startedAt": "2026-01-02T10:00:15.500Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "chunk": "€😀éx€€€😀éx\n0025 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0026 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0027 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0028 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0029 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0030 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0031 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0032 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0033 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0034 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0035 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0036 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0037 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0038 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0039 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0040 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0041 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0042 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0043 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0044 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0045 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0046 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0047 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0048 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0049 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0050 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0051 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0052 €€€😀",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "chunk": "éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0053 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0054 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0055 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0056 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0057 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0058 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0059 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0060 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0061 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0062 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0063 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0064 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0065 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0066 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0067 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0068 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0069 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0070 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0071 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0072 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0073 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0074 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0075 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0076 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0077 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0078 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0079 €€€😀éx€€€😀éx€€€😀éx€€€",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "chunk": "😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0080 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0081 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0082 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0083 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0084 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0085 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0086 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0087 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0088 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0089 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0090 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0091 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0092 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0093 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0094 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0095 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0096 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0097 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0098 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0099 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0100 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0101 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0102 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0103 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0104 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0105 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0106 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "chunk": "€😀éx€€€😀éx€€€😀éx\n0107 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0108 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0109 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0110 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0111 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0112 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0113 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0114 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0115 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0116 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0117 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0118 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0119 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0120 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0121 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0122 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0123 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0124 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0125 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0126 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0127 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0128 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0129 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0130 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0131 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0132 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\n0133 €€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx€€€😀éx\ndon",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "chunk": "e!",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-cmd",
+      "exitCode": 3,
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "n-fc",
+        "category": "edit",
+        "files": [
+          "/p/beta/2",
+          "/p/beta/10",
+          "/p/beta/b.txt",
+          "/p/beta/c.txt",
+          "/p/beta/a.txt"
+        ],
+        "rawName": "FileChange",
+        "startedAt": "2026-01-02T10:00:16.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-fc",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1,
+      "writes": [
+        {
+          "op": "delete",
+          "path": "/p/beta/2"
+        },
+        {
+          "op": "create",
+          "path": "/p/beta/10"
+        },
+        {
+          "op": "edit",
+          "path": "/p/beta/b.txt"
+        },
+        {
+          "op": "move",
+          "path": "/p/beta/c.txt"
+        },
+        {
+          "op": "edit",
+          "path": "/p/beta/a.txt"
+        }
+      ]
+    },
+    {
+      "agent": {
+        "cwd": "/p/ghost",
+        "id": "parity/codex:default:cx-ghost",
+        "lastEventAt": "2026-01-02T10:00:17.000Z",
+        "link": "root",
+        "name": "cx-ghost",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-ghost",
+        "callId": "n-ghost",
+        "category": "command",
+        "command": "echo ghost",
+        "rawName": "CommandExecution",
+        "startedAt": "2026-01-02T10:00:17.250Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-ghost",
+      "callId": "n-ghost",
+      "chunk": "ghost\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-ghost",
+      "callId": "n-ghost",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "x-long",
+        "category": "command",
+        "command": "rg -n 'üüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüüü",
+        "rawName": "exec_command",
+        "startedAt": "2026-01-02T10:00:20.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "interrupted",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta",
+        "id": "parity/codex:default:cx-main",
+        "lastEventAt": "2026-01-02T10:00:24.000Z",
+        "link": "root",
+        "model": "gpt-5.5-codex-mini",
+        "name": "Codex session",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "interrupted"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta",
+        "id": "parity/codex:default:cx-kid",
+        "lastEventAt": "2026-01-02T10:00:30.000Z",
+        "link": "confirmed",
+        "name": "explorer",
+        "parentId": "parity/codex:default:cx-main",
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta/sub",
+        "id": "parity/codex:default:cx-kid",
+        "lastEventAt": "2026-01-02T10:00:31.000Z",
+        "link": "confirmed",
+        "model": "gpt-5.5-codex",
+        "name": "explorer",
+        "parentId": "parity/codex:default:cx-main",
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "sub-agent",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-kid",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-kid",
+        "callId": "k1",
+        "category": "command",
+        "command": "rg -n parser src",
+        "rawName": "exec_command",
+        "startedAt": "2026-01-02T10:00:33.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-kid",
+      "callId": "k1",
+      "chunk": "src/parser.ts:1:export function parse() {}\n",
+      "host": "parity",
+      "kind": "tool.output",
+      "truncated": false,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-kid",
+      "callId": "k1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "call": {
+        "agentId": "parity/codex:default:cx-main",
+        "callId": "n-other",
+        "category": "command",
+        "command": "true",
+        "rawName": "CommandExecution",
+        "startedAt": "2026-01-02T10:00:35.000Z"
+      },
+      "host": "parity",
+      "kind": "tool.start",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "n-other",
+      "exitCode": 0,
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": true,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-kid",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    },
+    {
+      "agent": {
+        "cwd": "/p/beta",
+        "id": "parity/codex:default:cx-guard",
+        "lastEventAt": "2026-01-02T10:00:40.000Z",
+        "link": "root",
+        "name": "Approval review",
+        "parentId": null,
+        "projectRoot": null,
+        "provider": "codex",
+        "role": "main",
+        "status": "idle"
+      },
+      "host": "parity",
+      "kind": "agent.upsert",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-guard",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "working",
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-guard",
+      "host": "parity",
+      "kind": "agent.status",
+      "status": "idle",
+      "v": 1
+    }
+  ],
+  "statuses": [
+    {
+      "host": "parity",
+      "kind": "source.status",
+      "source": "logs:<HOME>/.claude/projects",
+      "state": "ok",
+      "v": 1
+    },
+    {
+      "host": "parity",
+      "kind": "source.status",
+      "source": "logs:<HOME>/.codex/sessions",
+      "state": "ok",
+      "v": 1
+    }
+  ],
+  "timeouts": [
+    {
+      "agentId": "parity/claude:default:pa",
+      "callId": "r-open",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": null,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:pa:kid2",
+      "callId": "k2-r",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": null,
+      "v": 1
+    },
+    {
+      "agentId": "parity/claude:default:s1:sub1",
+      "callId": "u1",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": null,
+      "v": 1
+    },
+    {
+      "agentId": "parity/codex:default:cx-main",
+      "callId": "x-long",
+      "host": "parity",
+      "kind": "tool.end",
+      "ok": null,
+      "v": 1
+    }
+  ]
+}

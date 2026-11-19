@@ -62,10 +62,10 @@ func writeLines(t *testing.T, file string, lines []string) {
 // Their records are from the last minute, so their agents are inside the
 // linger window. The cwd does not exist, so no agent gets a project root and
 // neither collector watches a directory.
-func hubHome(t *testing.T) string {
+func hubHome(t *testing.T, t0 time.Time) string {
 	t.Helper()
 	home := t.TempDir()
-	base := time.Now().Add(-40 * time.Second)
+	base := t0
 	fill := func(formats []string) []string {
 		lines := make([]string, len(formats))
 		for i, f := range formats {
@@ -95,11 +95,11 @@ func hubHome(t *testing.T) string {
 
 // writeRemoteStream writes what the fake remote prints: a hello, an empty
 // snapshot, three agent.upsert (one sub-agent), two tool.start, one tool.end
-// and a coverage, with timestamps from the last minute. Every envelope names
+// and a coverage, with timestamps from t0+10s on. Every envelope names
 // streamHost. It returns the file.
-func writeRemoteStream(t *testing.T) string {
+func writeRemoteStream(t *testing.T, t0 time.Time) string {
 	t.Helper()
-	base := time.Now().Add(-30 * time.Second)
+	base := t0.Add(10 * time.Second)
 	at := func(s int) string { return isoAt(base.Add(time.Duration(s) * time.Second)) }
 	ptr := func(s string) *string { return &s }
 	ok := true
@@ -149,12 +149,36 @@ func writeRemoteStream(t *testing.T) string {
 	return file
 }
 
-// hubEnv writes the inputs of a hub run and returns the environment of the
-// hubs: HOME is the new home, and every remote prints the stream and stays up.
-func hubEnv(t *testing.T) []string {
+// hubInputs are the inputs of a hub run.
+type hubInputs struct {
+	env  []string  // the environment of the hubs
+	home string    // the temporary HOME
+	t0   time.Time // every log time is t0 plus a fixed delta
+}
+
+// freeze returns the body's hosts and stream with HOME as <HOME>, every time
+// as an offset from t0 and the local host label as <LOCAL>, as hub.json
+// stores them.
+func (in hubInputs) freeze(t *testing.T, b hubBody) ([]any, stream) {
 	t.Helper()
-	home := hubHome(t)
-	file := writeRemoteStream(t)
+	z := newFreezer(t, in.home, in.t0)
+	for _, h := range b.hosts {
+		if m, _ := h.(map[string]any); m["kind"] == "local" {
+			z.local, _ = m["label"].(string)
+		}
+	}
+	hosts, _ := z.value(b.hosts).([]any)
+	return hosts, z.stream(b.s)
+}
+
+// hubEnv writes the inputs of a hub run, 40 s before now (t0) and later, and
+// returns them: HOME is the new home, and every remote prints the stream and
+// stays up.
+func hubEnv(t *testing.T) hubInputs {
+	t.Helper()
+	t0 := time.UnixMilli(time.Now().Add(-40 * time.Second).UnixMilli())
+	home := hubHome(t, t0)
+	file := writeRemoteStream(t, t0)
 	if strings.Contains(file, "'") {
 		t.Fatalf("the temporary path %q holds a quote", file)
 	}
@@ -162,7 +186,7 @@ func hubEnv(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(childEnv(home), "AGENT_VIEW_REMOTE_COMMAND="+string(argv))
+	return hubInputs{env: append(childEnv(home), "AGENT_VIEW_REMOTE_COMMAND="+string(argv)), home: home, t0: t0}
 }
 
 // syncBuffer is a bytes.Buffer that a child writes while the test reads it.
@@ -446,9 +470,9 @@ func requireHubContent(t *testing.T, b hubBody) {
 // local logs and the same fake remote.
 func TestParityHubSnapshot(t *testing.T) {
 	requireBun(t)
-	env := hubEnv(t)
-	goHub := startHub(t, "Go", env, goBin, "serve", "--port", "0", "--remote", fakeHost)
-	tsHub := startHub(t, "TypeScript", env, bunPath, "src/cli.ts", "--no-open", "--port", "0", "--remote", fakeHost)
+	in := hubEnv(t)
+	goHub := startHub(t, "Go", in.env, goBin, "serve", "--port", "0", "--remote", fakeHost)
+	tsHub := startHub(t, "TypeScript", in.env, bunPath, "src/cli.ts", "--no-open", "--port", "0", "--remote", fakeHost)
 	bodies := waitStable(t, goHub, tsHub)
 	goBody, tsBody := bodies[0], bodies[1]
 
@@ -460,6 +484,8 @@ func TestParityHubSnapshot(t *testing.T) {
 	}
 	requireHubContent(t, goBody)
 	t.Logf("compared %d hosts and %d envelopes", len(tsBody.hosts), len(tsBody.s.ordered))
+	hosts, s := in.freeze(t, tsBody)
+	writeGoldenJSON(t, "hub.json", toFile(hosts, s))
 }
 
 // runGoAudit runs "agent-view audit --port <port>" and returns its stdout.
@@ -481,7 +507,7 @@ func runGoAudit(t *testing.T, port string) string {
 // the Go hub.
 func TestParityAudit(t *testing.T) {
 	requireBun(t)
-	goHub := startHub(t, "Go", hubEnv(t), goBin, "serve", "--port", "0", "--remote", fakeHost)
+	goHub := startHub(t, "Go", hubEnv(t).env, goBin, "serve", "--port", "0", "--remote", fakeHost)
 	waitStable(t, goHub)
 
 	goOut := runGoAudit(t, goHub.port)
@@ -509,4 +535,5 @@ func TestParityAudit(t *testing.T) {
 		t.Errorf("the Go report has %d Claude agents, want at least 1", n)
 	}
 	t.Logf("report: %s", canonical(goReport))
+	writeGoldenJSON(t, "audit.json", tsReport)
 }

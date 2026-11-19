@@ -1,0 +1,21 @@
+{
+  "counts": {
+    "claude": {
+      "agents": 3,
+      "confirmedParents": 1,
+      "confirmedWrites": 2,
+      "sessionLinks": 0
+    },
+    "codex": {
+      "agents": 2,
+      "confirmedParents": 0,
+      "confirmedWrites": 1,
+      "sessionLinks": 0
+    }
+  },
+  "degradedSources": 1,
+  "discoveredLogs": 5,
+  "loadedLogs": 4,
+  "malformedRecords": 1,
+  "writesByLapsedAgents": 0
+}
