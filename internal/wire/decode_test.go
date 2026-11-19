@@ -73,7 +73,8 @@ func TestDecodeSourceEvent(t *testing.T) {
 	if !reflect.DeepEqual(se, want) {
 		t.Errorf("got %#v, want %#v", se, want)
 	}
-	for _, bad := range []string{`{"kind":"fs.change"}`, `{"ts":"T"}`, `[]`, `{"kind":"fs.change","ts":"T"} x`, `{"kind":"tool.start","call":3,"ts":"T"}`} {
+	for _, bad := range []string{`{"kind":"fs.change"}`, `{"ts":"T"}`, `[]`, `{"kind":"fs.change","ts":"T"} x`, `{"kind":"tool.start","call":3,"ts":"T"}`,
+		`{"kind":"tool.start","call":null,"ts":"T"}`, `{"kind":"agent.upsert","ts":"T"}`, `{"kind":"coverage","coverage":null,"ts":"T"}`} {
 		if _, err := DecodeSourceEvent([]byte(bad)); err == nil {
 			t.Errorf("DecodeSourceEvent(%q) returned no error", bad)
 		}
@@ -155,6 +156,12 @@ func TestDecodeRejects(t *testing.T) {
 		"seq too large": `{"v":1,"host":"h","seq":1e300,"kind":"hello","ts":"T"}`,
 		"call string":   `{"v":1,"host":"h","seq":1,"kind":"tool.start","call":"x","ts":"T"}`,
 		"truncated str": `{"v":1,"host":"h","seq":1,"kind":"tool.output","agentId":"a","callId":"c","chunk":"x","truncated":"yes","ts":"T"}`,
+		"no agent":      `{"v":1,"host":"h","seq":1,"kind":"agent.upsert","ts":"T"}`,
+		"agent null":    `{"v":1,"host":"h","seq":1,"kind":"agent.upsert","agent":null,"ts":"T"}`,
+		"no call":       `{"v":1,"host":"h","seq":1,"kind":"tool.start","ts":"T"}`,
+		"call null":     `{"v":1,"host":"h","seq":1,"kind":"tool.start","call":null,"ts":"T"}`,
+		"no coverage":   `{"v":1,"host":"h","seq":1,"kind":"coverage","ts":"T"}`,
+		"coverage null": `{"v":1,"host":"h","seq":1,"kind":"coverage","coverage":null,"ts":"T"}`,
 		"not JSON":      `not json`,
 		"empty":         ``,
 		"array":         `[{"v":1}]`,
@@ -170,6 +177,20 @@ func TestDecodeRejects(t *testing.T) {
 				t.Errorf("DecodeEnvelope(%q) = %+v, want an error", line, env)
 			}
 		})
+	}
+}
+
+// An agent.upsert, tool.start or coverage needs its object (TestDecodeRejects),
+// but an empty object decodes: the object's fields are lenient.
+func TestDecodeAcceptsEmptyNestedObject(t *testing.T) {
+	for _, line := range []string{
+		`{"v":1,"host":"h","seq":1,"kind":"agent.upsert","agent":{},"ts":"T"}`,
+		`{"v":1,"host":"h","seq":1,"kind":"tool.start","call":{},"ts":"T"}`,
+		`{"v":1,"host":"h","seq":1,"kind":"coverage","coverage":{},"ts":"T"}`,
+	} {
+		if _, err := DecodeEnvelope([]byte(line)); err != nil {
+			t.Errorf("DecodeEnvelope(%q): %v", line, err)
+		}
 	}
 }
 

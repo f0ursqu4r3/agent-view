@@ -340,20 +340,34 @@ func TestSnapshotReplacesMirror(t *testing.T) {
 	}
 
 	before := len(rec.all())
-	// What the decoder makes of {"kind":"tool.start","call":null} and an
-	// agent.upsert without an agent.
+	// A source decodes each line and skips the ones that fail, as the remote
+	// does. TypeScript forwards these lines and its state throws on them; the
+	// Go decoder rejects them, so they reach neither the subscribers nor the
+	// mirror.
 	for _, line := range []string{
 		`{"kind":"tool.start","call":null,"ts":"` + tsNow + `"}`,
 		`{"kind":"agent.upsert","ts":"` + tsNow + `"}`,
+		`{"kind":"coverage","coverage":null,"ts":"` + tsNow + `"}`,
 	} {
 		e, err := wire.DecodeSourceEvent([]byte(line))
-		if err != nil {
-			t.Fatalf("decode %s: %v", line, err)
+		if err == nil {
+			t.Errorf("decode %s: no error", line)
+			a.emit(e)
 		}
-		a.emit(e)
 	}
-	if n := len(rec.all()); n != before+2 {
-		t.Fatalf("got %d envelopes, want %d", n, before+2)
+	if n := len(rec.all()); n != before {
+		t.Errorf("got %d envelopes, want %d", n, before)
+	}
+	replay := &recorder{}
+	h.Subscribe(replay.fn)
+	if got := hostKinds(replay.all()); !slices.Equal(got, []string{"alpha:hello", "alpha:snapshot"}) {
+		t.Errorf("replay = %v, want [alpha:hello alpha:snapshot]", got)
+	}
+	if ids := agentIDs(snapshots(replay.all())[0]); !slices.Equal(ids, []string{"fresh"}) {
+		t.Errorf("replayed agents = %v, want [fresh]", ids)
+	}
+	if calls := snapshots(replay.all())[0].Ev.(wire.Snapshot).OpenCalls; len(calls) != 0 {
+		t.Errorf("replayed calls = %+v, want none", calls)
 	}
 	a.emit(upsert("after"))
 	got := rec.all()

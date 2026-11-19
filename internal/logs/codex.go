@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-view/internal/text"
 	"agent-view/internal/wire"
 )
 
@@ -79,7 +80,7 @@ func (r *codexRecord) touch(id string, set func(*agentState)) *agentState {
 	cur := r.a.agents[id]
 	if cur == nil {
 		cur = &agentState{
-			identity:    identity{name: sliceUTF16(id[strings.LastIndex(id, ":")+1:], 12), role: "main", link: "root"},
+			identity:    identity{name: text.SliceUTF16(id[strings.LastIndex(id, ":")+1:], 12), role: "main", link: "root"},
 			status:      "idle",
 			lastEventAt: r.ts,
 		}
@@ -391,7 +392,7 @@ func (a *CodexAdapter) directCall(r *codexRecord, agent *agentState, agentID str
 			command, ok = commandText(in.Get("cmd"))
 		}
 		if ok {
-			call.Command = sliceUTF16(command, MaxCommandChars)
+			call.Command = text.SliceUTF16(command, MaxCommandChars)
 		}
 	}
 	r.emit(wire.ToolStart{Call: call}, r.ts)
@@ -509,7 +510,7 @@ func (a *CodexAdapter) nativeItem(r *codexRecord, file string, p *Obj, prefix st
 	switch changes := obj(item.Get("changes")); {
 	case typ == "CommandExecution":
 		if command, ok := commandText(item.Get("command")); ok {
-			call.Command = sliceUTF16(command, MaxCommandChars)
+			call.Command = text.SliceUTF16(command, MaxCommandChars)
 		}
 		if code, ok := isInteger(item.Get("exit_code")); ok {
 			end.ExitCode = &code

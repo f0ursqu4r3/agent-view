@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"agent-view/internal/text"
 	"agent-view/internal/wire"
 )
 
@@ -85,7 +86,7 @@ func (a *ClaudeAdapter) Ingest(record any, file, scope string) []wire.SourceEven
 	case existing != nil:
 		next.name = existing.name
 	case child != "":
-		next.name = "Sub-agent " + sliceUTF16(child, 8)
+		next.name = "Sub-agent " + text.SliceUTF16(child, 8)
 	default:
 		next.name = "Claude Code session"
 	}
@@ -160,7 +161,7 @@ func (a *ClaudeAdapter) touch(id, ts string, fields identity) *agentState {
 	cur := a.agents[id]
 	if cur == nil {
 		cur = &agentState{
-			identity:    identity{name: sliceUTF16(id[strings.LastIndex(id, ":")+1:], 12), role: "main", link: "root"},
+			identity:    identity{name: text.SliceUTF16(id[strings.LastIndex(id, ":")+1:], 12), role: "main", link: "root"},
 			status:      "idle",
 			lastEventAt: ts,
 		}
@@ -254,7 +255,7 @@ func (a *ClaudeAdapter) toolUse(agent *agentState, agentID string, cwd *string, 
 	agent.status = "working"
 	call := wire.Call{AgentID: agentID, CallID: callID, StartedAt: ts, Category: category, RawName: name, Files: files}
 	if command, ok := input.Get("command").(string); ok && category == "command" {
-		call.Command = sliceUTF16(command, MaxCommandChars)
+		call.Command = text.SliceUTF16(command, MaxCommandChars)
 	}
 	if pattern, ok := input.Get("pattern").(string); ok && category == "search" {
 		call.Pattern = pattern
@@ -293,7 +294,7 @@ func (a *ClaudeAdapter) toolResult(agent *agentState, agentID, root string, b, r
 		}
 		name, ok := str(call.input.Get("description"))
 		if !ok {
-			name = "Sub-agent " + sliceUTF16(spawned, 8)
+			name = "Sub-agent " + text.SliceUTF16(spawned, 8)
 		}
 		parent := agentID
 		child := a.touch(childID, ts, identity{

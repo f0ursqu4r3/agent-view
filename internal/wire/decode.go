@@ -99,9 +99,19 @@ func decodeAs[T Event](line []byte) (Event, error) {
 	return ev, nil
 }
 
+// requiredObject names the member that a kind cannot do without. The state
+// cannot apply such an event when the member is missing or null (TypeScript's
+// apply throws), so the line is an error.
+var requiredObject = map[string]string{"agent.upsert": "agent", "tool.start": "call", "coverage": "coverage"}
+
 // decodeEvent builds the event of the given kind. A kind this version does not
 // know becomes a Raw that holds the non-envelope members as received.
 func decodeEvent(kind string, line []byte, ms []member) (Event, error) {
+	if key, ok := requiredObject[kind]; ok {
+		if raw, ok := find(ms, key); !ok || string(raw) == "null" {
+			return nil, fmt.Errorf("wire: %s: %q is missing or null", kind, key)
+		}
+	}
 	var (
 		ev  Event
 		err error
@@ -184,8 +194,10 @@ func DecodeSourceEvent(line []byte) (SourceEvent, error) {
 
 // DecodeEnvelope decodes one NDJSON line. The line must be a JSON object with
 // v equal to 1, a string kind, a string host, an integer seq and a string ts.
-// A known kind whose fields have the wrong type is an error. Fields that a
-// known kind does not define are dropped. An unknown kind becomes a Raw.
+// A known kind whose fields have the wrong type is an error, and so is an
+// agent.upsert, tool.start or coverage whose object is missing or null.
+// Fields that a known kind does not define are dropped. An unknown kind
+// becomes a Raw.
 func DecodeEnvelope(line []byte) (Envelope, error) {
 	ms, err := scanObject(line)
 	if err != nil {
