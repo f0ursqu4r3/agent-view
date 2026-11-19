@@ -193,7 +193,9 @@ func TestDemoSourceEmitPanic(t *testing.T) {
 // the real scheduler runs callbacks and honors cancel
 func TestRealScheduler(t *testing.T) {
 	s := NewRealScheduler()
-	if d := time.Now().UnixMilli() - int64(s.NowMs()); d < 0 || d > 1000 {
+	// NowMs first: the clock only moves on, so d is never negative.
+	now := s.NowMs()
+	if d := time.Now().UnixMilli() - int64(now); d < 0 || d > 1000 {
 		t.Errorf("NowMs off by %d ms", d)
 	}
 	done := make(chan struct{})
