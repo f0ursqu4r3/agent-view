@@ -50,19 +50,7 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 	name := regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(t.Name(), "-")
 	p := &tuiPane{t: t, sock: fmt.Sprintf("av-%s-%d", name, os.Getpid())}
 
-	// The collector reads HOME, CLAUDE_CONFIG_DIR and CODEX_HOME: the test
-	// sets HOME to a temporary directory and drops the others (and XDG_*),
-	// so it never reads the owner's logs.
-	env := []string{"HOME=" + o.home}
-	for _, kv := range os.Environ() {
-		k, _, _ := strings.Cut(kv, "=")
-		switch {
-		case k == "HOME", k == "TMUX", k == "TMUX_PANE", k == "CLAUDE_CONFIG_DIR", k == "CODEX_HOME", k == "NO_COLOR",
-			strings.HasPrefix(k, "AGENT_VIEW_"), strings.HasPrefix(k, "XDG_"):
-			continue
-		}
-		env = append(env, kv)
-	}
+	env := isolatedEnv(o.home)
 	argv := []string{"-L", p.sock, "-f", "/dev/null", "new-session", "-d", "-s", "main",
 		"-x", "100", "-y", "30", "-c", t.TempDir(), "--", binPath}
 	argv = append(argv, o.args...)
@@ -81,6 +69,24 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 		t.Fatalf("tmux new-session: %v: %s", err, out)
 	}
 	return p
+}
+
+// isolatedEnv returns this process's environment with HOME set to home.
+// The collector reads HOME, CLAUDE_CONFIG_DIR and CODEX_HOME: the others are
+// dropped (and XDG_*, TMUX*, NO_COLOR, AGENT_VIEW_*), so a test never reads
+// the owner's logs.
+func isolatedEnv(home string) []string {
+	env := []string{"HOME=" + home}
+	for _, kv := range os.Environ() {
+		k, _, _ := strings.Cut(kv, "=")
+		switch {
+		case k == "HOME", k == "TMUX", k == "TMUX_PANE", k == "CLAUDE_CONFIG_DIR", k == "CODEX_HOME", k == "NO_COLOR",
+			strings.HasPrefix(k, "AGENT_VIEW_"), strings.HasPrefix(k, "XDG_"):
+			continue
+		}
+		env = append(env, kv)
+	}
+	return env
 }
 
 func (p *tuiPane) tmux(args ...string) string {
@@ -233,8 +239,26 @@ func startDemoRemote(t *testing.T, prefix, marker string) *tuiPane {
 	stream := remoteStream(t)
 	script := prefix + "cat '" + stream + "'; exec sleep " + marker
 	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
-	p.waitScreen("both hosts up and the remote agent", func(s string) bool {
-		return hostUp(s, localLabel()) && hostUp(s, "fakehost") && strings.Contains(s, "remote-agent-e2e")
+	p.waitScreen("both hosts up", func(s string) bool {
+		return hostUp(s, localLabel()) && hostUp(s, "fakehost")
+	})
+	// At 100 × 30 the demo's lanes can push the remote lane off the board.
+	// Hosts keep their first-appearance order, so the remote lane is the first
+	// or the last: selecting the last row (G), then the first (g), in turn,
+	// scrolls the board until the remote agent shows.
+	keys := []string{"G", "g"}
+	n := 0
+	p.waitScreen("the remote agent", func(s string) bool {
+		if strings.Contains(s, "remote-agent-e2e") {
+			return true
+		}
+		if n%5 == 4 { // every 500 ms
+			k := keys[(n/5)%2]
+			t.Logf("the remote lane is off the board: pressing %s", k)
+			p.keys(k)
+		}
+		n++
+		return false
 	})
 	for deadline := time.Now().Add(paneWait); pgrepCount(t, "sleep "+marker) != 1; time.Sleep(100 * time.Millisecond) {
 		if time.Now().After(deadline) {

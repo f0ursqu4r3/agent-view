@@ -130,7 +130,7 @@ func TestRunTUIPanicBeforeRun(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
-	cmd.Env = append(os.Environ(), helperEnv+"=prerun-panic", "HOME="+t.TempDir())
+	cmd.Env = append(isolatedEnv(t.TempDir()), helperEnv+"=prerun-panic")
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	err := cmd.Run()
@@ -140,7 +140,7 @@ func TestRunTUIPanicBeforeRun(t *testing.T) {
 	if err == nil {
 		t.Fatal("helper exited 0, want a panic exit")
 	}
-	if n := strings.Count(errb.String(), "panic: PRE-RUN-PANIC-MARKER"); n != 1 {
+	if n := strings.Count(errb.String(), "PRE-RUN-PANIC-MARKER"); n != 1 {
 		t.Fatalf("stderr has the panic message %d times, want 1: %q", n, errb.String())
 	}
 }

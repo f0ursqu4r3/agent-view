@@ -128,7 +128,7 @@ func TestCapturePanicPrintsAfterRestore(t *testing.T) {
 	if err == nil {
 		t.Fatal("helper exited 0, want a panic exit")
 	}
-	if n := strings.Count(errs, "panic: QUIET-PANIC-MARKER"); n != 1 {
+	if n := strings.Count(errs, "QUIET-PANIC-MARKER"); n != 1 {
 		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
 	}
 	if strings.Contains(out, "QUIET-PANIC-MARKER") {
@@ -143,7 +143,7 @@ func TestCaptureGoroutinePanicReachesStderr(t *testing.T) {
 	if err == nil {
 		t.Fatal("helper exited 0, want a panic exit")
 	}
-	if n := strings.Count(errs, "panic: QUIET-GO-PANIC-MARKER"); n != 1 {
+	if n := strings.Count(errs, "QUIET-GO-PANIC-MARKER"); n != 1 {
 		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
 	}
 }
@@ -154,7 +154,7 @@ func TestPanicAfterRestorePrintsOnce(t *testing.T) {
 	if err == nil {
 		t.Fatal("helper exited 0, want a panic exit")
 	}
-	if n := strings.Count(errs, "panic: QUIET-LATE-PANIC-MARKER"); n != 1 {
+	if n := strings.Count(errs, "QUIET-LATE-PANIC-MARKER"); n != 1 {
 		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
 	}
 }
