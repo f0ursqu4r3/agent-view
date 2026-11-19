@@ -4,12 +4,6 @@ Date: 2026-11-18. Branch: go-p2b1-collector. Plan: `docs/superpowers/plans/2026-
 
 These are the findings that the per-task reviews and the final review deferred. The final fix wave fixed these, so they are left out: a partial watch root restarted every other tick (the directory limit, ENOSPC, EMFILE, ENFILE, and an unreadable subdirectory); a dropped watcher hint for a new log; the `TestRealScheduler` clock flake; the README notes on cgo and exit time. Items resolved during the tasks are also left out (the Task 5 log shapes, now in the parity fixtures; the test helper names; the start of the fsnotify error loop; the fsnotify EINVAL error; the local parity guard).
 
-## For P2b-2
-
-- `collect.handle` has no recover (final review M4). A panic in `State.Tick`, `Snapshot`, or `startTimers` ends the process. TypeScript `.catch` swallows it. Add one deferred recover that still closes `it.done`.
-- Tick fairness: ticks and coverage starve while the queue never empties. TypeScript timers join the queue tail. The effect is negligible in practice. Decide in P2b-2 (for example, poll the tick channels in the drain).
-- The hub must encode envelopes with `wire.EncodeLine`, never `json.Marshal`: `json.Marshal` escapes `<`, `>`, and `&` again. Say this in the `MarshalJSON` doc.
-
 ## For P2c
 
 - Three ordered or LRU implementations (final review M3): `internal/collect/ordered.go`, `internal/logs/ordered.go`, and `pathCache` in `internal/collect/paths.go`. Extract one generic package.

@@ -55,6 +55,11 @@ type Collector struct {
 	state *State
 	paths *paths
 
+	// stepHook is a test hook. It is nil in production. When set, the loop
+	// calls it at the start of every queued step, inside the step's
+	// recover. Set it before Start or Subscribe.
+	stepHook func()
+
 	// Owned by the loop goroutine.
 	seq       int64
 	subs      []*subscriber
@@ -365,10 +370,31 @@ func (c *Collector) startTimers() {
 	c.covTicker = time.NewTicker(coverageInterval)
 }
 
+// pollTimers queues a tick or a coverage report for a timer that has fired,
+// without blocking. drain calls it between batches, so a queue that never
+// empties still runs them at their interval, behind the items queued before
+// them (as TypeScript timers join the queue tail).
+func (c *Collector) pollTimers() {
+	if c.ticker == nil || c.covTicker == nil {
+		return
+	}
+	select {
+	case <-c.ticker.C:
+		c.enqueue(item{run: c.tick})
+	default:
+	}
+	select {
+	case <-c.covTicker.C:
+		c.pushCoverage()
+	default:
+	}
+}
+
 // drain handles the queued items in order. It reports false once the
 // collector is stopped; the items left are dropped.
 func (c *Collector) drain() bool {
 	for {
+		c.pollTimers()
 		c.mu.Lock()
 		items := c.queue
 		c.queue = nil
@@ -389,20 +415,33 @@ func (c *Collector) drain() bool {
 	}
 }
 
+// handle runs one queued step. A panic in the step is recovered and written
+// to stderr, as TypeScript's .catch swallows it, and the item's done
+// channel still closes.
 func (c *Collector) handle(it item) {
+	closeDone := true
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "agent-view: collector step failed: %v\n", r)
+		}
+		if closeDone && it.done != nil {
+			close(it.done)
+		}
+	}()
+	if c.stepHook != nil {
+		c.stepHook()
+	}
 	switch {
 	case it.events != nil:
 		c.process(it.events)
 	case it.sub != nil:
 		if !c.greet(it.sub) {
-			return // stopped: Subscribe greets on its caller's goroutine
+			closeDone = false // stopped: Subscribe greets on its caller's goroutine
+			return
 		}
 		c.subs = append(c.subs, it.sub)
 	case it.run != nil:
 		it.run()
-	}
-	if it.done != nil {
-		close(it.done)
 	}
 }
 

@@ -19,7 +19,9 @@ func marshalValue(v any) ([]byte, error) {
 }
 
 // MarshalJSON writes one flat object. The keys are v, host, seq, kind, the
-// event's fields in schema.ts order, and ts.
+// event's fields in schema.ts order, and ts. Do not call json.Marshal on an
+// Envelope to write it out: json.Marshal escapes <, > and & again, so the
+// bytes differ from the TypeScript output. Use EncodeLine.
 func (e Envelope) MarshalJSON() ([]byte, error) {
 	if e.Ev == nil {
 		return nil, errors.New("wire: envelope has no event")

@@ -2,12 +2,14 @@ package collect
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -680,4 +682,109 @@ func TestPathCacheLRU(t *testing.T) {
 			t.Errorf("get(%s) = %q, %v", k, got, ok)
 		}
 	}
+}
+
+// statusBatch is a one-event source batch for the push tests.
+func statusBatch(source string) []wire.SourceEvent {
+	return []wire.SourceEvent{{Ts: wire.FormatISO(wire.NowMs()), Ev: wire.SourceStatus{Source: source, SourceState: wire.SourceState{State: "ok"}}}}
+}
+
+// Go only: a step that panics is recovered, its done channel still closes, a
+// line goes to stderr, and the collector keeps delivering later envelopes.
+func TestStepPanicIsRecovered(t *testing.T) {
+	c, _ := newDemo()
+	var armed atomic.Bool
+	c.stepHook = func() {
+		if armed.CompareAndSwap(true, false) {
+			panic("boom")
+		}
+	}
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	startCollector(t, c)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := os.Stderr
+	os.Stderr = w
+	restored := false
+	restore := func() {
+		if !restored {
+			restored = true
+			os.Stderr = saved
+			w.Close()
+		}
+	}
+	defer restore()
+
+	armed.Store(true)
+	c.push(statusBatch("lost"))
+	c.push(statusBatch("kept"))
+	if !c.await(nil) {
+		t.Fatal("await did not complete")
+	}
+	hasSource := func(source string) func([]wire.Envelope) bool {
+		return func(envs []wire.Envelope) bool {
+			_, i := find(envs, func(e wire.SourceStatus) bool { return e.Source == source })
+			return i >= 0
+		}
+	}
+	if !hasSource("kept")(rec.all()) {
+		t.Error("the batch after the panic was not delivered")
+	}
+	if hasSource("lost")(rec.all()) {
+		t.Error("the batch that panicked was delivered")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		c.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return")
+	}
+	restore()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "agent-view: collector step failed: boom\n"; !strings.Contains(string(out), want) {
+		t.Errorf("stderr = %q, want it to contain %q", out, want)
+	}
+}
+
+// Go only: a queue that never empties still runs the tick, so an open call
+// that timed out ends while the load lasts.
+func TestTickRunsUnderSustainedLoad(t *testing.T) {
+	dir := realTempDir(t)
+	proj := filepath.Join(dir, "proj")
+	mkdirs(t, filepath.Join(proj, ".git"))
+	root := claudeRoot(dir)
+	writeLog(t, root, toolUseLine(t, "slow1", "Write", map[string]any{"file_path": filepath.Join(proj, "a.ts"), "content": "x"}, proj))
+	c := New(Options{Host: "mac", Roots: []logs.Root{root}, Lifecycle: lifecycle.Options{CallTimeoutMs: 100}})
+	// Each step takes about as long as the pusher's period, so the queue
+	// has an item at every check.
+	c.stepHook = func() { time.Sleep(time.Millisecond) }
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	startCollector(t, c)
+
+	const load = 3 * time.Second
+	loadStart := time.Now()
+	for time.Since(loadStart) < load {
+		c.push(statusBatch("load"))
+		time.Sleep(time.Millisecond)
+		if _, i := find(rec.all(), endOf("slow1")); i >= 0 {
+			if d := time.Since(loadStart); d >= load {
+				t.Fatalf("tool.end arrived after the load ended (%v)", d)
+			}
+			return
+		}
+	}
+	t.Fatal("the timed-out tool.end did not arrive before the load ended")
 }
