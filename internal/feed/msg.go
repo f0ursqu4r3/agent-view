@@ -1,5 +1,5 @@
-// Package feed runs the collector and turns its output into Bubble Tea
-// messages for the TUI.
+// Package feed holds the Bubble Tea messages that carry the collector's
+// envelopes, host states and diagnostics to the TUI.
 package feed
 
 import "agent-view/internal/schema"

@@ -42,8 +42,7 @@ const Usage = `usage: agent-view [--demo] [--demo-scale normal|stress] [--watch 
   --remote <ssh-host>            add a remote machine over SSH (repeatable)
   audit                          check a running hub and print counts
 
-Set NO_COLOR to turn color off. Set AGENT_VIEW_COLLECTOR (a JSON array of
-strings) to replace the collector command.`
+Set NO_COLOR to turn color off.`
 
 // Args holds the parsed command line.
 type Args struct {
@@ -281,23 +280,4 @@ func lingerMs(v string) (int64, bool) {
 		ms = maxLingerMs
 	}
 	return max(int64(ms), 1), true
-}
-
-// CollectorFlags returns the flags that go to the collector child.
-// --reduced-motion stays in the TUI.
-func (a Args) CollectorFlags() []string {
-	var f []string
-	if a.Demo {
-		f = append(f, "--demo")
-	}
-	if a.DemoScale != "" {
-		f = append(f, "--demo-scale", a.DemoScale)
-	}
-	for _, w := range a.Watch {
-		f = append(f, "--watch", w)
-	}
-	if a.LingerMs > 0 {
-		f = append(f, "--linger", strconv.FormatFloat(float64(a.LingerMs)/60_000, 'f', -1, 64))
-	}
-	return f
 }

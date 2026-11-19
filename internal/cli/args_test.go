@@ -23,12 +23,6 @@ func TestParseFlags(t *testing.T) {
 	if !reflect.DeepEqual(a, want) {
 		t.Fatalf("Parse = %+v, want %+v", a, want)
 	}
-	wantFlags := []string{
-		"--demo", "--demo-scale", "stress", "--watch", "/a", "--watch", "/b", "--linger", "5",
-	}
-	if got := a.CollectorFlags(); !reflect.DeepEqual(got, wantFlags) {
-		t.Fatalf("CollectorFlags = %q, want %q", got, wantFlags)
-	}
 }
 
 func TestParseDefaults(t *testing.T) {
@@ -42,9 +36,6 @@ func TestParseDefaults(t *testing.T) {
 	if a.Demo || a.Reduced || a.LingerMs != 0 || len(a.Watch) != 0 {
 		t.Fatalf("defaults = %+v", a)
 	}
-	if got := a.CollectorFlags(); len(got) != 0 {
-		t.Fatalf("CollectorFlags = %q, want none", got)
-	}
 }
 
 func TestParseEqualsForm(t *testing.T) {
@@ -52,19 +43,9 @@ func TestParseEqualsForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"--demo-scale", "normal", "--watch", "/x", "--linger", "3"}
-	if got := a.CollectorFlags(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("CollectorFlags = %q, want %q", got, want)
-	}
-}
-
-func TestReducedMotionNotPassedToCollector(t *testing.T) {
-	a, err := Parse([]string{"--reduced-motion"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := a.CollectorFlags(); len(got) != 0 {
-		t.Fatalf("CollectorFlags = %q, want none", got)
+	want := Args{Mode: "tui", DemoScale: "normal", Watch: []string{"/x"}, LingerMs: 180_000}
+	if !reflect.DeepEqual(a, want) {
+		t.Fatalf("Parse = %+v, want %+v", a, want)
 	}
 }
 
@@ -198,9 +179,6 @@ func TestParseLingerDecimal(t *testing.T) {
 	}
 	if a.LingerMs != 90_000 {
 		t.Fatalf("LingerMs = %d, want 90000", a.LingerMs)
-	}
-	if got := a.CollectorFlags(); !reflect.DeepEqual(got, []string{"--linger", "1.5"}) {
-		t.Fatalf("CollectorFlags = %q", got)
 	}
 	for _, v := range []string{"0", "x", "-1", "0.0"} {
 		_, err := Parse([]string{"--linger", v})

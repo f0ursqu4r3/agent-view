@@ -2,9 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"slices"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"agent-view/internal/feed"
 )
 
 func pipe(t *testing.T) *os.File {
@@ -91,5 +97,26 @@ func TestNoColor(t *testing.T) {
 		if got := noColor(); got != want {
 			t.Errorf("NO_COLOR=%q: noColor() = %v, want %v", val, got, want)
 		}
+	}
+}
+
+// rest returns the lines the program never took, in order: a line sent as
+// the program ended, then the lines still queued after the stop.
+func TestDiagWriterRest(t *testing.T) {
+	w := newDiagWriter()
+	sent := make(chan tea.Msg, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	w.start(ctx, func(m tea.Msg) { sent <- m })
+
+	w.line("taken")
+	if m := w.filter(nil, <-sent); m != feed.DiagMsg("taken") {
+		t.Fatalf("filter = %#v, want DiagMsg(taken)", m)
+	}
+	w.Write([]byte("dropped\n")) // sent, but the program had ended
+	<-sent
+	cancel()
+	w.line("queued")
+	if got, want := w.rest(), []string{"dropped", "queued"}; !slices.Equal(got, want) {
+		t.Fatalf("rest = %q, want %q", got, want)
 	}
 }
