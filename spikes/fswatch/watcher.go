@@ -25,7 +25,7 @@ var ignoredDirs = map[string]bool{
 type wopts struct {
 	latency time.Duration // FSEvents latency
 	noDefer bool          // FSEvents kFSEventStreamCreateFlagNoDefer
-	maxDirs int           // fsnotify: directory cap, as MAX_DIRS in fs-changes.ts
+	maxDirs int           // fsnotify: directory cap, as MAX_DIRS in the former TypeScript collector/sources/fs-changes.ts (removed in P2c; see git history)
 }
 
 type wstats struct {

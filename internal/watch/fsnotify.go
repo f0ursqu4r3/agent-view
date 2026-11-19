@@ -15,7 +15,8 @@ import (
 	"agent-view/internal/fsutil"
 )
 
-// fsnotifyWatcher is the per-directory mode of watch.ts: one fsnotify watch
+// fsnotifyWatcher is the per-directory mode of the former TypeScript
+// collector/watch.ts (removed in P2c; see git history): one fsnotify watch
 // per directory, found by a walk. A new directory is added on Create, then
 // read, and its entries are reported, so files written before the add are
 // not missed. Symlinked directories are not followed.

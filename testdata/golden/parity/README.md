@@ -15,10 +15,13 @@ tests). The tests need no Bun.
   envelopes, the `source.status` envelopes, the timed-out `tool.end`
   envelopes and the last `coverage` envelope.
 - `hub.json`: the normalized `/api/snapshot` body of the hub. The hub had the
-  local host and one fake remote host (`fakehost`). The file holds the hosts
-  and the same four parts as `fixtures.json`.
+  local host and one fake remote host (`fakehost`). The file has the keys
+  `hosts`, `ordered`, `statuses` and `timeouts`. It has no `coverage` key: the
+  coverage envelope of each host is inside `ordered`, and `statuses` and
+  `timeouts` are empty.
 - `audit.json`: the report that the TypeScript live-audit script printed. It
-  read the `/api/snapshot` of a hub with the same inputs as `hub.json`.
+  read the `/api/snapshot` of the Go hub, which ran with inputs of the same
+  kind as `hub.json`.
 - `demo-normal-60000.ndjson`: the events of the TypeScript demo source at
   `normal` scale on a virtual clock, for 60 000 ms. One event on each line.
 - `demo-stress-10000.ndjson`: the same at `stress` scale, for 10 000 ms.
@@ -31,9 +34,9 @@ The files replace these run-specific values:
 - `<HOME>`: the temporary HOME directory, in every string and map key.
 - `<LOCAL>`: the label of the hub's local host (the machine's name), alone or
   before `/` in an agent ID.
-- `T+<ms>`: an RFC 3339 time in `hub.json`, as milliseconds after the start of
-  the run (`T-<ms>` for a time before it). The tests do the same to the Go
-  output before they compare.
+- `T+<ms>`: an RFC 3339 time in `hub.json`, as milliseconds after `t0` (`T-<ms>`
+  for a time before it). `t0` is the base time of the fake logs; the hub
+  starts later. The tests do the same to the Go output before they compare.
 
 The normalizer in `internal/parity/normalize_test.go` also drops `seq`, `ts`,
 and the `now`, `collectorVersion` and `platform` fields of `hello`.
