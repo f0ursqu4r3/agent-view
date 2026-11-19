@@ -5,13 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"agent-view/internal/cli"
-	"agent-view/internal/collect"
-	"agent-view/internal/hub"
-	"agent-view/internal/lifecycle"
-	"agent-view/internal/remote"
 	"agent-view/internal/server"
 )
 
@@ -37,79 +32,25 @@ func runServe(args cli.Args, stdout, stderr io.Writer, signals <-chan os.Signal)
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 2
 	}
-	var command func(sshHost, label string) []string
-	if override != nil {
-		command = func(string, string) []string { return override }
-	}
 
-	lc := lifecycle.Options{LingerMs: args.LingerMs}
-	h := hub.New(hub.Options{Lifecycle: lc})
-	// fail stops the hub, which stops every source it holds.
-	fail := func(format string, a ...any) int {
-		fmt.Fprintf(stderr, "agent-view: "+format+"\n", a...)
-		h.Stop()
+	st, err := newStack(args, override, nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 1
 	}
 
-	label := h.UniqueLabel(localLabel())
-	local := hub.NewLocalSource(collect.New(collect.Options{
-		Host:      label,
-		Demo:      args.Demo,
-		DemoScale: args.DemoScale,
-		Watch:     args.Watch,
-		Lifecycle: lc,
-	}), label)
-	if err := h.AddSource(local); err != nil {
-		return fail("%v", err)
-	}
-	remotes := make([]*remote.Remote, 0, len(args.Remotes))
-	for _, sshHost := range args.Remotes {
-		r, err := remote.New(remote.Options{SSHHost: sshHost, Label: h.UniqueLabel(sshHost), Command: command})
-		if err != nil {
-			return fail("remote %s: %v", sshHost, err)
-		}
-		if err := h.AddSource(r); err != nil {
-			return fail("remote %s: %v", sshHost, err)
-		}
-		remotes = append(remotes, r)
-	}
-
-	srv, err := server.Start(h, args.Port)
+	srv, err := server.Start(st.hub, args.Port)
 	if err != nil {
-		return fail("cannot start the server on port %d: %v", args.Port, err)
+		fmt.Fprintf(stderr, "agent-view: cannot start the server on port %d: %v\n", args.Port, err)
+		st.hub.Stop() // no source has started: this does not wait
+		return 1
 	}
 	fmt.Fprintf(stdout, "Agent View: %s\n", srv.URL)
 
-	// A remote that fails to connect only shows as down. It never stops the
-	// hub or the local collector.
-	for _, r := range remotes {
-		if err := r.Start(); err != nil {
-			fmt.Fprintf(stderr, "agent-view: remote %s failed: %v\n", r.Label(), err)
-		}
-	}
-	// Start waits for the first scan, so it runs off this goroutine: a signal
-	// must be able to end the process meanwhile.
-	go func() {
-		if err := local.Start(); err != nil {
-			fmt.Fprintf(stderr, "agent-view: local collector failed: %v\n", err)
-		}
-	}()
+	st.start(func(msg string) { fmt.Fprintf(stderr, "agent-view: %s\n", msg) })
 
 	<-signals
 	srv.Stop()
-	stopped := make(chan struct{})
-	go func() {
-		h.Stop()
-		close(stopped)
-	}()
-	select {
-	case <-stopped:
-	case <-time.After(stopWait):
-		// A remote child that ignores SIGTERM gets SIGKILL from its Remote
-		// only 2 s after SIGTERM, when this process has already exited.
-		for _, r := range remotes {
-			r.Kill()
-		}
-	}
+	st.stop(stopWait)
 	return 0
 }

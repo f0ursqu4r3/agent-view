@@ -73,9 +73,9 @@ func TestParseRejects(t *testing.T) {
 		argv []string
 		want string
 	}{
-		{[]string{"--remote", "h"}, "--remote comes in phase 2"},
-		{[]string{"--remote=h"}, "--remote comes in phase 2"},
-		{[]string{"--port", "1"}, "--port comes in phase 2"},
+		{[]string{"--remote"}, "--remote needs a value"},
+		{[]string{"--port", "1"}, "--port is only valid with serve or audit"},
+		{[]string{"--port=1"}, "--port is only valid with serve or audit"},
 		{[]string{"--demo", "serve"}, "serve must be the first argument"},
 		{[]string{"--demo", "audit"}, "audit must be the first argument"},
 		{[]string{"serve", "audit"}, "audit must be the first argument"},
@@ -251,6 +251,34 @@ func TestParseServeAudit(t *testing.T) {
 	a, err = Parse([]string{"audit", "--port", "4000"})
 	if err != nil || a.Port != 4000 || a.Mode != "audit" {
 		t.Fatalf("Parse(audit --port 4000) = %+v, %v", a, err)
+	}
+}
+
+// The TUI mode takes --remote, repeatable, with the validation and the message of serve.
+func TestParseTUIRemote(t *testing.T) {
+	a, err := Parse([]string{"--remote", "a", "--remote=user@b.example", "--demo", "--linger", "2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Args{
+		Mode: "tui", Remotes: []string{"a", "user@b.example"}, Demo: true, LingerMs: 120_000,
+	}
+	if !reflect.DeepEqual(a, want) {
+		t.Fatalf("Parse = %+v, want %+v", a, want)
+	}
+	const wantMsg = "Invalid --remote value (use a host name or user@host, no spaces or shell characters)"
+	for _, bad := range []string{"-oProxyCommand=x", "host;id", "a b", ""} {
+		_, err := Parse([]string{"--remote", bad})
+		var ue UsageError
+		if !errors.As(err, &ue) || ue.Msg != wantMsg {
+			t.Errorf("--remote %q: error = %v, want UsageError %q", bad, err, wantMsg)
+		}
+	}
+	// --port stays serve and audit only.
+	_, err = Parse([]string{"--port", "1"})
+	var ue UsageError
+	if !errors.As(err, &ue) || ue.Msg != "--port is only valid with serve or audit" {
+		t.Fatalf("--port 1: error = %v, want the new UsageError", err)
 	}
 }
 

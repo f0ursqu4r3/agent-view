@@ -17,7 +17,8 @@ const DefaultPort = 4317
 
 // Usage is the usage text printed after a usage error.
 const Usage = `usage: agent-view [--demo] [--demo-scale normal|stress] [--watch <dir>]...
-                  [--linger <minutes>] [--reduced-motion]
+                  [--remote <ssh-host>]... [--linger <minutes>]
+                  [--reduced-motion]
        agent-view collect --stdio [--label <name>] [--demo] [--demo-scale normal|stress]
                   [--watch <dir>]... [--linger <minutes>]
        agent-view serve [--port <n>] [--remote <ssh-host>]... [--demo]
@@ -38,8 +39,7 @@ const Usage = `usage: agent-view [--demo] [--demo-scale normal|stress] [--watch 
                                  127.0.0.1
   --port <n>                     hub port (serve and audit; default 4317;
                                  serve accepts 0 for a free port)
-  --remote <ssh-host>            add a remote machine over SSH (serve only;
-                                 repeatable)
+  --remote <ssh-host>            add a remote machine over SSH (repeatable)
   audit                          check a running hub and print counts
 
 Set NO_COLOR to turn color off. Set AGENT_VIEW_COLLECTOR (a JSON array of
@@ -55,7 +55,7 @@ type Args struct {
 	Reduced   bool
 	Label     string   // collect only; "" means the host name
 	Port      int      // serve and audit; DefaultPort when not given
-	Remotes   []string // serve only; ssh hosts, in order
+	Remotes   []string // TUI and serve; ssh hosts, in order
 }
 
 // UsageError is a command-line error. Msg names the offending token.
@@ -68,8 +68,9 @@ func usagef(format string, a ...any) UsageError {
 }
 
 // Parse parses the arguments after the program name. "collect", "serve" and
-// "audit" must come first; collect needs --stdio. The TUI rejects --remote and
-// --port (they come with P2c), and the retired --no-open.
+// "audit" must come first; collect needs --stdio. The TUI takes --remote, as
+// serve does. It rejects --port (serve and audit only) and the retired
+// --no-open.
 func Parse(argv []string) (Args, error) {
 	a := Args{Mode: "tui"}
 	stdio := false
@@ -175,11 +176,8 @@ func Parse(argv []string) (Args, error) {
 			}
 			a.Label = v
 		case "--remote":
-			if mode != "serve" {
-				if mode == "collect" {
-					return Args{}, usagef("--remote is not valid with collect")
-				}
-				return Args{}, usagef("--remote comes in phase 2")
+			if mode == "collect" {
+				return Args{}, usagef("--remote is not valid with collect")
 			}
 			v, err := next()
 			if err != nil {
@@ -194,7 +192,7 @@ func Parse(argv []string) (Args, error) {
 				if mode == "collect" {
 					return Args{}, usagef("--port is not valid with collect")
 				}
-				return Args{}, usagef("--port comes in phase 2")
+				return Args{}, usagef("--port is only valid with serve or audit")
 			}
 			v, err := next()
 			if err != nil {

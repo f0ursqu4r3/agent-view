@@ -30,12 +30,24 @@ func TestRunNotATerminal(t *testing.T) {
 
 func TestRunUsageError(t *testing.T) {
 	var errb bytes.Buffer
-	code := run([]string{"--remote", "h"}, pipe(t), pipe(t), &errb)
+	code := run([]string{"--port", "1"}, pipe(t), pipe(t), &errb)
 	if code != 2 {
 		t.Fatalf("exit code = %d, want 2", code)
 	}
 	out := errb.String()
-	if !strings.Contains(out, "--remote comes in phase 2") || !strings.Contains(out, "usage:") {
+	if !strings.Contains(out, "--port is only valid with serve or audit") || !strings.Contains(out, "usage:") {
+		t.Fatalf("stderr = %q", out)
+	}
+}
+
+// The TUI mode checks --remote like serve: a bad host is a usage error, exit 2.
+func TestRunTUIBadRemote(t *testing.T) {
+	var errb bytes.Buffer
+	code := run([]string{"--remote", "a b"}, pipe(t), pipe(t), &errb)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if out := errb.String(); !strings.Contains(out, "Invalid --remote value") || !strings.Contains(out, "usage:") {
 		t.Fatalf("stderr = %q", out)
 	}
 }
