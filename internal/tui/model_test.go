@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -698,6 +699,85 @@ func TestModelTimeoutEndOfOldCall(t *testing.T) {
 				t.Errorf("a is on the screen:\n%s", f.screen())
 			}
 		})
+	}
+}
+
+// describeCalls lists the IDs and outputs of calls.
+func describeCalls(calls []*store.ViewCall) []string {
+	out := []string{}
+	for _, c := range calls {
+		out = append(out, fmt.Sprintf("%s %q", c.CallID, c.Output))
+	}
+	return out
+}
+
+// emptySnapshot is the snapshot a fresh collector sends before its scan.
+func emptySnapshot() schema.Envelope {
+	return schema.Envelope{Kind: "snapshot", Agents: []schema.Agent{}, OpenCalls: []schema.Call{}, RawFiles: []byte("[]")}
+}
+
+// TestModelCollectorRestart: a restarted collector sends hello and an empty
+// snapshot, then its scan again. The board and the focus stay, nothing
+// counts twice, and the replay writes no log line.
+func TestModelCollectorRestart(t *testing.T) {
+	f := newModelFix(t, true, 120, 40)
+	old := f.clock - 60_000
+	scan := func() []schema.Envelope {
+		return []schema.Envelope{
+			agentEnv("a", "", old), agentEnv("b", "", old),
+			startEnv("a", "c1", "command", "", old+1000),
+			{Kind: "tool.output", AgentID: "a", CallID: "c1", Chunk: "boom\n", Ts: iso(old + 1900)},
+			endEnv("a", "c1", false, old+2000),
+			startEnv("a", "c2", "read", "/work/repo/open.go", old+3000),
+			startEnv("b", "c3", "read", "/work/repo/b.go", old+3000), endEnv("b", "c3", true, old+4000),
+		}
+	}
+	f.send(feed.StateMsg{State: "up"})
+	f.batch(append([]schema.Envelope{{Kind: "hello", Now: iso(f.clock)}, emptySnapshot()}, scan()...)...)
+	f.clock += 3000
+	f.send(clockMsg{}) // the summary goes out
+	f.press("j")
+	f.press("enter")
+	if f.m.ui.Focus != "a" {
+		t.Fatalf("Focus = %q, want a", f.m.ui.Focus)
+	}
+	counters := map[string]store.Counters{"a": f.s.Counters("a"), "b": f.s.Counters("b")}
+	agents, calls := f.s.HostStats("devbox")
+
+	f.send(feed.StateMsg{State: "down", Detail: "exit status 1"})
+	f.clock += 1000
+	f.send(feed.StateMsg{Host: "devbox", State: "up"})
+	lines := f.m.log.Len()
+	screen := f.screen() // the clock stands still from here
+	f.batch(schema.Envelope{Kind: "hello", Now: iso(f.clock)}, emptySnapshot())
+	check := func(when string) {
+		t.Helper()
+		if f.m.ui.Focus != "a" || f.m.ui.Selected != "a" {
+			t.Errorf("%s: Focus %q, Selected %q; want a", when, f.m.ui.Focus, f.m.ui.Selected)
+		}
+		if got := f.screen(); got != screen {
+			t.Errorf("%s: the screen changed:\n%s\nwant\n%s", when, got, screen)
+		}
+		if n := f.m.log.Len(); n != lines {
+			t.Errorf("%s: %d new log line(s)", when, n-lines)
+		}
+		for id, want := range counters {
+			if c := f.s.Counters(id); c != want {
+				t.Errorf("%s: Counters(%s) = %+v, want %+v", when, id, c, want)
+			}
+		}
+		if a, n := f.s.HostStats("devbox"); a != agents || n != calls {
+			t.Errorf("%s: HostStats = %d agents, %d calls; want %d, %d", when, a, n, agents, calls)
+		}
+		if got := f.s.RecentEnded("a", 5); len(got) != 1 || got[0].Output != "boom\n" {
+			t.Errorf("%s: ended calls of a = %q; want c1 with output %q", when, describeCalls(got), "boom\n")
+		}
+	}
+	check("after the empty snapshot")
+	f.batch(scan()...)
+	check("after the replay")
+	if n := strings.Count(f.screen(), "loaded 2 agents, 3 calls from logs"); n != 1 {
+		t.Errorf("%d summary lines, want 1:\n%s", n, f.screen())
 	}
 }
 

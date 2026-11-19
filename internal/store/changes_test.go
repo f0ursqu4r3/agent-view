@@ -210,11 +210,15 @@ func TestReplayIsIgnored(t *testing.T) {
 }
 
 // A restarted collector sends hello, an empty snapshot, and its scan again.
+// The empty snapshot changes no agent state, so the board keeps its agents
+// and calls while the scan runs, and the replay changes nothing. (Before,
+// the empty snapshot made every agent dormant and dropped its calls.)
 func TestRestartedCollectorReplay(t *testing.T) {
 	s := newStore(t, Options{Now: fixed(nowMs)})
 	scan := []schema.Envelope{
 		evUpsert("local", agent("a", withLastAt(nowMs-60_000)), nowMs-60_000),
-		evStart("local", call("a", "c1", withStart(nowMs-50_000)), nowMs-50_000),
+		evStart("local", call("a", "c1", withStart(nowMs-50_000), withCommand("make")), nowMs-50_000),
+		evOutput("local", "a", "c1", "built\n", false, nowMs-41_000),
 		evEnd("local", "a", "c1", ptr(false), nil, nil, nowMs-40_000),
 		evStart("local", call("a", "c2", withStart(nowMs-30_000)), nowMs-30_000),
 	}
@@ -227,25 +231,63 @@ func TestRestartedCollectorReplay(t *testing.T) {
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
 	}
+	recent := describe(s.RecentEnded("a", 5))
+	before, _ := s.Agent("a")
 
 	s.Apply(evHello("local", nowMs, false))
 	eqChanges(t, "empty snapshot", s.Apply(evSnapshot("local", nil, nil)), nil)
-	eq(t, "agents after the empty snapshot", ids(s.Agents(nowMs)), []string{})
-	eqChanges(t, "replayed upsert", s.Apply(scan[0]), nil)
-	eqChanges(t, "replayed start of an ended call", s.Apply(scan[1]), nil)
-	eqChanges(t, "replayed end", s.Apply(scan[2]), nil)
-	// c2 was open when the snapshot dropped it: its tool.start restores it silently and does not count it again.
-	eqChanges(t, "replayed start of a dropped open call", s.Apply(scan[3]), nil)
+	eq(t, "agents after the empty snapshot", ids(s.Agents(nowMs)), []string{"a"})
+	eq(t, "open calls after the empty snapshot", callIDs(s.OpenCalls("a")), []string{"c2"})
+	eq(t, "ended calls after the empty snapshot", describe(s.RecentEnded("a", 5)), recent)
+	for i, e := range scan {
+		eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
+	}
 	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c2"})
+	// The replayed output of an ended call is not added again.
+	eq(t, "ended calls", describe(s.RecentEnded("a", 5)), recent)
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
+	}
+	if after, _ := s.Agent("a"); after.Status != before.Status || after.LastEventMs != before.LastEventMs {
+		t.Fatalf("agent = %q %d, want %q %d", after.Status, after.LastEventMs, before.Status, before.LastEventMs)
 	}
 	eqChanges(t, "live end", s.Apply(evEnd("local", "a", "c2", ptr(false), nil, nil, nowMs-1000)), []Change{ended("local", "a", "c2", nowMs-1000, false)})
 	if c := s.Counters("a"); c != (Counters{Calls: 2, Faults: 2, FirstSeenMs: nowMs - 60_000}) {
 		t.Fatalf("Counters = %+v, want 2 calls, 2 faults", c)
 	}
-	// The snapshot dropped c1 from the call list, and its replay restored it.
 	eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{"c2", "c1"})
+}
+
+// An empty snapshot changes no agent state, on any host: agents, dormant
+// records, calls, pending restores, and counters stay. It still replaces the
+// held touches and the write times, as every snapshot does.
+func TestEmptySnapshotKeepsAgents(t *testing.T) {
+	idle := nowMs - (2*DefaultLingerMs + 1000)
+	s := newStore(t, Options{Now: fixed(nowMs)})
+	s.Apply(evHello("local", nowMs, false))
+	s.Apply(evSnapshot("local", []schema.Agent{agent("a"), agent("d", withLastAt(idle))}, []schema.Call{call("a", "c1")}))
+	s.Apply(evEnd("local", "a", "c0", ptr(true), nil, []schema.Write{{Path: "/p/w.ts", Op: "edit"}}))
+	s.Apply(evFS("local", "/p/x.ts"))
+	s.Agents(nowMs) // d goes dormant
+	h := s.hosts["local"]
+	if h.dormant.len() != 1 || len(h.held) != 1 || h.recent.len() != 1 {
+		t.Fatalf("before: dormant %d held %d recent %d, want 1 1 1", h.dormant.len(), len(h.held), h.recent.len())
+	}
+	counters := s.Counters("a")
+
+	eqChanges(t, "empty snapshot", s.Apply(evSnapshot("local", nil, nil,
+		schema.FileTouch{Path: "/p/seed.ts", LastTouchAt: iso(nowMs), Attribution: "unattributed"})), nil)
+	eq(t, "agents", ids(s.Agents(nowMs)), []string{"a"})
+	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c1"})
+	if c := s.Counters("a"); c != counters {
+		t.Fatalf("Counters = %+v, want %+v", c, counters)
+	}
+	if h.dormant.len() != 1 {
+		t.Fatalf("dormant = %d, want 1", h.dormant.len())
+	}
+	if !slices.Equal(h.held, []heldTouch{{"/p/seed.ts", nowMs}}) || h.recent.len() != 0 {
+		t.Fatalf("held %v recent %d, want the snapshot's seed only and no writes", h.held, h.recent.len())
+	}
 }
 
 // describe lists the fields a restored call must get back.
@@ -289,8 +331,10 @@ func TestReplayRestoresCalls(t *testing.T) {
 		t.Fatalf("RecentEnded before the restart = %q, want c2 and c1", before)
 	}
 
+	// A snapshot that lists the agent and no call drops the ended calls from the call list.
+	relist := evSnapshot("local", []schema.Agent{agent("a", withLastAt(nowMs-35_000))}, nil)
 	s.Apply(evHello("local", nowMs, false))
-	s.Apply(evSnapshot("local", nil, nil))
+	s.Apply(relist)
 	for i, e := range scan {
 		eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
 		if i == 1 {
@@ -305,7 +349,7 @@ func TestReplayRestoresCalls(t *testing.T) {
 	}
 
 	// A restored call still waiting for its end goes when the sweep makes its agent dormant.
-	s.Apply(evSnapshot("local", nil, nil))
+	s.Apply(relist)
 	s.Apply(scan[0])
 	s.Apply(scan[1])
 	s.Agents(nowMs + 2*DefaultLingerMs)
@@ -498,7 +542,7 @@ func TestCountersTravelThroughDormancy(t *testing.T) {
 		t.Fatalf("Counters after the replay = %+v, want %+v", c, want)
 	}
 	// A snapshot that leaves the agent out keeps its record too.
-	s.Apply(evSnapshot("local", nil, nil))
+	s.Apply(evSnapshot("local", []schema.Agent{agent("other")}, nil))
 	s.Apply(evUpsert("local", agent("a"), later))
 	if c := s.Counters("a"); c != want {
 		t.Fatalf("Counters after the snapshot = %+v, want %+v", c, want)

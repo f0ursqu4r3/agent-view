@@ -79,7 +79,9 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			call = h.pending[callKey{e.AgentID, e.CallID}] // a restored call fills in silently
 		}
 		bump(h, e.AgentID, at)
-		if call == nil {
+		// Sources send a call's output before its end, so output for an ended
+		// call is a replay (a restarted collector scans again): it adds nothing.
+		if call == nil || call.Ended {
 			return
 		}
 		out := call.Output + e.Chunk
@@ -131,9 +133,25 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 // snapshot replaces the host's agents, calls, and touches. Agents it leaves out
 // become dormant with their records, and agent ranks survive. It reports agents
 // and open calls new to the store; a call the store saw end is not opened again.
+//
+// A snapshot that lists no agent and no open call replaces the touches only.
+// A fresh collector sends one before its scan, so after a collector restart
+// the board keeps its agents and calls, and the scan replays what it holds.
 func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter) {
 	files := e.SnapshotFiles()
 	if e.Agents == nil || e.OpenCalls == nil || files == nil {
+		return
+	}
+	h.held = nil
+	h.recent = newOmap[string, []int64]()
+	for _, f := range files {
+		// A confirmed file is a touch seed, not a write, so it suppresses no grey flicker.
+		if f.Path == "" || f.Attribution == "confirmed" {
+			continue
+		}
+		h.held = append(h.held, heldTouch{path: f.Path, atMs: s.ms(h, f.LastTouchAt)})
+	}
+	if len(e.Agents) == 0 && len(e.OpenCalls) == 0 {
 		return
 	}
 	oldAgents, oldCalls := h.agents, h.calls
@@ -141,8 +159,6 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 	h.calls = newOmap[callKey, *ViewCall]()
 	h.openByAgent = map[string]map[string]*ViewCall{}
 	h.pending = map[callKey]*ViewCall{}
-	h.held = nil
-	h.recent = newOmap[string, []int64]()
 	for _, a := range e.Agents {
 		if a.ID == "" {
 			continue
@@ -199,13 +215,6 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		if !h.calls.has(k) {
 			dropOpen(h, c)
 		}
-	}
-	for _, f := range files {
-		// A confirmed file is a touch seed, not a write, so it suppresses no grey flicker.
-		if f.Path == "" || f.Attribution == "confirmed" {
-			continue
-		}
-		h.held = append(h.held, heldTouch{path: f.Path, atMs: s.ms(h, f.LastTouchAt)})
 	}
 }
 
