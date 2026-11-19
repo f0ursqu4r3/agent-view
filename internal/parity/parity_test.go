@@ -1,5 +1,5 @@
-// Package parity compares the Go collector with the TypeScript collector
-// (src/). Every test runs Bun and skips when Bun is missing.
+// Package parity compares the Go collector and hub with the TypeScript
+// collector and hub (src/). Every test runs Bun and skips when Bun is missing.
 package parity
 
 import (
