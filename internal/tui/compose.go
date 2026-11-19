@@ -135,7 +135,7 @@ func tooSmall(g *cells.Grid) {
 func panel(in Input, w, h int) *cells.Grid {
 	switch in.UI.Panel {
 	case board.PanelCoverage:
-		return CoveragePanel(coverage(in.Store), in.Diagnostics, min(w-4, 100), h-4)
+		return CoveragePanel(coverages(in.Store), in.Diagnostics, min(w-4, 100), h-4)
 	case board.PanelHelp:
 		return HelpPanel(min(w-4, helpW), min(h-2, len(helpKeys)+2))
 	}

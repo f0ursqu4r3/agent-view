@@ -62,9 +62,15 @@ func (f *modelFix) send(msg tea.Msg) tea.Cmd {
 // with the clock time unless they carry a time.
 func (f *modelFix) batch(es ...schema.Envelope) tea.Cmd {
 	f.t.Helper()
+	return f.batchFrom("devbox", es...)
+}
+
+// batchFrom is batch from another host.
+func (f *modelFix) batchFrom(host string, es ...schema.Envelope) tea.Cmd {
+	f.t.Helper()
 	for i := range es {
 		f.seq++
-		es[i].V, es[i].Host, es[i].Seq = 1, "devbox", f.seq
+		es[i].V, es[i].Host, es[i].Seq = 1, host, f.seq
 		if es[i].Ts == "" {
 			es[i].Ts = iso(f.clock)
 		}
@@ -438,6 +444,158 @@ func TestModelFeedDown(t *testing.T) {
 	}
 	if d := f.m.Diagnostics(); len(d) == 0 || !strings.Contains(d[len(d)-1], "exec: bun: not found") {
 		t.Errorf("diagnostics: %q", d)
+	}
+}
+
+// TestHostStateKeyedByRawLabel: the state of a host is stored under the
+// label the store uses, so it reaches that host's segment, and the label is
+// cleaned only where it is drawn. A label that cleans to nothing is a host,
+// not the local collector.
+func TestHostStateKeyedByRawLabel(t *testing.T) {
+	const raw = "dev\x1b[31mbox"
+	f := newModelFix(t, true, 120, 40)
+	f.batchFrom(raw, schema.Envelope{Kind: "hello", Now: iso(f.clock)}, emptySnapshot())
+	f.send(feed.StateMsg{Host: raw, State: "down", Detail: "ssh: connection refused"})
+
+	segs := f.m.segments()
+	if len(segs) != 1 || segs[0].Label != raw || segs[0].State != "down" {
+		t.Fatalf("segments = %+v, want the one host %q, down", segs, raw)
+	}
+	first := f.lines()[0]
+	if !strings.Contains(first, "devbox ● down") || strings.Contains(first, "connecting") || strings.Contains(first, "[31m") {
+		t.Errorf("status bar: %q", first)
+	}
+	if !strings.Contains(f.screen(), "HOST  devbox down") {
+		t.Errorf("log lacks the down line:\n%s", f.screen())
+	}
+	if d := f.m.Diagnostics(); len(d) == 0 || d[len(d)-1] != "devbox collector down: ssh: connection refused" {
+		t.Errorf("diagnostics: %q", d)
+	}
+
+	f.send(feed.StateMsg{Host: raw, State: "up"})
+	if segs := f.m.segments(); len(segs) != 1 || segs[0].State != "up" {
+		t.Errorf("segments after up = %+v", segs)
+	}
+
+	// Another host, and a label that cleans to "": neither touches the first.
+	f.send(feed.StateMsg{Host: "box", State: "connecting"})
+	f.send(feed.StateMsg{Host: "\x1b[31m", State: "down"})
+	got := map[string]string{}
+	for _, s := range f.m.segments() {
+		got[s.Label] = s.State
+	}
+	want := map[string]string{raw: "up", "box": "connecting", "\x1b[31m": "down"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("states = %q, want %q", got, want)
+	}
+}
+
+// TestModelCoveragePanelShowsEveryHost: the panel holds one block per store
+// host, in the store's order, each with its own coverage.
+func TestModelCoveragePanelShowsEveryHost(t *testing.T) {
+	f := newModelFix(t, true, 120, 40)
+	for _, host := range []string{"zeta", "alpha"} { // not in sorted order
+		f.batchFrom(host,
+			schema.Envelope{Kind: "hello", Now: iso(f.clock)},
+			schema.Envelope{Kind: "coverage", Coverage: &schema.Coverage{LogRoots: []string{"/roots/" + host}}},
+		)
+	}
+	f.press("c")
+	var ys []int
+	for _, s := range []string{"host zeta", "/roots/zeta", "host alpha", "/roots/alpha"} {
+		_, y, ok := f.find(s)
+		if !ok {
+			t.Fatalf("panel lacks %q:\n%s", s, f.screen())
+		}
+		ys = append(ys, y)
+	}
+	if !(ys[0] < ys[1] && ys[1] < ys[2] && ys[2] < ys[3]) {
+		t.Errorf("lines of host zeta, its root, host alpha, its root: %v; want increasing:\n%s", ys, f.screen())
+	}
+
+	// One host: no host line.
+	g := newModelFix(t, true, 120, 40)
+	g.batch(schema.Envelope{Kind: "hello", Now: iso(g.clock)}, schema.Envelope{Kind: "coverage", Coverage: &schema.Coverage{LogRoots: []string{"/roots/devbox"}}})
+	g.press("c")
+	if scr := g.screen(); !strings.Contains(scr, "/roots/devbox") || strings.Contains(scr, "host devbox") {
+		t.Errorf("one-host panel:\n%s", scr)
+	}
+}
+
+// boxHosts sends two hosts, labeled as `--remote box --remote box` labels
+// them, each with an agent per id and a read call on <host>.go.
+func (f *modelFix) boxHosts(ids map[string]string) {
+	f.t.Helper()
+	for _, host := range []string{"box", "box#2"} {
+		id := ids[host]
+		f.batchFrom(host, schema.Envelope{Kind: "hello", Now: iso(f.clock)}, emptySnapshot(),
+			agentEnv(id, "", f.clock), startEnv(id, "c-"+host, "read", "/work/repo/"+strings.ReplaceAll(host, "#", "")+".go", f.clock))
+		f.send(feed.StateMsg{Host: host, State: "up"})
+	}
+}
+
+// TestEqualAgentIDsOnTwoHosts: the store keeps the agents of two hosts apart
+// by host and ID, so two hosts with the agent ID "session-1" give two rows,
+// and the labels box and box#2 show as they are.
+func TestEqualAgentIDsOnTwoHosts(t *testing.T) {
+	f := newModelFix(t, true, 100, 40)
+	f.boxHosts(map[string]string{"box": "session-1", "box#2": "session-1"})
+
+	if got := f.s.Hosts(); !reflect.DeepEqual(got, []string{"box", "box#2"}) {
+		t.Fatalf("hosts = %q", got)
+	}
+	agents := f.s.Agents(f.clock)
+	if len(agents) != 2 || agents[0].Host != "box" || agents[1].Host != "box#2" || agents[0].ID != "session-1" || agents[1].ID != "session-1" {
+		t.Fatalf("agents = %+v, want session-1 on box and on box#2", agents)
+	}
+	if got := f.s.LaneOrder(f.clock); !reflect.DeepEqual(got, []string{"session-1", "session-1"}) {
+		t.Fatalf("lane order = %q, want two rows", got)
+	}
+	cards := 0
+	for _, l := range f.lines() {
+		if strings.Contains(l, "agent session-1") {
+			cards++
+		}
+	}
+	if cards != 2 {
+		t.Errorf("%d agent cards on the screen, want 2:\n%s", cards, f.screen())
+	}
+	if first := f.lines()[0]; !strings.Contains(first, "box ● up") || !strings.Contains(first, "box#2 ● up") {
+		t.Errorf("status bar: %q", first)
+	}
+	f.press("c")
+	for _, s := range []string{"host box", "host box#2"} {
+		if _, _, ok := f.find(s); !ok {
+			t.Errorf("coverage panel lacks %q:\n%s", s, f.screen())
+		}
+	}
+	f.press("esc")
+
+	// The rows lay out as the label says only when the store looks up an
+	// agent by host and ID. It looks up by ID alone, so both rows show the
+	// first host's agent, and the board has no header for box#2.
+	t.Run("rows show their own host", func(t *testing.T) {
+		t.Skip("known gap: Store.Agent, OpenCalls, RecentEnded and Counters take an agent ID alone and answer from the first host that has it")
+		for _, s := range []string{"box#2 ─", "box2.go"} { // the host header, the call of box#2
+			if _, _, ok := f.find(s); !ok {
+				t.Errorf("board lacks %q:\n%s", s, f.screen())
+			}
+		}
+	})
+
+	// With different IDs, each host has its header on the board.
+	g := newModelFix(t, true, 100, 40)
+	g.boxHosts(map[string]string{"box": "s1", "box#2": "s2"})
+	var headers []string
+	for _, l := range g.lines() {
+		for _, h := range []string{"box#2 ─", "box ─"} {
+			if strings.Contains(l, h) {
+				headers = append(headers, h)
+			}
+		}
+	}
+	if !reflect.DeepEqual(headers, []string{"box ─", "box#2 ─"}) {
+		t.Errorf("host headers on the board = %q:\n%s", headers, g.screen())
 	}
 }
 

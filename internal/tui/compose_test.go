@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,6 +164,63 @@ func TestComposeStatusAndKeys(t *testing.T) {
 	}
 	if !strings.Contains(lines[len(lines)-1], "space resume") {
 		t.Errorf("paused key bar: %q", lines[len(lines)-1])
+	}
+}
+
+// threeHosts is a status bar with three hosts, two of them with the same
+// label but for the suffix.
+func threeHosts() Status {
+	return Status{
+		Hosts:  []HostStatus{{Label: "devbox", State: "up"}, {Label: "box", State: "connecting"}, {Label: "box#2", State: "down"}},
+		Agents: 12, Working: 3, CallsPerMin: 40, Faults: 2, Clock: "01:00:00",
+	}
+}
+
+// TestStatusBarThreeHostsAt80: three hosts do not leave room for every
+// count at 80 columns. What does not fit is cut with an ellipsis, and the
+// PAUSED badge and the clock stay whole, at any width.
+func TestStatusBarThreeHostsAt80(t *testing.T) {
+	f := newFixture(t)
+	f.agent("a", "")
+	var b strings.Builder
+	for _, paused := range []bool{false, true} {
+		in := f.input(80, 24)
+		in.Status = threeHosts()
+		in.UI.Paused, in.Status.Paused = paused, paused
+		g, _ := Compose(in)
+		top := cells.New(g.W, 1)
+		copy(top.C, g.C[:g.W])
+		fmt.Fprintf(&b, "=== paused %v ===\n%s\n%s\n", paused, cells.Plain(top), cells.Mask(top))
+	}
+	checkGolden(t, "status_three_hosts_80", b.String())
+
+	// A long label too, from 40 to 140 columns.
+	st := threeHosts()
+	st.Hosts[1].Label = "a-host-with-a-rather-long-label.example.com"
+	for w := 40; w <= 140; w++ {
+		for _, paused := range []bool{false, true} {
+			g := cells.New(w, 1)
+			drawStatus(g, st, paused)
+			clockX := w - marginX - len(st.Clock)
+			if got := at(g, clockX, 0, len(st.Clock)); got != st.Clock {
+				t.Fatalf("width %d paused %v: clock %q, want %q", w, paused, got, st.Clock)
+			}
+			gap := clockX - 2
+			if paused {
+				const badge = " PAUSED "
+				x := clockX - 2 - len(badge)
+				if got := at(g, x, 0, len(badge)); got != badge {
+					t.Fatalf("width %d: badge %q, want %q\n%s", w, got, badge, cells.Plain(g))
+				}
+				gap = x - 2
+			}
+			if got := at(g, gap, 0, 2); got != "  " {
+				t.Fatalf("width %d paused %v: text runs into the badge or clock: %q\n%s", w, paused, got, cells.Plain(g))
+			}
+			if line := cells.Plain(g); !strings.Contains(line, "…") {
+				t.Errorf("width %d paused %v: nothing is cut:\n%s", w, paused, line)
+			}
+		}
 	}
 }
 

@@ -1,0 +1,262 @@
+=== diagnostics ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ log roots          /home/u/.claude/projects                          │
+│                    /home/u/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/u/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ diagnostics                                                          │
+│ exec: bun: not found                                                 │
+│ devbox collector down: exit status 1                                 │
+│ store: dropped 2 envelope(s)                                         │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== no diagnostics ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ log roots          /home/u/.claude/projects                          │
+│                    /home/u/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/u/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ diagnostics                                                          │
+│ none                                                                 │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== short box ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ log roots          /home/u/.claude/projects                          │
+│                    /home/u/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/u/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== many diagnostics ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ log roots          /home/u/.claude/projects                          │
+│                    /home/u/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/u/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ diagnostics                                                          │
+│ diag 3                                                               │
+│ diag 4                                                               │
+│ diag 5                                                               │
+│ diag 6                                                               │
+│ diag 7                                                               │
+│ diag 8                                                               │
+│ diag 9                                                               │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== no coverage ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ log roots          none                                              │
+│ logs open          0 of 0 discovered                                 │
+│ watch roots        none                                              │
+│ malformed records  0                                                 │
+│ fs events dropped  0                                                 │
+│ sources            none                                              │
+│                                                                      │
+│ diagnostics                                                          │
+│ exec: bun: not found                                                 │
+│ devbox collector down: exit status 1                                 │
+│ store: dropped 2 envelope(s)                                         │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== narrow ===
+┌─ coverage ───────────────────────────┐
+│ log roots          /home/u/.claude/… │
+│                    /home/u/.codex/s… │
+│ logs open          7 of 12 discover… │
+│ watch roots        /home/u/work      │
+│ malformed records  3                 │
+│ fs events dropped  1                 │
+│ sources            claude: ok        │
+│                    codex: degraded … │
+│                    cursor: down (no… │
+│                                      │
+│ diagnostics                          │
+│ exec: bun: not found                 │
+│ devbox collector down: exit status 1 │
+│ store: dropped 2 envelope(s)         │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+└────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btdddddddddttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttb
+bttttttttttttttttttttssssssssssssssssstb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzztb
+bttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb

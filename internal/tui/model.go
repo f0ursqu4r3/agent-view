@@ -67,6 +67,7 @@ type Model struct {
 	frameOn, spinOn, clockOn bool // a tick of that kind is on its way
 
 	// Collector state: feedState applies to every host without its own state.
+	// hostState is keyed by the raw host label, as the store keys its hosts.
 	feedState string
 	hostState map[string]string
 	hosts     map[string]*hostInfo

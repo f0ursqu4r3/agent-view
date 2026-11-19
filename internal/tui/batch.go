@@ -247,12 +247,14 @@ func (m *Model) takeTouches(now int64) {
 	}
 }
 
-// setState applies the collector state of a host. A state without a host is
-// the local collector's and replaces every per-host state. A change writes
-// a HOST line; a detail goes to the diagnostics, so the coverage panel
+// setState applies the collector state of a host. The state is keyed by the
+// host label as the message carries it, the same string the store uses for
+// that host; labels are cleaned only where they are drawn. A state without a
+// host is the local collector's and replaces every per-host state. A change
+// writes a HOST line; a detail goes to the diagnostics, so the coverage panel
 // shows it.
 func (m *Model) setState(msg feed.StateMsg) {
-	host, state, detail := text.Clean(msg.Host), text.Clean(msg.State), text.Clean(msg.Detail)
+	host, state, detail := msg.Host, text.Clean(msg.State), text.Clean(msg.Detail)
 	prev := m.feedState
 	if host == "" {
 		m.feedState = state
@@ -271,15 +273,16 @@ func (m *Model) setState(msg feed.StateMsg) {
 		}
 	}
 	if detail != "" {
-		m.addDiag(label + " collector " + state + ": " + detail)
+		m.addDiag(label + " collector " + state + ": " + detail) // addDiag cleans the line
 	}
 	if state != prev && !m.ui.Paused {
-		m.log.Host(m.nowMs(), label, state)
+		m.log.Host(m.nowMs(), label, state) // Host cleans the label
 	}
 }
 
 // segments returns the status bar segment of each host: the store's hosts,
-// then hosts known only from a StateMsg, else the local collector.
+// then hosts known only from a StateMsg, else the local collector. A label is
+// the raw label; the status bar cleans it when it draws it.
 func (m *Model) segments() []HostStatus {
 	labels := m.store.Hosts()
 	var extra []string

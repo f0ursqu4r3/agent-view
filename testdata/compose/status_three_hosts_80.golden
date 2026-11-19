@@ -1,0 +1,6 @@
+=== paused false ===
+ AGENT VIEW  devbox ● up  box ● connecting  box#2 ● down  12 agents …  01:00:00 
+tBBBBBBBBBBtttttttttkkkkttttttssssssssssssttttttttzzzzzzddbbdddddddddttddddddddt
+=== paused true ===
+ AGENT VIEW  devbox ● up  box ● connecting  box#2 ● down  …   PAUSED   01:00:00 
+tBBBBBBBBBBtttttttttkkkkttttttssssssssssssttttttttzzzzzzddbtt########ttddddddddt

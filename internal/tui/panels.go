@@ -33,17 +33,25 @@ var helpKeys = [][2]string{
 	{"q", "quit"},
 }
 
-// coverage returns the coverage of the first host that sent one.
-func coverage(s *store.Store) schema.Coverage {
+// HostCoverage is the coverage of one host, with the host's label.
+type HostCoverage struct {
+	Label    string
+	Coverage schema.Coverage
+}
+
+// coverages returns the coverage of every host of the store, in the store's
+// order. A host that sent none has an empty coverage.
+func coverages(s *store.Store) []HostCoverage {
 	if s == nil {
-		return schema.Coverage{}
+		return nil
 	}
-	for _, h := range s.Hosts() {
-		if c, ok := s.Coverage(h); ok {
-			return c
-		}
+	hosts := s.Hosts()
+	out := make([]HostCoverage, len(hosts))
+	for i, h := range hosts {
+		c, _ := s.Coverage(h)
+		out[i] = HostCoverage{Label: h, Coverage: c}
 	}
-	return schema.Coverage{}
+	return out
 }
 
 // panelBox returns a w × h grid with a bright border, the title at the top
@@ -59,31 +67,42 @@ func panelBox(w, h int, title, hint string) *cells.Grid {
 	return g
 }
 
-// CoveragePanel draws the coverage panel, w × h: what the collector watches
-// and how well, then the newest diagnostics lines that fit.
-func CoveragePanel(cov schema.Coverage, diag []string, w, h int) *cells.Grid {
-	g := panelBox(w, h, "coverage", "c or esc to close")
-	if w < 6 || h < 3 {
-		return g
+// panelLine is one line of the coverage panel. A line has a label in the
+// left column and a value in the right one; a wide line is one text from the
+// left edge of the panel. A line with no text is blank.
+type panelLine struct {
+	label, value string
+	st           cells.Style
+	wide         bool
+}
+
+// draw draws the line at line y of a panel w cells wide.
+func (l panelLine) draw(g *cells.Grid, y, w int) {
+	if l.wide {
+		g.Text(2, y, w-4, l.value, l.st)
+		return
 	}
+	g.Text(2, y, panelLabelW-1, l.label, cells.Style{Role: cells.RDim})
+	vx := 2 + panelLabelW
+	g.Text(vx, y, w-vx-2, l.value, l.st)
+}
+
+// coverageLines returns the lines of one host's coverage: what the collector
+// watches and how well.
+func coverageLines(cov schema.Coverage) []panelLine {
 	dim := cells.Style{Role: cells.RDim}
 	plain := cells.Style{Role: cells.RText}
-	y, last := 1, h-2 // the inner lines
-	vx := 2 + panelLabelW
+	var out []panelLine
 	row := func(label string, values []string, styles []cells.Style) {
-		if y > last {
-			return
-		}
-		g.Text(2, y, panelLabelW-1, label, dim)
 		if len(values) == 0 {
 			values, styles = []string{"none"}, []cells.Style{dim}
 		}
 		for i, v := range values {
-			if y > last {
-				return
+			l := panelLine{value: v, st: styles[i]}
+			if i == 0 {
+				l.label = label
 			}
-			g.Text(vx, y, w-vx-2, v, styles[i])
-			y++
+			out = append(out, l)
 		}
 	}
 	list := func(label string, items []string) {
@@ -124,6 +143,64 @@ func CoveragePanel(cov schema.Coverage, diag []string, w, h int) *cells.Grid {
 		}
 	}
 	row("sources", vals, sts)
+	return out
+}
+
+// CoveragePanel draws the coverage panel, w × h: what the collector watches
+// and how well, then diagnostics.
+//
+// With one host (or none: an empty coverage) the panel shows that coverage,
+// then the newest diagnostics lines that fit, and cuts what does not fit.
+// With several hosts it shows one block per host in the order of covs, each
+// starting with a line "host <label>", then the diagnostics buffer. When
+// that content is taller than the box, the last line reads "… <n> more
+// lines", n being the number of lines left out.
+func CoveragePanel(covs []HostCoverage, diag []string, w, h int) *cells.Grid {
+	g := panelBox(w, h, "coverage", "c or esc to close")
+	if w < 6 || h < 3 {
+		return g
+	}
+	dim := cells.Style{Role: cells.RDim}
+	plain := cells.Style{Role: cells.RText}
+	y, last := 1, h-2 // the inner lines
+
+	if len(covs) > 1 {
+		var lines []panelLine
+		for i, hc := range covs {
+			if i > 0 {
+				lines = append(lines, panelLine{})
+			}
+			lines = append(lines, panelLine{value: "host " + text.Clean(hc.Label), st: dim, wide: true})
+			lines = append(lines, coverageLines(hc.Coverage)...)
+		}
+		lines = append(lines, panelLine{}, panelLine{value: "diagnostics", st: dim, wide: true})
+		if len(diag) == 0 {
+			lines = append(lines, panelLine{value: "none", st: dim, wide: true})
+		}
+		for _, d := range diag {
+			lines = append(lines, panelLine{value: text.Clean(d), st: plain, wide: true})
+		}
+		if len(lines) > last {
+			cut := len(lines) - (last - 1)
+			lines = append(lines[:last-1], panelLine{value: fmt.Sprintf("… %d more lines", cut), st: dim, wide: true})
+		}
+		for i, l := range lines {
+			l.draw(g, y+i, w)
+		}
+		return g
+	}
+
+	var cov schema.Coverage
+	if len(covs) == 1 {
+		cov = covs[0].Coverage
+	}
+	for _, l := range coverageLines(cov) {
+		if y > last {
+			break
+		}
+		l.draw(g, y, w)
+		y++
+	}
 
 	y++ // a blank line
 	if y > last {

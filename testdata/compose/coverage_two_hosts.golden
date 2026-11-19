@@ -1,0 +1,200 @@
+=== diagnostics ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ host box                                                             │
+│ log roots          /home/a/.claude/projects                          │
+│                    /home/a/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/a/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ host box#2                                                           │
+│ log roots          /home/b/.claude/projects                          │
+│                    /home/b/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/b/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ diagnostics                                                          │
+│ exec: bun: not found                                                 │
+│ box#2 collector down: exit status 1                                  │
+│ store: dropped 2 envelope(s)                                         │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btddddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== no diagnostics ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ host box                                                             │
+│ log roots          /home/a/.claude/projects                          │
+│                    /home/a/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/a/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ host box#2                                                           │
+│ log roots          /home/b/.claude/projects                          │
+│                    /home/b/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/b/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ diagnostics                                                          │
+│ none                                                                 │
+│                                                                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btddddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== second host without coverage ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ host box                                                             │
+│ log roots          /home/a/.claude/projects                          │
+│                    /home/a/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/a/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ host devbox                                                          │
+│ log roots          none                                              │
+│ logs open          0 of 0 discovered                                 │
+│ watch roots        none                                              │
+│ malformed records  0                                                 │
+│ fs events dropped  0                                                 │
+│ sources            none                                              │
+│                                                                      │
+│ diagnostics                                                          │
+│ exec: bun: not found                                                 │
+│ box#2 collector down: exit status 1                                  │
+│ store: dropped 2 envelope(s)                                         │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttddddttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
+=== short box ===
+┌─ coverage ───────────────────────────────────────────────────────────┐
+│ host box                                                             │
+│ log roots          /home/a/.claude/projects                          │
+│                    /home/a/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/a/work                                      │
+│ malformed records  3                                                 │
+│ fs events dropped  1                                                 │
+│ sources            claude: ok                                        │
+│                    codex: degraded (no logs)                         │
+│                    cursor: down (not installed)                      │
+│                                                                      │
+│ … 15 more lines                                                      │
+└────────────────────────────────────────────────── c or esc to close ─┘
+bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+btddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
+bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
