@@ -147,6 +147,9 @@ func (w *diagWriter) rest() []string {
 	}
 }
 
+// beforeRun runs just before the program starts (a test hook).
+var beforeRun = func() {}
+
 // run is main without os.Exit; it returns the exit code.
 func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 	args, err := cli.Parse(argv)
@@ -209,16 +212,20 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 		Store:   store.New(store.Options{LingerMs: args.LingerMs}),
 		Reduced: args.Reduced, NoColor: noColor(), LingerMs: args.LingerMs,
 	})
-	p := tea.NewProgram(model, tea.WithFPS(20), tea.WithFilter(diag.filter))
-
+	// Canceling ctx makes p.Send return at once, also before p.Run: a panic
+	// before the program runs must not leave the bridge blocked in Send.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	p := tea.NewProgram(model, tea.WithFPS(20), tea.WithFilter(diag.filter), tea.WithContext(ctx))
 	diag.start(ctx, p.Send)
 
 	// The bridge subscribes before any source starts, so the first scan is
 	// history in the store.
 	br := bridge.Start(bridge.Config{Hub: st.hub, Send: p.Send, Diag: diag.line})
+	// shutdown stops the diagnostics forwarder (later lines stay queued for
+	// diag.rest), then the bridge, then the sources.
 	shutdown := sync.OnceFunc(func() {
+		cancel()
 		br.Stop()
 		st.stop(stopWait)
 	})
@@ -237,9 +244,9 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 		}
 	}()
 
+	beforeRun()
 	_, runErr := p.Run()
-	shutdown() // the program has ended: p.Send no longer blocks
-	cancel()
+	shutdown()
 	restore() // every captured line is queued when it returns
 	late := diag.rest()
 

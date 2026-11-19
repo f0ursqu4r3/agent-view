@@ -22,8 +22,15 @@ import (
 var binPath string
 
 func TestMain(m *testing.M) {
+	if os.Getenv(helperEnv) == "prerun-panic" {
+		beforeRun = func() { panic("PRE-RUN-PANIC-MARKER") }
+		os.Exit(runTUI(cli.Args{Mode: "tui", Demo: true}, os.Stderr))
+	}
 	os.Exit(testMain(m))
 }
+
+// helperEnv makes the test binary run a helper instead of the tests.
+const helperEnv = "AGENT_VIEW_TEST_HELPER"
 
 func testMain(m *testing.M) int {
 	dir, err := os.MkdirTemp("", "agent-view-bin")

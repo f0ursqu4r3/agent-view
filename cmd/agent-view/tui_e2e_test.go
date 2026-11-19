@@ -50,12 +50,15 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 	name := regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(t.Name(), "-")
 	p := &tuiPane{t: t, sock: fmt.Sprintf("av-%s-%d", name, os.Getpid())}
 
+	// The collector reads HOME, CLAUDE_CONFIG_DIR and CODEX_HOME: the test
+	// sets HOME to a temporary directory and drops the others (and XDG_*),
+	// so it never reads the owner's logs.
 	env := []string{"HOME=" + o.home}
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
 		switch {
 		case k == "HOME", k == "TMUX", k == "TMUX_PANE", k == "CLAUDE_CONFIG_DIR", k == "CODEX_HOME", k == "NO_COLOR",
-			strings.HasPrefix(k, "AGENT_VIEW_"):
+			strings.HasPrefix(k, "AGENT_VIEW_"), strings.HasPrefix(k, "XDG_"):
 			continue
 		}
 		env = append(env, kv)
@@ -253,12 +256,14 @@ func TestTUIDemoAndRemote(t *testing.T) {
 	waitNoMarked(t, marker)
 }
 
-// writeClaudeLog writes one Claude session log under home, with records and a
-// file time one hour old: a custom title and two finished tool calls.
+// writeClaudeLog writes one Claude session under home, with records and
+// file times one hour old: the main log has a custom title and two finished
+// tool calls; a sub-agent log has one finished tool call.
 func writeClaudeLog(t *testing.T, home, title string) {
 	t.Helper()
 	dir := filepath.Join(home, ".claude", "projects", "-e2e-proj")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	subDir := filepath.Join(dir, "e2e-session", "subagents")
+	if err := os.MkdirAll(subDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	base := time.Now().Add(-time.Hour)
@@ -268,34 +273,46 @@ func writeClaudeLog(t *testing.T, home, title string) {
 	rec := func(s int, typ, rest string) string {
 		return fmt.Sprintf(`{"sessionId":"e2e-session","cwd":"/e2e/proj","timestamp":%q,"type":%q%s}`, ts(s), typ, rest)
 	}
-	lines := []string{
+	write := func(path string, lines ...string) {
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, base, base); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(dir, "e2e-session.jsonl"),
 		rec(0, "user", `,"message":{"content":"start"}`),
 		rec(1, "custom-title", `,"customTitle":"`+title+`"`),
 		rec(2, "assistant", `,"message":{"model":"m-1","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"a.txt"}}]}`),
 		rec(3, "user", `,"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"x"}]}`),
 		rec(4, "assistant", `,"message":{"model":"m-1","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"echo x"}}]}`),
 		rec(5, "user", `,"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"x"}]}`),
-	}
-	path := filepath.Join(dir, "e2e-session.jsonl")
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chtimes(path, base, base); err != nil {
-		t.Fatal(err)
-	}
+	)
+	write(filepath.Join(subDir, "agent-sub1.jsonl"),
+		rec(10, "user", `,"isSidechain":true,"message":{"content":"x"}`),
+		rec(11, "assistant", `,"isSidechain":true,"message":{"model":"m-1","content":[{"type":"tool_use","id":"u1","name":"Read","input":{"file_path":"b.txt"}}]}`),
+		rec(12, "user", `,"isSidechain":true,"message":{"content":[{"type":"tool_result","tool_use_id":"u1","content":"x"}]}`),
+	)
 }
 
-// An agent from a log written an hour ago is history: its row and the
-// "loaded" line show, and no BOOT line does.
+// Agents from logs written an hour ago are history: the main agent's row and
+// the "loaded" line show, with every finished call counted, and the
+// sub-agent gets no BOOT line. The bridge subscribes before the scan, so the
+// calls arrive as events; a late subscriber gets a snapshot without the
+// finished calls and the count is 0.
 func TestTUIStartupHistory(t *testing.T) {
 	home := t.TempDir()
 	writeClaudeLog(t, home, "startup-history-agent")
-	// --linger 180 keeps the hour-old agent on the board (default: 10 min).
+	// --linger 180 keeps the hour-old agents on the board (default: 10 min).
 	p := startTUI(t, tuiOpts{home: home, args: []string{"--linger", "180"}})
-	loaded := regexp.MustCompile(`loaded \d+ agent`)
+	loaded := regexp.MustCompile(`loaded \d+ agents?, \d+ calls? from logs`)
 	s := p.waitScreen("the history agent and the loaded line", func(s string) bool {
 		return strings.Contains(s, "startup-history-agent") && loaded.MatchString(s)
 	})
+	if got := loaded.FindString(s); got != "loaded 2 agents, 3 calls from logs" {
+		t.Fatalf("summary = %q, want %q:\n%s", got, "loaded 2 agents, 3 calls from logs", s)
+	}
 	if strings.Contains(s, "BOOT") {
 		t.Fatalf("a BOOT line for a history agent:\n%s", s)
 	}
@@ -336,12 +353,17 @@ func TestTUIQuitWithStubbornRemote(t *testing.T) {
 }
 
 // A remote that sends garbage, one hello and half a line, then exits 1: its
-// host shows down and connects again; the local host stays up; the program
+// host shows down and then connecting again; the local host stays up; the program
 // runs until q, and the coverage panel holds the reason.
 func TestTUIBrokenRemote(t *testing.T) {
 	hello := strings.TrimSuffix(string(wire.EncodeLine(wire.Envelope{V: 1, Host: "fakehost", Seq: 0, Ts: "2026-01-01T00:00:00.000Z",
 		Ev: wire.Hello{CollectorVersion: "0", Platform: "t", Now: "2026-01-01T00:00:00.000Z"}})), "\n")
-	script := `printf 'garbage {{{\n'; printf '%s\n' '` + hello + `'; printf '{"v":1,"kind":"agent.upsert",'; exit 1`
+	marker := newMarker(t)
+	flag := filepath.Join(t.TempDir(), "ran")
+	// Later runs wait without a hello, so the host stays connecting: a host
+	// that cycles through connecting and up in milliseconds is hard to see.
+	script := "if [ -e '" + flag + "' ]; then exec sleep " + marker + "; fi; touch '" + flag + "'; " +
+		`printf 'garbage {{{\n'; printf '%s\n' '` + hello + `'; printf '{"v":1,"kind":"agent.upsert",'; exit 1`
 	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
 	p.waitScreen("the remote down", func(s string) bool {
 		if strings.Contains(statusLine(s), "fakehost ● down") {
@@ -353,8 +375,7 @@ func TestTUIBrokenRemote(t *testing.T) {
 		return false
 	})
 	p.waitScreen("the remote connecting again", func(s string) bool {
-		st := statusLine(s)
-		return strings.Contains(st, "fakehost ● connecting") || strings.Contains(st, "fakehost ● up")
+		return strings.Contains(statusLine(s), "fakehost ● connecting")
 	})
 	if s := p.screen(); !hostUp(s, localLabel()) {
 		t.Fatalf("local host not up:\n%s", s)
@@ -370,6 +391,7 @@ func TestTUIBrokenRemote(t *testing.T) {
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0", code)
 	}
+	waitNoMarked(t, marker)
 }
 
 // What a remote writes on stderr never reaches the board: it shows in the

@@ -18,6 +18,7 @@ type stack struct {
 	label   string // the local host label
 	local   *hub.LocalSource
 	remotes []*remote.Remote
+	onErr   func(string) // set by start; stop reports a panic to it
 }
 
 // newStack builds the hub, the local source and one remote per a.Remotes, in
@@ -70,14 +71,21 @@ func newStack(a cli.Args, remoteCmd []string, diag func(string)) (*stack, error)
 // first scan. A source that fails to start only shows as down; it never stops
 // the hub or the other sources. Each failure goes to onErr as "remote <label>
 // failed: <message>" or "local collector failed: <message>". onErr may run on
-// another goroutine and must return quickly.
+// another goroutine and must return quickly. A panic in the local source's
+// Start goes to onErr as "local collector panicked: <value>".
 func (s *stack) start(onErr func(string)) {
+	s.onErr = onErr
 	for _, r := range s.remotes {
 		if err := r.Start(); err != nil {
 			onErr(fmt.Sprintf("remote %s failed: %v", r.Label(), err))
 		}
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				onErr(fmt.Sprintf("local collector panicked: %v", r))
+			}
+		}()
 		if err := s.local.Start(); err != nil {
 			onErr(fmt.Sprintf("local collector failed: %v", err))
 		}
@@ -88,11 +96,18 @@ func (s *stack) start(onErr func(string)) {
 // bound, it sends SIGKILL to the process group of every remote child and
 // returns without waiting: a child that ignores SIGTERM gets SIGKILL from its
 // Remote only 2 s after SIGTERM, when the process may have exited already.
+// A panic in the hub's Stop goes to the onErr of start as "hub stop
+// panicked: <value>".
 func (s *stack) stop(bound time.Duration) {
 	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
+		defer func() {
+			if r := recover(); r != nil && s.onErr != nil {
+				s.onErr(fmt.Sprintf("hub stop panicked: %v", r))
+			}
+		}()
 		s.hub.Stop()
-		close(stopped)
 	}()
 	select {
 	case <-stopped:

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -118,5 +120,27 @@ func TestDiagWriterRest(t *testing.T) {
 	w.line("queued")
 	if got, want := w.rest(), []string{"dropped", "queued"}; !slices.Equal(got, want) {
 		t.Fatalf("rest = %q, want %q", got, want)
+	}
+}
+
+// A panic after the bridge started and before the program runs does not
+// hang: the sources stop, stderr is restored, and the panic text prints once
+// on the real stderr.
+func TestRunTUIPanicBeforeRun(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+	cmd.Env = append(os.Environ(), helperEnv+"=prerun-panic", "HOME="+t.TempDir())
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		t.Fatalf("the helper hung; stderr %q", errb.String())
+	}
+	if err == nil {
+		t.Fatal("helper exited 0, want a panic exit")
+	}
+	if n := strings.Count(errb.String(), "panic: PRE-RUN-PANIC-MARKER"); n != 1 {
+		t.Fatalf("stderr has the panic message %d times, want 1: %q", n, errb.String())
 	}
 }

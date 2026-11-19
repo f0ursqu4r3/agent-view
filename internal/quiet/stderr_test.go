@@ -45,6 +45,16 @@ var helpers = map[string]func(){
 		defer restore()
 		panic("QUIET-PANIC-MARKER")
 	},
+	"gopanic": func() {
+		capture()
+		go panic("QUIET-GO-PANIC-MARKER")
+		select {}
+	},
+	"panicAfterRestore": func() {
+		restore := capture()
+		restore()
+		panic("QUIET-LATE-PANIC-MARKER")
+	},
 }
 
 // capture starts CaptureStderr with an onLine that prints to stdout.
@@ -118,10 +128,33 @@ func TestCapturePanicPrintsAfterRestore(t *testing.T) {
 	if err == nil {
 		t.Fatal("helper exited 0, want a panic exit")
 	}
-	if !strings.Contains(errs, "panic: QUIET-PANIC-MARKER") {
-		t.Fatalf("real stderr = %q, want the panic message", errs)
+	if n := strings.Count(errs, "panic: QUIET-PANIC-MARKER"); n != 1 {
+		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
 	}
 	if strings.Contains(out, "QUIET-PANIC-MARKER") {
 		t.Fatalf("onLine got the panic message: %q", out)
+	}
+}
+
+// A panic on another goroutine while fd 2 is captured still prints on the
+// real stderr, once: the crash output is the original fd 2.
+func TestCaptureGoroutinePanicReachesStderr(t *testing.T) {
+	_, errs, err := runHelper(t, "gopanic")
+	if err == nil {
+		t.Fatal("helper exited 0, want a panic exit")
+	}
+	if n := strings.Count(errs, "panic: QUIET-GO-PANIC-MARKER"); n != 1 {
+		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
+	}
+}
+
+// After restore the crash output is off again, so a panic prints once.
+func TestPanicAfterRestorePrintsOnce(t *testing.T) {
+	_, errs, err := runHelper(t, "panicAfterRestore")
+	if err == nil {
+		t.Fatal("helper exited 0, want a panic exit")
+	}
+	if n := strings.Count(errs, "panic: QUIET-LATE-PANIC-MARKER"); n != 1 {
+		t.Fatalf("real stderr has the panic message %d times, want 1: %q", n, errs)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agent-view/internal/cli"
+	"agent-view/internal/hub"
 	"agent-view/internal/wire"
 )
 
@@ -131,5 +132,43 @@ func TestStackStopBound(t *testing.T) {
 	}
 	if got := errs.all(); len(got) != 0 {
 		t.Fatalf("onErr got %q, want nothing", got)
+	}
+}
+
+// A panic in the goroutine that start runs goes to onErr; it does not end
+// the process. The stack has no local source, so its Start panics.
+func TestStackStartRecoversPanic(t *testing.T) {
+	s := &stack{hub: hub.New(hub.Options{})}
+	defer s.hub.Stop()
+	var errs errLog
+	s.start(errs.add)
+	for deadline := time.Now().Add(5 * time.Second); len(errs.all()) == 0; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no onErr call after the panic")
+		}
+	}
+	if got := errs.all(); len(got) != 1 || !strings.HasPrefix(got[0], "local collector panicked: ") {
+		t.Fatalf("onErr got %q, want one panic report", got)
+	}
+}
+
+// A panic in the goroutine that stop runs goes to the onErr of start, and
+// stop still returns. The stack has no hub, so its Stop panics.
+func TestStackStopRecoversPanic(t *testing.T) {
+	s := &stack{}
+	var errs errLog
+	s.onErr = errs.add
+	done := make(chan struct{})
+	go func() {
+		s.stop(time.Second)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stop did not return")
+	}
+	if got := errs.all(); len(got) != 1 || !strings.HasPrefix(got[0], "hub stop panicked: ") {
+		t.Fatalf("onErr got %q, want one panic report", got)
 	}
 }
