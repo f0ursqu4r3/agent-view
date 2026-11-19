@@ -343,6 +343,81 @@ func TestReplayedStatusKeepsNewerStatus(t *testing.T) {
 	}
 }
 
+// The collector ends a call that has had no event for its call timeout with a
+// tool.end ok:null at its own clock. The startup scan leaves calls that never
+// ended open, so the next tick ends them at now. That end must not make an old
+// agent look active: it neither revives nor bumps the agent, and its change
+// carries the call's last activity, so it is history.
+func TestTimeoutEndOfOldCall(t *testing.T) {
+	t.Run("stored agent past the linger", func(t *testing.T) {
+		old := nowMs - 15*60_000 // past the linger, not yet dormant
+		s := newStore(t, Options{Now: fixed(nowMs)})
+		s.Apply(evHello("local", nowMs, false))
+		s.Apply(evSnapshot("local", nil, nil))
+		s.Apply(evUpsert("local", agent("a", withLastAt(old-1000)), old-1000))
+		s.Apply(evStart("local", call("a", "c1", withStart(old-2000)), old-2000))
+		s.Apply(evOutput("local", "a", "c1", "", true, old))
+		eq(t, "agents before the end", ids(s.Agents(nowMs)), []string{})
+
+		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)),
+			[]Change{ended("local", "a", "c1", old, true)})
+		a, ok := s.Agent("a")
+		if !ok || a.LastEventMs != old {
+			t.Fatalf("Agent(a) = stored %v, LastEventMs %d; want stored, %d", ok, a.LastEventMs, old)
+		}
+		eq(t, "agents after the end", ids(s.Agents(nowMs)), []string{})
+		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
+		recent := s.RecentEnded("a", 5)
+		if len(recent) != 1 || recent[0].Ok != nil || recent[0].EndMs != old {
+			t.Fatalf("RecentEnded = %q, want c1 ended ok:null at %d", describe(recent), old)
+		}
+		if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
+			t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
+		}
+	})
+
+	t.Run("dormant agent", func(t *testing.T) {
+		old := nowMs - 20*3_600_000
+		s := newStore(t, Options{Now: fixed(nowMs)})
+		s.Apply(evHello("local", nowMs, false))
+		s.Apply(evSnapshot("local", nil, nil))
+		s.Apply(evUpsert("local", agent("a", withLastAt(old)), old))
+		start := evStart("local", call("a", "c1", withStart(old)), old)
+		s.Apply(start)
+		eq(t, "agents before the end", ids(s.Agents(nowMs)), []string{}) // the sweep makes a dormant
+
+		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)), nil)
+		if _, ok := s.Agent("a"); ok || s.UnknownEvents != 0 {
+			t.Fatalf("the end revived the agent, or counted it unknown (%d)", s.UnknownEvents)
+		}
+		eq(t, "agents after the end", ids(s.Agents(nowMs)), []string{})
+
+		// The call ended: when the agent comes back, a replayed start does not open it again.
+		s.Apply(evStatus("local", "a", "working", nowMs))
+		eqChanges(t, "replayed start", s.Apply(start), nil)
+		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
+		if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
+			t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
+		}
+	})
+
+	t.Run("live agent", func(t *testing.T) {
+		s := newStore(t, Options{Now: fixed(nowMs)})
+		s.Apply(evHello("local", nowMs, false))
+		s.Apply(evSnapshot("local", nil, nil))
+		s.Apply(evUpsert("local", agent("a", withLastAt(nowMs-800_000)), nowMs-800_000))
+		s.Apply(evStart("local", call("a", "c1", withStart(nowMs-700_000)), nowMs-700_000))
+		s.Apply(evStart("local", call("a", "c2", withStart(nowMs-3000)), nowMs-3000))
+		// The agent is active: the end is live, at its last event, and the call shows ??.
+		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)),
+			[]Change{ended("local", "a", "c1", nowMs-3000, false)})
+		if a, _ := s.Agent("a"); a.LastEventMs != nowMs-3000 {
+			t.Fatalf("LastEventMs = %d, want %d", a.LastEventMs, nowMs-3000)
+		}
+		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c2"})
+	})
+}
+
 func TestStatusOrderedByEventTime(t *testing.T) {
 	s := seeded(t)
 	eqChanges(t, "finished", s.Apply(evStatus("local", "a", "finished", nowMs-10_000)),

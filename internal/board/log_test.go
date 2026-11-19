@@ -53,7 +53,9 @@ func TestLogToolLine(t *testing.T) {
 	addAgent(s, "h", "a", "", "")
 	var l Log
 	l.FromChange(s, runCall(s, "a", "c1", "command", nil, "make test", ptr(false), nowMs-1400, nowMs))
-	l.FromChange(s, runCall(s, "a", "c2", "read", []string{"/p/README.md"}, "", nil, nowMs, nowMs+500))
+	// A call timeout (ok null) comes long after the call's last activity, the
+	// agent's last event here: the duration runs to that activity.
+	l.FromChange(s, runCall(s, "a", "c2", "read", []string{"/p/README.md"}, "", nil, nowMs-500, nowMs+600_000))
 	got := cells.Plain(l.Render(80, 6, ""))
 	for _, want := range []string{"RUN", "$ make test", "FAIL", "1.4s", "READ", "README.md", "??", "0.5s", "01:00:00"} {
 		if !strings.Contains(got, want) {

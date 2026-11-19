@@ -25,7 +25,8 @@ const (
 
 // Change is one effect of an applied envelope. AtMs is the skew-corrected time
 // of the envelope; for a snapshot, it is the time of the item (the agent's last
-// event, the call's start). History is true when AtMs is more than 10 s older
+// event, the call's start); for a call timeout (tool.end with ok null), it is
+// the call's last activity, which is also its EndMs. History is true when AtMs is more than 10 s older
 // than the arrival, which is Options.Now when Apply runs. Status is set for
 // AgentStatus only.
 type Change struct {
@@ -139,9 +140,13 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 			return false
 		}
 		k := callKey{e.AgentID, e.CallID}
-		if call, ok := h.pending[k]; ok && h.agents.has(e.AgentID) {
+		if call, ok := h.pending[k]; ok {
+			a, stored := h.agents.get(e.AgentID)
+			if !stored {
+				return true
+			}
 			delete(h.pending, k)
-			endCall(call, e, at)
+			endCall(call, e, endMs(a, call, e, at))
 			storeCall(h, call)
 			trimCalls(h)
 		}

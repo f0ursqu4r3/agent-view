@@ -14,9 +14,14 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	if s.replay(h, e, at) {
 		return
 	}
-	// The collector keeps every agent. An event for a dormant agent revives it.
-	// An event for an agent never seen is dropped: the feed has no resnapshot path.
+	// The collector keeps every agent. An event for a dormant agent revives it,
+	// except a call timeout, which only ends the call. An event for an agent
+	// never seen is dropped: the feed has no resnapshot path.
 	if id := subjectOf(e); id != "" {
+		if d, ok := h.dormant.get(id); ok && isTimeout(e) {
+			endTally(d.tally, e)
+			return
+		}
 		if !h.agents.has(id) && !revive(h, id) {
 			s.UnknownEvents++
 			return
@@ -88,19 +93,19 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 		}
 		call.Output, call.OutputTruncated = out, truncated
 	case "tool.end":
-		bump(h, e.AgentID, at)
+		// A call timeout is no activity of the agent: it bumps nothing, and
+		// the call ends at its last activity.
 		if a, ok := h.agents.get(e.AgentID); ok {
-			if m := a.tally.calls[e.CallID]; m == callOpen || m == callDropped {
-				a.tally.calls[e.CallID] = callEnded
-				if e.Ok != nil && !*e.Ok {
-					a.tally.faults++
-				}
+			if !isTimeout(e) {
+				bump(h, e.AgentID, at)
 			}
-		}
-		if call, ok := h.calls.get(callKey{e.AgentID, e.CallID}); ok && !call.Ended {
-			endCall(call, e, at)
-			closeOpen(h, call)
-			em.add(CallEnded, e.AgentID, e.CallID, "", at)
+			endTally(a.tally, e)
+			if call, ok := h.calls.get(callKey{e.AgentID, e.CallID}); ok && !call.Ended {
+				end := endMs(a, call, e, at)
+				endCall(call, e, end)
+				closeOpen(h, call)
+				em.add(CallEnded, e.AgentID, e.CallID, "", end)
+			}
 		}
 		for _, w := range e.Writes {
 			if w.Path != "" {
@@ -241,6 +246,31 @@ func callFor(h *hostState, k callKey) *ViewCall {
 		return c
 	}
 	return h.pending[k]
+}
+
+// isTimeout reports whether e is a call timeout: the collector ends a call that
+// has had no event for its call timeout with ok null at its own clock. No
+// source sends ok null.
+func isTimeout(e schema.Envelope) bool { return e.Kind == "tool.end" && e.Ok == nil }
+
+// endMs returns the end time of a call that e ends at at. A call timeout comes
+// long after the call's last activity, so the call ends at that activity: its
+// start, or the agent's last event when that is later.
+func endMs(a *agentEntry, call *ViewCall, e schema.Envelope, at int64) int64 {
+	if isTimeout(e) {
+		return max(call.StartMs, a.lastEventMs)
+	}
+	return at
+}
+
+// endTally marks a call of a tally ended, once, and counts a fault.
+func endTally(t *tally, e schema.Envelope) {
+	if m := t.calls[e.CallID]; m == callOpen || m == callDropped {
+		t.calls[e.CallID] = callEnded
+		if e.Ok != nil && !*e.Ok {
+			t.faults++
+		}
+	}
 }
 
 func endCall(call *ViewCall, e schema.Envelope, at int64) {

@@ -616,6 +616,46 @@ func TestModelRoutesAnimations(t *testing.T) {
 	}
 }
 
+// TestModelTimeoutEndOfOldCall: the startup scan leaves a call that never
+// ended open, and the collector's next tick ends it with ok:null at now. The
+// old agent stays off the board, writes no log line, and does not count as
+// working: neither while it is still stored nor once it is dormant.
+func TestModelTimeoutEndOfOldCall(t *testing.T) {
+	for name, age := range map[string]int64{"stored": 15 * 60_000, "dormant": 20 * 3_600_000} {
+		t.Run(name, func(t *testing.T) {
+			f := newModelFix(t, true, 120, 40)
+			f.send(feed.StateMsg{State: "up"})
+			old := f.clock - age
+			f.batch(schema.Envelope{Kind: "hello", Now: iso(f.clock)},
+				agentEnv("a", "", old), startEnv("a", "c1", "command", "", old))
+			f.batch(agentEnv("b", "", f.clock), startEnv("b", "l1", "read", "/work/repo/x.go", f.clock))
+			lines := f.m.log.Len()
+			if first := f.lines()[0]; !strings.Contains(first, "1 agent ") || !strings.Contains(first, "1 working") {
+				t.Fatalf("status before the end: %q", first)
+			}
+
+			f.clock += 1500
+			f.send(clockMsg{}) // a sweep: the 20-hour-old agent goes dormant
+			f.clock += 1000
+			f.batch(schema.Envelope{Kind: "tool.end", AgentID: "a", CallID: "c1"})
+			if n := f.m.log.Len(); n != lines {
+				t.Errorf("the timeout end wrote %d log line(s):\n%s", n-lines, f.screen())
+			}
+			if first := f.lines()[0]; !strings.Contains(first, "1 agent ") || !strings.Contains(first, "1 working") {
+				t.Errorf("status after the end: %q", first)
+			}
+			for _, h := range f.m.hits {
+				if h.AgentID == "a" {
+					t.Errorf("a is on the board:\n%s", f.screen())
+				}
+			}
+			if strings.Contains(f.screen(), "agent a") {
+				t.Errorf("a is on the screen:\n%s", f.screen())
+			}
+		})
+	}
+}
+
 // TestModelHistorySettlesRowHeight checks that a batch with only history
 // changes for an agent draws its row at the new height at once, while a
 // live change in the same batch still animates.
