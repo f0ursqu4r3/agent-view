@@ -615,3 +615,41 @@ func TestModelRoutesAnimations(t *testing.T) {
 		t.Errorf("interrupted: no flash")
 	}
 }
+
+// TestModelHistorySettlesRowHeight checks that a batch with only history
+// changes for an agent draws its row at the new height at once, while a
+// live change in the same batch still animates.
+func TestModelHistorySettlesRowHeight(t *testing.T) {
+	f := newModelFix(t, false, 120, 40)
+	old := f.clock - 30_000
+	f.batch(schema.Envelope{Kind: "hello", Now: iso(f.clock)},
+		agentEnv("a", "", old), agentEnv("b", "", old), agentEnv("c", "", old))
+	f.frames(100)
+	for _, id := range []string{"a", "b", "c"} {
+		if !strings.Contains(f.screen(), "▸ agent "+id) {
+			t.Fatalf("%s not collapsed:\n%s", id, f.screen())
+		}
+	}
+
+	// A history start (open call) expands a's row, and a history start and
+	// end in the last 60 s expands b's row, with no animation.
+	f.batch(startEnv("a", "h1", "read", "/work/repo/a.go", old+1000))
+	f.batch(startEnv("b", "h2", "read", "/work/repo/b.go", old+1000), endEnv("b", "h2", true, old+15_000))
+	if f.m.frameOn || f.m.anim.Active() || f.m.log.Len() != 0 {
+		t.Errorf("history animated: frameOn %v, active %v, log %d", f.m.frameOn, f.m.anim.Active(), f.m.log.Len())
+	}
+	for _, id := range []string{"a", "b"} {
+		if h := hitFor(t, f.m.hits, id); h.H != 7 {
+			t.Errorf("%s card shows %d of 7 lines:\n%s", id, h.H, f.screen())
+		}
+	}
+
+	// A live start and a history start for c: the live change animates.
+	f.batch(startEnv("c", "h3", "read", "/work/repo/old.go", old+1000), startEnv("c", "l1", "edit", "/work/repo/live.go", f.clock))
+	if !f.m.frameOn || !f.m.anim.Active() {
+		t.Fatalf("mixed batch did not animate")
+	}
+	if fr := f.m.anim.Frame("c", 9, 0); fr.RowH >= 9 || fr.CallRows != 0 {
+		t.Errorf("mixed batch: %+v; want the row growing and the card printing", fr)
+	}
+}

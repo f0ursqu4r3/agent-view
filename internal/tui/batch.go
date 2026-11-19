@@ -23,7 +23,8 @@ type liveChange struct {
 // the log and the animations, unless the board is paused; history changes
 // feed neither. Then it releases unattributed touches, writes due host
 // lines, forgets agents that left the board, and keeps the selection in
-// view.
+// view. An agent whose changes in the batch are all history gets its row
+// height settled, so the row does not grow or shrink on screen.
 func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 	now := m.nowMs()
 	var ids []string
@@ -33,6 +34,7 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		before = m.shownCalls(ids)
 	}
 	var live []liveChange
+	histOnly := map[string]bool{} // agent → no live change in this batch
 	for _, e := range envs {
 		if e.Kind == "hello" && e.Host != "" {
 			if h := m.host(e.Host); h.helloMs == 0 {
@@ -44,8 +46,12 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		m.summaryAt(e.Host, changes, now)
 		for _, c := range changes {
 			if c.History {
+				if _, ok := histOnly[c.AgentID]; !ok {
+					histOnly[c.AgentID] = true
+				}
 				continue
 			}
+			histOnly[c.AgentID] = false
 			switch {
 			case c.Kind == store.CallStarted:
 				m.starts = append(m.starts, now)
@@ -64,6 +70,11 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 			c := lc.c
 			m.known[c.AgentID] = true
 			m.animate(c, lc.failed, after[c.AgentID] != before[c.AgentID])
+		}
+	}
+	for id, only := range histOnly {
+		if only {
+			m.anim.Settle(id)
 		}
 	}
 	if n := m.store.Panics - m.panics; n > 0 {

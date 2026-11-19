@@ -297,3 +297,55 @@ func TestForgetDropsAgentState(t *testing.T) {
 	}
 	e.Forget("missing") // no panic
 }
+
+// TestSettleSnapsRowHeight checks that Settle makes the next Frame jump to
+// its target height and finish a drawing gutter, while the other effects
+// of the agent keep running.
+func TestSettleSnapsRowHeight(t *testing.T) {
+	e := New(false)
+	e.Frame("a", 1, 0) // seen collapsed
+	e.OnChange(started("a"), true)
+	e.OnFail("a")
+	e.Settle("a")
+	f := e.Frame("a", 9, 2)
+	if f.RowH != 9 {
+		t.Errorf("settled RowH = %d, want 9", f.RowH)
+	}
+	if f.CallRows != 0 || !f.Flash || f.WhereChars != 0 || f.HistOffset[1] != -15 {
+		t.Errorf("settle cancelled live effects: %+v", f)
+	}
+	steps(e, 1)
+	if f := e.Frame("a", 9, 2); f.RowH != 9 || f.CallRows != 1 {
+		t.Errorf("after a step: %+v", f)
+	}
+
+	// Settle is used up by one Frame: a later target change animates.
+	steps(e, 10)
+	if e.Active() {
+		t.Fatal("still active")
+	}
+	if f := e.Frame("a", 1, 0); f.RowH != 9 || !e.Active() {
+		t.Errorf("later collapse: RowH %d, active %v; want 9 and animating", f.RowH, e.Active())
+	}
+
+	// A drawing gutter completes.
+	e.OnAgentAdded("s", true)
+	if got := e.Frame("s", 9, 0).GutterRows; got != 0 {
+		t.Fatalf("gutter = %d, want 0", got)
+	}
+	e.Settle("s")
+	if f := e.Frame("s", 9, 0); f.GutterRows != 9 || f.CallRows != 0 {
+		t.Errorf("settled gutter: %+v; want gutter 9, row print running", f)
+	}
+
+	// No state: nothing to settle, and none is made.
+	e.Settle("x")
+	if _, ok := e.agents["x"]; ok {
+		t.Errorf("Settle made state for an unknown agent")
+	}
+	r := New(true)
+	r.Settle("a")
+	if r.Active() {
+		t.Errorf("reduced engine active after Settle")
+	}
+}

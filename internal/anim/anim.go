@@ -49,7 +49,8 @@ type agentState struct {
 
 	seen   bool // Frame has been called
 	rowH   int
-	target int // last target row height from Frame
+	target int  // last target row height from Frame
+	settle bool // the next Frame snaps the row height and the gutter
 }
 
 func newState() *agentState {
@@ -138,6 +139,16 @@ func (e *Engine) OnFail(agentID string) {
 	e.state(agentID).flash = 0
 }
 
+// Settle makes the next Frame of an agent jump to the row height it is
+// given, and finish a gutter that is still drawing, so a change that is not
+// live (a history event) does not animate the row. The other effects of the
+// agent keep running. An agent without state has nothing to settle.
+func (e *Engine) Settle(agentID string) {
+	if a := e.agents[agentID]; a != nil {
+		a.settle = true
+	}
+}
+
 // Forget drops the state of an agent that no longer receives Frame calls.
 func (e *Engine) Forget(agentID string) {
 	delete(e.agents, agentID)
@@ -215,10 +226,15 @@ func (e *Engine) Frame(agentID string, targetRowH, histCount int) AgentFrame {
 	}
 	a := e.state(agentID)
 	a.target = targetRowH
-	if !a.seen {
+	if !a.seen || a.settle {
 		a.seen = true
 		a.rowH = targetRowH
 	}
+	if a.settle && a.gutterOn {
+		a.gutterOn = false
+		a.gutter = targetRowH
+	}
+	a.settle = false
 	f.RowH = a.rowH
 	f.CallRows = a.callRows
 	f.HistPrintRows = a.histRows
