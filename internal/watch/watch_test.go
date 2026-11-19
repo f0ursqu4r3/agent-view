@@ -236,18 +236,24 @@ func TestFsnotifyPartialUntilRootRemoved(t *testing.T) {
 	}
 }
 
-// A capacity failure on a directory (no inotify watches or file descriptors
-// left) leaves the watcher partial. Any other failure needs a restart.
-func TestFsnotifyFailCapacity(t *testing.T) {
+// A failure that a restart would hit again leaves the watcher partial: no
+// inotify watches or file descriptors left, or a directory below the root
+// that it may not read. Any other failure, and any failure on the root,
+// needs a restart.
+func TestFsnotifyFailPartial(t *testing.T) {
 	cases := []struct {
+		onRoot  bool
 		err     error
 		code    string
 		partial bool
 	}{
-		{syscall.ENOSPC, "ENOSPC", true},
-		{syscall.EMFILE, "EMFILE", true},
-		{&fs.PathError{Op: "open", Path: "x", Err: syscall.ENFILE}, "ENFILE", true},
-		{syscall.EACCES, "EACCES", false},
+		{false, syscall.ENOSPC, "ENOSPC", true},
+		{false, syscall.EMFILE, "EMFILE", true},
+		{false, &fs.PathError{Op: "open", Path: "x", Err: syscall.ENFILE}, "ENFILE", true},
+		{false, syscall.EACCES, "EACCES", true},
+		{false, syscall.EPERM, "EPERM", true},
+		{false, syscall.ELOOP, "ELOOP", false},
+		{true, syscall.EACCES, "EACCES", false},
 	}
 	for _, c := range cases {
 		s, failed := start(t.TempDir(), func(string, Op) {}, Options{})
@@ -255,15 +261,49 @@ func TestFsnotifyFailCapacity(t *testing.T) {
 			t.Fatalf("start: %q", failed.Degraded())
 		}
 		x := &fsnotifyWatcher{state: s}
-		sub := filepath.Join(s.real, "sub")
-		x.fail("cannot watch", sub, c.err)
-		if got, want := x.Degraded(), "cannot watch "+sub+": "+c.code; got != want {
-			t.Errorf("%s: Degraded() = %q, want %q", c.code, got, want)
+		dir, name := filepath.Join(s.real, "sub"), filepath.Join(s.real, "sub")
+		if c.onRoot {
+			dir, name = s.real, s.root
+		}
+		x.fail("cannot watch", dir, c.err)
+		if got, want := x.Degraded(), "cannot watch "+name+": "+c.code; got != want {
+			t.Errorf("%s (root %v): Degraded() = %q, want %q", c.code, c.onRoot, got, want)
 		}
 		if got := x.Partial(); got != c.partial {
-			t.Errorf("%s: Partial() = %v, want %v", c.code, got, c.partial)
+			t.Errorf("%s (root %v): Partial() = %v, want %v", c.code, c.onRoot, got, c.partial)
 		}
 	}
+}
+
+// A directory below the root that the watcher may not read leaves it
+// partial, and the rest of the tree is still watched.
+func TestFsnotifyUnreadableDirPartial(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores permission bits")
+	}
+	root := t.TempDir()
+	mkdirAll(t, root, "open")
+	locked := filepath.Join(root, "locked")
+	mkdirAll(t, locked)
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	r := newRecorder(t)
+	w := treeFsnotify(root, r.onChange, Options{})
+	defer r.close(w)
+	real, err := filepath.EvalSymlinks(locked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := w.Degraded(), "cannot watch "+real+": EACCES"; got != want {
+		t.Errorf("Degraded() = %q, want %q", got, want)
+	}
+	if !w.Partial() {
+		t.Error("Partial() = false, want true")
+	}
+	writeFile(t, filepath.Join(root, "open", "f.txt"), "x")
+	r.waitRel(filepath.Join("open", "f.txt"))
 }
 
 // a missing root sets degraded and does not throw, in both modes

@@ -460,8 +460,8 @@ func (s *Source) scan() {
 
 // ensureWatcher watches a readable root (code "") and reports the root's
 // status when it changes. It replaces a degraded watcher, but keeps a
-// partial one (a capacity limit): that one still gives hints for what it
-// covers, and the fast safety rescan covers the rest.
+// partial one (a capacity or permission limit): that one still gives hints
+// for what it covers, and the fast safety rescan covers the rest.
 func (s *Source) ensureWatcher(root Root, code string) {
 	w := s.watchers[root.Path]
 	if code == "" && w != nil && w.Degraded() != "" && !w.Partial() {

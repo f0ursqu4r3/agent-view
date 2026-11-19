@@ -125,13 +125,16 @@ func (x *fsnotifyWatcher) addTree(dir string, report bool) {
 
 // fail records why dir could not be watched or read. A directory below the
 // root that is gone by then is skipped: it has nothing left to watch. A
-// capacity limit leaves the watcher partial; any other failure degrades it.
+// capacity limit, or a directory below the root that the watcher may not
+// read, leaves the watcher partial: a restart would fail the same way. Any
+// other failure degrades it.
 func (x *fsnotifyWatcher) fail(what, dir string, err error) {
-	if dir != x.real && (errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) {
+	below := dir != x.real
+	if below && (errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) {
 		return
 	}
 	why := what + " " + x.name(dir) + ": " + fsutil.ErrCode(err)
-	if isCapacity(err) {
+	if isCapacity(err) || below && errors.Is(err, fs.ErrPermission) {
 		x.limit(why)
 		return
 	}

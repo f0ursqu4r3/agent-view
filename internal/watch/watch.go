@@ -53,13 +53,13 @@ type Watcher interface {
 	// failed. It is safe from any goroutine.
 	Degraded() string
 	// Partial is true while the watcher runs but covers only part of the
-	// tree because of a capacity limit: the directory limit, or no inotify
-	// watches or file descriptors left. Such a watcher still reports changes
-	// in what it covers, and a restart would hit the same limit. Partial is
-	// false while the watcher is healthy, after Close, and after any failure
-	// that needs a restart (the root removed, a watcher error, events
-	// dropped), even though Degraded keeps its first reason. It is safe from
-	// any goroutine.
+	// tree because of a limit that a restart would hit again: the directory
+	// limit, no inotify watches or file descriptors left, or a directory
+	// below the root that it may not read. Such a watcher still reports
+	// changes in what it covers. Partial is false while the watcher is
+	// healthy, after Close, and after any failure that needs a restart (the
+	// root removed, a watcher error, events dropped), even though Degraded
+	// keeps its first reason. It is safe from any goroutine.
 	Partial() bool
 }
 
@@ -111,8 +111,8 @@ func (s *state) degrade(why string) {
 	s.degraded.CompareAndSwap(nil, &why)
 }
 
-// limit records a capacity limit: the watcher runs on, but covers only part
-// of the tree. The first reason stays.
+// limit records a limit that a restart would hit again: the watcher runs
+// on, but covers only part of the tree. The first reason stays.
 func (s *state) limit(why string) { s.degraded.CompareAndSwap(nil, &why) }
 
 func (s *state) Partial() bool {
