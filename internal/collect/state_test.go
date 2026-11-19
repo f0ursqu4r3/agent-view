@@ -361,7 +361,7 @@ func decodeGolden(t *testing.T, path string) []wire.SourceEvent {
 
 // snapshot + later deltas equals full replay (golden file)
 func TestSnapshotPlusDeltasEqualsFullReplay(t *testing.T) {
-	events := decodeGolden(t, "../../test/fixtures/golden/session.ndjson")
+	events := decodeGolden(t, "../../testdata/fixtures/golden/session.ndjson")
 	if len(events) < 10 {
 		t.Fatalf("golden file has %d events, want at least 10", len(events))
 	}

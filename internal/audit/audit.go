@@ -1,5 +1,6 @@
-// Package audit is the live audit. It ports test/live-audit.ts: it reads a
-// running hub's /api/snapshot, checks it, and reports counts only. Neither an
+// Package audit is the live audit. It ports the former TypeScript
+// test/live-audit.ts (removed in P2c; see git history): it reads a running
+// hub's /api/snapshot, checks it, and reports counts only. Neither an
 // error nor the report holds a path, a name, a command or an output.
 package audit
 

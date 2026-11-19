@@ -1,5 +1,6 @@
 // Package hub merges the sources of agent activity: the local collector and
-// remote collectors. It ports src/hub/hub.ts.
+// remote collectors. It ports the former TypeScript hub/hub.ts (removed in
+// P2c; see git history).
 package hub
 
 import (

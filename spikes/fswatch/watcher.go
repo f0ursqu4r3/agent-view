@@ -14,7 +14,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// ignoredDirs is IGNORED_DIRS from src/collector/sources/fs-changes.ts.
+// ignoredDirs is IGNORED_DIRS from the former TypeScript
+// collector/sources/fs-changes.ts (removed in P2c; see git history).
 var ignoredDirs = map[string]bool{
 	".git": true, ".worktrees": true, ".pytest_cache": true, "__pycache__": true, ".turbo": true,
 	"coverage": true, "node_modules": true, ".next": true, ".cache": true, ".venv": true, "venv": true,

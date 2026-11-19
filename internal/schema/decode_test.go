@@ -15,7 +15,7 @@ func wrap(line string, seq int) []byte {
 
 func fixtureLines(t *testing.T) []string {
 	t.Helper()
-	f, err := os.Open("../../test/fixtures/golden/session.ndjson")
+	f, err := os.Open("../../testdata/fixtures/golden/session.ndjson")
 	if err != nil {
 		t.Fatal(err)
 	}

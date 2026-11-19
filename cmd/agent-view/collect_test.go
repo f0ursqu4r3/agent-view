@@ -129,7 +129,7 @@ func parseEnv(t *testing.T, line string) map[string]any {
 	return m
 }
 
-// `bun src/cli.ts collect --stdio --demo` writes valid NDJSON: hello, snapshot, events
+// `agent-view collect --stdio --demo` writes valid NDJSON: hello, snapshot, events
 func TestCollectStdioDemo(t *testing.T) {
 	c := startCollector(t, "collect", "--stdio", "--demo", "--label", "t")
 	start := time.Now()

@@ -815,7 +815,7 @@ func TestCodexPendingCap(t *testing.T) {
 // fixtures: a main log and a child log replay end to end
 func TestCodexFixturesReplay(t *testing.T) {
 	a := NewCodexAdapter("mac")
-	dir := filepath.Join("..", "..", "test", "fixtures", "codex")
+	dir := filepath.Join("..", "..", "testdata", "fixtures", "codex")
 	replay := func(file string) []wire.SourceEvent {
 		data, err := os.ReadFile(filepath.Join(dir, file))
 		if err != nil {

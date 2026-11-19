@@ -504,7 +504,7 @@ func TestClaudePendingCap(t *testing.T) {
 // fixtures: sub-agent id comes from the file name and the session replays end to end
 func TestClaudeFixturesReplay(t *testing.T) {
 	a := NewClaudeAdapter("mac")
-	dir := filepath.Join("..", "..", "test", "fixtures", "claude")
+	dir := filepath.Join("..", "..", "testdata", "fixtures", "claude")
 	replay := func(file string) []wire.SourceEvent {
 		data, err := os.ReadFile(filepath.Join(dir, file))
 		if err != nil {

@@ -1,4 +1,5 @@
-// Package schema mirrors the event schema in src/shared/schema.ts.
+// Package schema mirrors the event schema in the former TypeScript
+// shared/schema.ts (removed in P2c; see git history).
 package schema
 
 import "encoding/json"

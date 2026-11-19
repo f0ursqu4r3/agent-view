@@ -19,8 +19,8 @@ import (
 // deadline bounds every wait on another goroutine.
 const deadline = 5 * time.Second
 
-// tsNow is the time of the fake source's hello and snapshot, like TS in
-// test/hub/helpers.ts.
+// tsNow is the time of the fake source's hello and snapshot, like TS in the
+// former TypeScript test/hub/helpers.ts (removed in P2c; see git history).
 var tsNow = wire.FormatISO(wire.NowMs())
 
 func iso(ms int64) string { return wire.FormatISO(ms) }

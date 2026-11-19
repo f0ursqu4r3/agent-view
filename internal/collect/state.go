@@ -1,5 +1,6 @@
 // Package collect holds the collector: the live-activity model and, in later
-// files, the sources that feed it. It ports src/collector.
+// files, the sources that feed it. It ports the former TypeScript collector
+// (removed in P2c; see git history).
 package collect
 
 import (

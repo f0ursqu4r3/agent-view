@@ -1,6 +1,7 @@
 // Package store holds the viewer state built from collector envelopes: agents,
-// calls, presence, and lane order. It is a port of viewer/store.ts. Times are
-// Unix milliseconds.
+// calls, presence, and lane order. It is a port of the former TypeScript
+// viewer/store.ts (removed in P2c; see git history). Times are Unix
+// milliseconds.
 package store
 
 import (
@@ -14,7 +15,8 @@ import (
 	"agent-view/internal/schema"
 )
 
-// Limits from viewer/store.ts, plus the dormant cap.
+// Limits from the former TypeScript viewer/store.ts (removed in P2c; see git
+// history), plus the dormant cap.
 const (
 	outputKeep       = 16 * 1024 // bytes of output kept per call
 	maxCallsPerHost  = 2000

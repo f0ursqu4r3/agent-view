@@ -52,7 +52,8 @@ type Options struct {
 	Diag func(msg string)
 }
 
-// Collector is one collector. It ports src/collector/collector.ts. The
+// Collector is one collector. It ports the former TypeScript
+// collector/collector.ts (removed in P2c; see git history). The
 // sources feed one ordered queue; one loop goroutine takes each event from
 // it, enriches it (not in demo mode), applies it to the state, wraps it in
 // an envelope and delivers it to every subscriber in order. A demo

@@ -15,13 +15,12 @@ import (
 	"time"
 )
 
-// The golden files hold the TypeScript side of the live parity tests, written
-// once with PARITY_WRITE_GOLDEN=1 while Bun and the TypeScript code existed.
-// The TestGolden tests compare the Go side with them and need no Bun.
+// The golden files hold results that the TypeScript collector, hub and audit
+// script gave once, before the TypeScript code was removed (see
+// testdata/golden/parity/README.md). The TestGolden tests compare the Go side
+// with them and need no Bun.
 
 const (
-	// goldenEnv makes the live parity tests write the golden files.
-	goldenEnv = "PARITY_WRITE_GOLDEN"
 	// homeMark replaces the temporary HOME in every golden string.
 	homeMark = "<HOME>"
 	// localMark replaces the hub's local host label (the machine's name).
@@ -123,25 +122,16 @@ func (z freezer) stream(s stream) stream {
 
 // streamFile is the JSON form of a stream in fixtures.json and hub.json.
 type streamFile struct {
-	Hosts    []any      `json:"hosts,omitempty"`
+	Hosts    []any      `json:"hosts"`
 	Ordered  []envelope `json:"ordered"`
 	Statuses []envelope `json:"statuses"`
 	Timeouts []envelope `json:"timeouts"`
-	Coverage envelope   `json:"coverage,omitempty"`
+	Coverage envelope   `json:"coverage"`
 }
 
-func toFile(hosts []any, s stream) streamFile {
-	nonNil := func(e []envelope) []envelope {
-		if e == nil {
-			return []envelope{}
-		}
-		return e
-	}
-	return streamFile{Hosts: hosts, Ordered: nonNil(s.ordered), Statuses: nonNil(s.statuses), Timeouts: nonNil(s.timeouts), Coverage: s.coverage}
-}
-
-// encodeJSON writes v with sorted keys, two-space indent, no HTML escaping
-// and a trailing newline.
+// encodeJSON writes v with sorted keys, two-space indent (with indent set),
+// no HTML escaping and a trailing newline. TestGoldenDetectsChange uses it to
+// write a changed copy of a golden in the golden's own format.
 func encodeJSON(v any, indent bool) ([]byte, error) {
 	// A round trip through any sorts the keys of structs too.
 	b, err := json.Marshal(v)
@@ -162,48 +152,6 @@ func encodeJSON(v any, indent bool) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-// writeGolden writes data to the golden file name when goldenEnv is 1 and the
-// test has passed so far.
-func writeGolden(t *testing.T, name string, data []byte) {
-	t.Helper()
-	if os.Getenv(goldenEnv) != "1" {
-		return
-	}
-	if t.Failed() {
-		t.Errorf("%s not written: the live comparison failed", name)
-		return
-	}
-	if err := os.MkdirAll(goldenDir(), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(goldenDir(), name), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("wrote %s (%d bytes)", name, len(data))
-}
-
-func writeGoldenJSON(t *testing.T, name string, v any) {
-	t.Helper()
-	data, err := encodeJSON(v, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeGolden(t, name, data)
-}
-
-func writeGoldenNDJSON(t *testing.T, name string, events []envelope) {
-	t.Helper()
-	var buf bytes.Buffer
-	for _, e := range events {
-		line, err := encodeJSON(e, false)
-		if err != nil {
-			t.Fatal(err)
-		}
-		buf.Write(line)
-	}
-	writeGolden(t, name, buf.Bytes())
 }
 
 // readStreamFile reads fixtures.json or hub.json.
@@ -266,7 +214,7 @@ func diffStreamGolden(hosts []any, s stream, path string) ([]string, error) {
 	if !reflect.DeepEqual(hosts, f.Hosts) {
 		out = append(out, fmt.Sprintf("hosts: Go %s; golden %s", canonical(hosts), canonical(f.Hosts)))
 	}
-	return append(out, diffStreams(s, f.stream(), false)...), nil
+	return append(out, diffStreams(s, f.stream())...), nil
 }
 
 // diffEventsGolden compares the Go demo events with a demo golden.
@@ -314,7 +262,7 @@ func reportDiffs(t *testing.T, diffs []string, err error) {
 	}
 }
 
-// demoCases are the demo traces the live and golden tests compare.
+// demoCases are the demo traces that the demo goldens hold.
 var demoCases = []struct {
 	scale string
 	ms    float64
@@ -331,7 +279,7 @@ func TestGoldenFixtures(t *testing.T) {
 	if r.err != nil || r.timedOut {
 		t.Fatalf("Go collector: err %v, timed out %v (stderr %q)", r.err, r.timedOut, r.stderr)
 	}
-	s, err := normalize(r.lines, false)
+	s, err := normalize(r.lines)
 	if err != nil {
 		t.Fatalf("Go output: %v", err)
 	}

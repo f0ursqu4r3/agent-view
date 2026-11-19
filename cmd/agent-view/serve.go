@@ -20,8 +20,9 @@ func localLabel() string {
 	return label
 }
 
-// runServe ports runHub of src/cli.ts: the local collector, the remotes and
-// the snapshot server behind one hub. It returns the exit code: 0 after a
+// runServe ports runHub of the former TypeScript cli.ts (removed in P2c; see
+// git history): the local collector, the remotes and the snapshot server
+// behind one hub. It returns the exit code: 0 after a
 // signal on signals, 1 when the server cannot start, 2 for a bad
 // AGENT_VIEW_REMOTE_COMMAND. After a signal it stops the server and the hub;
 // when the hub has not stopped within stopWait, it sends SIGKILL to every

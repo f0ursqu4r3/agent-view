@@ -1,5 +1,6 @@
 // Package fschange watches agents' project roots and emits fs.change
-// events. It replaces src/collector/sources/fs-changes.ts. The events never
+// events. It replaces the former TypeScript collector/sources/fs-changes.ts
+// (removed in P2c; see git history). The events never
 // carry an agent id: the viewer draws them as unattributed activity.
 package fschange
 

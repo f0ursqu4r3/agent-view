@@ -1,4 +1,5 @@
-// Package demo simulates agents for --demo. It ports src/collector/demo.ts.
+// Package demo simulates agents for --demo. It ports the former TypeScript
+// collector/demo.ts (removed in P2c; see git history).
 package demo
 
 // Mulberry32 is a small deterministic generator: the demo looks the same on

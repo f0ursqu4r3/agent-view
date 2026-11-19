@@ -35,8 +35,9 @@ func collectSignals() (<-chan os.Signal, func()) {
 	}
 }
 
-// runCollect ports collectStdio of src/cli.ts. It writes one NDJSON envelope
-// per line to stdout until a signal arrives on signals or a write fails, and
+// runCollect ports collectStdio of the former TypeScript cli.ts (removed in
+// P2c; see git history). It writes one NDJSON envelope per line to stdout
+// until a signal arrives on signals or a write fails, and
 // returns the exit code: 0 after a stop request, 1 when the collector cannot
 // start.
 func runCollect(args cli.Args, stdout io.Writer, stderr io.Writer, signals <-chan os.Signal) int {

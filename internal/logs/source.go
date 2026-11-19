@@ -60,7 +60,8 @@ type LogCoverage struct {
 }
 
 // Source tails the newest Claude and Codex logs under the given roots and
-// emits adapter events. It replaces src/collector/sources/log-source.ts.
+// emits adapter events. It replaces the former TypeScript
+// collector/sources/log-source.ts (removed in P2c; see git history).
 // File watchers give low latency, a poll of the selected files covers missed
 // callbacks, and a rescan finds new logs. A watcher hint for an unknown log
 // starts a rescan at once. The safety rescan walks every root, which is

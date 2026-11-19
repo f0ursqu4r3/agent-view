@@ -1,6 +1,7 @@
 // Package lifecycle holds the time and presence rules that the collector and
-// the TUI store share. It ports src/shared/lifecycle.ts and the laterIso and
-// msOf helpers of src/collector/state.ts.
+// the TUI store share. It ports the former TypeScript shared/lifecycle.ts and
+// the laterIso and msOf helpers of collector/state.ts (removed in P2c; see git
+// history).
 package lifecycle
 
 import (
@@ -19,7 +20,8 @@ type Options struct {
 	FileTTLMs      int64
 }
 
-// Defaults returns the lifecycle values of src/shared/lifecycle.ts.
+// Defaults returns the lifecycle values of the former TypeScript
+// shared/lifecycle.ts (removed in P2c; see git history).
 func Defaults() Options {
 	return Options{
 		LingerMs:       600_000,

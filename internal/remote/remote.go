@@ -1,7 +1,8 @@
 //go:build darwin || linux
 
 // Package remote runs a collector on another machine over SSH and makes it a
-// hub source. It ports src/hub/remote.ts.
+// hub source. It ports the former TypeScript hub/remote.ts (removed in P2c; see
+// git history).
 package remote
 
 import (

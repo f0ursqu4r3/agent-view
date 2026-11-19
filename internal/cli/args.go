@@ -240,7 +240,8 @@ func allDigits(v string) bool {
 	return v != ""
 }
 
-// RemoteCommandOverride ports remoteCommandOverride of src/cli.ts. TEST ONLY:
+// RemoteCommandOverride ports remoteCommandOverride of the former TypeScript
+// cli.ts (removed in P2c; see git history). TEST ONLY:
 // AGENT_VIEW_REMOTE_COMMAND holds a JSON array of strings, and serve runs that
 // argv for every remote instead of ssh. An empty value means no override and
 // returns nil. Anything but a non-empty JSON array of strings is a UsageError.

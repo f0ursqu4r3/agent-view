@@ -1,6 +1,6 @@
 // Package server serves the hub's snapshot over HTTP. It ports the
-// /api/snapshot route of src/hub/server.ts. The browser viewer and /ws are
-// not ported.
+// /api/snapshot route of the former TypeScript hub/server.ts (removed in P2c;
+// see git history). The browser viewer and /ws are not ported.
 package server
 
 import (

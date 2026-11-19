@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -328,7 +327,7 @@ func normalizeHub(body []byte) (hubBody, error) {
 	}
 	b := hubBody{hosts: top.Hosts}
 	for i, raw := range top.Envelopes {
-		one, err := normalize([]string{string(raw)}, false)
+		one, err := normalize([]string{string(raw)})
 		if err != nil {
 			return hubBody{}, fmt.Errorf("envelope %d: %v", i, err)
 		}
@@ -466,28 +465,6 @@ func requireHubContent(t *testing.T, b hubBody) {
 	}
 }
 
-// The Go hub and the TypeScript hub serve the same /api/snapshot for the same
-// local logs and the same fake remote.
-func TestParityHubSnapshot(t *testing.T) {
-	requireBun(t)
-	in := hubEnv(t)
-	goHub := startHub(t, "Go", in.env, goBin, "serve", "--port", "0", "--remote", fakeHost)
-	tsHub := startHub(t, "TypeScript", in.env, bunPath, "src/cli.ts", "--no-open", "--port", "0", "--remote", fakeHost)
-	bodies := waitStable(t, goHub, tsHub)
-	goBody, tsBody := bodies[0], bodies[1]
-
-	if !reflect.DeepEqual(goBody.hosts, tsBody.hosts) {
-		t.Errorf("hosts: Go %s; TypeScript %s", canonical(goBody.hosts), canonical(tsBody.hosts))
-	}
-	for _, d := range diffStreams(goBody.s, tsBody.s, false) {
-		t.Error(d)
-	}
-	requireHubContent(t, goBody)
-	t.Logf("compared %d hosts and %d envelopes", len(tsBody.hosts), len(tsBody.s.ordered))
-	hosts, s := in.freeze(t, tsBody)
-	writeGoldenJSON(t, "hub.json", toFile(hosts, s))
-}
-
 // runGoAudit runs "agent-view audit --port <port>" and returns its stdout.
 func runGoAudit(t *testing.T, port string) string {
 	t.Helper()
@@ -501,39 +478,4 @@ func runGoAudit(t *testing.T, port string) string {
 		t.Fatalf("agent-view audit: %v\n%s", err, stderr.String())
 	}
 	return string(out)
-}
-
-// The TypeScript live audit and agent-view audit print the same report for
-// the Go hub.
-func TestParityAudit(t *testing.T) {
-	requireBun(t)
-	goHub := startHub(t, "Go", hubEnv(t).env, goBin, "serve", "--port", "0", "--remote", fakeHost)
-	waitStable(t, goHub)
-
-	goOut := runGoAudit(t, goHub.port)
-	tsOut := strings.Join(runBun(t, "test/live-audit.ts", goHub.port), "\n")
-	var goReport, tsReport any
-	if err := json.Unmarshal([]byte(goOut), &goReport); err != nil {
-		t.Fatalf("Go report: %v", err)
-	}
-	if err := json.Unmarshal([]byte(tsOut), &tsReport); err != nil {
-		t.Fatalf("TypeScript report: %v", err)
-	}
-	if !reflect.DeepEqual(goReport, tsReport) {
-		t.Errorf("report: Go %s; TypeScript %s", canonical(goReport), canonical(tsReport))
-	}
-
-	var counts struct {
-		Counts map[string]struct {
-			Agents int `json:"agents"`
-		} `json:"counts"`
-	}
-	if err := json.Unmarshal([]byte(goOut), &counts); err != nil {
-		t.Fatal(err)
-	}
-	if n := counts.Counts["claude"].Agents; n < 1 {
-		t.Errorf("the Go report has %d Claude agents, want at least 1", n)
-	}
-	t.Logf("report: %s", canonical(goReport))
-	writeGoldenJSON(t, "audit.json", tsReport)
 }

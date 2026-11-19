@@ -1,12 +1,13 @@
 // Package wire is the collector's NDJSON schema: it encodes and decodes the
-// envelopes. It mirrors src/shared/schema.ts. Package schema is the TUI's own
-// decoder of the same lines.
+// envelopes. It mirrors the former TypeScript shared/schema.ts (removed in P2c;
+// see git history). Package schema is the TUI's own decoder of the same lines.
 package wire
 
 // SchemaVersion is the envelope version the collector writes.
 const SchemaVersion = 1
 
-// CollectorVersion is the collector version (the package.json version).
+// CollectorVersion is the collector version (the version of the former
+// TypeScript package.json, removed in P2c; see git history).
 const CollectorVersion = "0.2.0"
 
 // Agent is one main agent or sub-agent. ParentID, Cwd and ProjectRoot encode

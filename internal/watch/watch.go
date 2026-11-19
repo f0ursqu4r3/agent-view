@@ -1,6 +1,6 @@
-// Package watch reports file changes under a directory tree. It replaces
-// src/collector/watch.ts: FSEvents on macOS, fsnotify (one watch per
-// directory) elsewhere.
+// Package watch reports file changes under a directory tree. It replaces the
+// former TypeScript collector/watch.ts (removed in P2c; see git history):
+// FSEvents on macOS, fsnotify (one watch per directory) elsewhere.
 package watch
 
 import (

@@ -11,7 +11,8 @@ import (
 	"agent-view/internal/schema"
 )
 
-// Helpers mirror the ones in test/viewer/store.test.ts.
+// Helpers mirror the ones in the former TypeScript test/viewer/store.test.ts
+// (removed in P2c; see git history).
 
 var nowMs = time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC).UnixMilli()
 

@@ -7,7 +7,8 @@ import (
 	"agent-view/internal/schema"
 )
 
-// Lifecycle defaults from src/shared/lifecycle.ts.
+// Lifecycle defaults from the former TypeScript shared/lifecycle.ts (removed in
+// P2c; see git history).
 const (
 	DefaultLingerMs       int64 = 600_000   // 10 min
 	DefaultStaleMs        int64 = 120_000   // 2 min
