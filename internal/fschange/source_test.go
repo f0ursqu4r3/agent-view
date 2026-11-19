@@ -552,6 +552,7 @@ func TestDeletedRootRestarts(t *testing.T) {
 type fakeWatcher struct {
 	mu       sync.Mutex
 	degraded string
+	partial  bool
 	closed   bool
 }
 
@@ -567,10 +568,30 @@ func (f *fakeWatcher) Degraded() string {
 	return f.degraded
 }
 
+func (f *fakeWatcher) Partial() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.partial && !f.closed
+}
+
+// fail is a failure that needs a restart. The first reason stays.
 func (f *fakeWatcher) fail(why string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.degraded = why
+	if f.degraded == "" {
+		f.degraded = why
+	}
+	f.partial = false
+}
+
+// limit is a capacity limit: the watcher runs on and covers part of the tree.
+func (f *fakeWatcher) limit(why string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.degraded == "" {
+		f.degraded = why
+		f.partial = true
+	}
 }
 
 func (f *fakeWatcher) isClosed() bool {
@@ -631,5 +652,60 @@ func TestFailedWatcherRestarts(t *testing.T) {
 	}
 	if got := len(status("degraded")); got != 1 {
 		t.Errorf("got %d degraded reports, want 1", got)
+	}
+}
+
+// A partial watcher (a capacity limit) still reports changes in what it
+// covers. SetRoots reports it once and keeps it: it does not close it nor
+// start another. A later failure that needs a restart closes it on the next
+// call and restarts it on the call after, as for any failed watcher.
+func TestPartialWatcherKept(t *testing.T) {
+	dir := tempDir(t)
+	var fakes []*fakeWatcher
+	h := newHarness(t, Options{Watch: func(string, func(string, watch.Op), watch.Options) watch.Watcher {
+		f := &fakeWatcher{}
+		fakes = append(fakes, f)
+		return f
+	}})
+	status := func(state string) []statusRec { return h.statusesOf("fs:"+dir, state) }
+	capped := "more than 12000 directories; later directories are not watched"
+
+	h.src.SetRoots([]string{dir})
+	fakes[0].limit(capped)
+	for range 3 {
+		h.src.SetRoots([]string{dir})
+	}
+	if len(fakes) != 1 {
+		t.Errorf("started %d watchers, want 1", len(fakes))
+	}
+	if fakes[0].isClosed() {
+		t.Error("the partial watcher was closed")
+	}
+	if got := h.src.Roots(); !slices.Equal(got, []string{dir}) {
+		t.Errorf("Roots() = %v, want [%s]", got, dir)
+	}
+	want := []statusRec{{"fs:" + dir, wire.SourceState{State: "degraded", Detail: capped}}}
+	if got := status("degraded"); !slices.Equal(got, want) {
+		t.Errorf("degraded reports = %v, want %v", got, want)
+	}
+
+	// The watcher then fails for good: Degraded keeps the first reason.
+	fakes[0].fail("events dropped under load")
+	h.src.SetRoots([]string{dir})
+	if !fakes[0].isClosed() {
+		t.Error("the failed watcher was not closed")
+	}
+	if got := h.src.Roots(); len(got) != 0 {
+		t.Errorf("Roots() = %v, want []", got)
+	}
+	h.src.SetRoots([]string{dir})
+	if len(fakes) != 2 {
+		t.Errorf("started %d watchers, want 2", len(fakes))
+	}
+	if got := len(status("ok")); got != 2 {
+		t.Errorf("got %d ok reports, want 2", got)
+	}
+	if got := status("degraded"); !slices.Equal(got, want) {
+		t.Errorf("degraded reports = %v, want %v", got, want)
 	}
 }

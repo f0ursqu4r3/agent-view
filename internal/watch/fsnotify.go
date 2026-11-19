@@ -97,7 +97,7 @@ func (x *fsnotifyWatcher) addTree(dir string, report bool) {
 		return
 	}
 	if len(x.dirs) >= x.maxDirs {
-		x.degrade(fmt.Sprintf("more than %d directories; later directories are not watched", x.maxDirs))
+		x.limit(fmt.Sprintf("more than %d directories; later directories are not watched", x.maxDirs))
 		return
 	}
 	if err := x.w.Add(dir); err != nil {
@@ -123,13 +123,25 @@ func (x *fsnotifyWatcher) addTree(dir string, report bool) {
 	}
 }
 
-// fail degrades the watcher, except for a directory below the root that is
-// gone by the time it is added or read: it has nothing left to watch.
+// fail records why dir could not be watched or read. A directory below the
+// root that is gone by then is skipped: it has nothing left to watch. A
+// capacity limit leaves the watcher partial; any other failure degrades it.
 func (x *fsnotifyWatcher) fail(what, dir string, err error) {
 	if dir != x.real && (errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)) {
 		return
 	}
-	x.degrade(what + " " + x.name(dir) + ": " + fsutil.ErrCode(err))
+	why := what + " " + x.name(dir) + ": " + fsutil.ErrCode(err)
+	if isCapacity(err) {
+		x.limit(why)
+		return
+	}
+	x.degrade(why)
+}
+
+// isCapacity reports whether err means that no inotify watches (ENOSPC, the
+// max_user_watches limit) or file descriptors (EMFILE, ENFILE) are left.
+func isCapacity(err error) bool {
+	return errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EMFILE) || errors.Is(err, syscall.ENFILE)
 }
 
 // forget drops dir and every watched directory below it. fsnotify has

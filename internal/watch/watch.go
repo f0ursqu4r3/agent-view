@@ -52,6 +52,15 @@ type Watcher interface {
 	// Degraded is "" while the watcher is healthy, else the first reason it
 	// failed. It is safe from any goroutine.
 	Degraded() string
+	// Partial is true while the watcher runs but covers only part of the
+	// tree because of a capacity limit: the directory limit, or no inotify
+	// watches or file descriptors left. Such a watcher still reports changes
+	// in what it covers, and a restart would hit the same limit. Partial is
+	// false while the watcher is healthy, after Close, and after any failure
+	// that needs a restart (the root removed, a watcher error, events
+	// dropped), even though Degraded keeps its first reason. It is safe from
+	// any goroutine.
+	Partial() bool
 }
 
 // Tree watches the directory tree at root and calls onChange with each
@@ -71,7 +80,9 @@ type state struct {
 	onChange func(rel string, op Op)
 	ignore   func(rel string) bool
 	degraded atomic.Pointer[string]
-	closed   atomic.Bool
+	// fatal is set by a failure that needs a restart.
+	fatal  atomic.Bool
+	closed atomic.Bool
 }
 
 // start resolves root. When root cannot be resolved, it returns a watcher
@@ -93,8 +104,20 @@ func start(root string, onChange func(rel string, op Op), o Options) (*state, Wa
 	}, nil
 }
 
-// degrade records why the watcher failed. The first reason stays.
-func (s *state) degrade(why string) { s.degraded.CompareAndSwap(nil, &why) }
+// degrade records a failure that needs a restart. The first reason stays.
+func (s *state) degrade(why string) {
+	// fatal goes first, so Partial never sees this reason without it.
+	s.fatal.Store(true)
+	s.degraded.CompareAndSwap(nil, &why)
+}
+
+// limit records a capacity limit: the watcher runs on, but covers only part
+// of the tree. The first reason stays.
+func (s *state) limit(why string) { s.degraded.CompareAndSwap(nil, &why) }
+
+func (s *state) Partial() bool {
+	return s.degraded.Load() != nil && !s.fatal.Load() && !s.closed.Load()
+}
 
 func (s *state) Degraded() string {
 	if p := s.degraded.Load(); p != nil {
@@ -132,3 +155,4 @@ type stopped string
 
 func (stopped) Close()             {}
 func (s stopped) Degraded() string { return string(s) }
+func (stopped) Partial() bool      { return false }

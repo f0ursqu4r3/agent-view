@@ -26,6 +26,7 @@ func toolLine(id string) string {
 // fakeWatcher is a watcher that reports nothing.
 type fakeWatcher struct {
 	degraded string
+	partial  bool
 	onClose  func()
 }
 
@@ -36,6 +37,8 @@ func (w fakeWatcher) Close() {
 }
 
 func (w fakeWatcher) Degraded() string { return w.degraded }
+
+func (w fakeWatcher) Partial() bool { return w.partial }
 
 func noWatch(string, func(string, watch.Op), watch.Options) watch.Watcher { return fakeWatcher{} }
 
@@ -256,6 +259,35 @@ func TestLogSourceHealthyRescanSlow(t *testing.T) {
 	until(t, degraded.hasStart("l1"), "fast rescan to find l1")
 }
 
+// A partial watcher (a capacity limit) is kept across scans and reported
+// once. A degraded watcher that is not partial is replaced on each scan.
+func TestLogSourceKeepsPartialWatcher(t *testing.T) {
+	dir := realDir(t)
+	root := claudeRoot(dir)
+	mkdir(t, root.Path, "proj")
+	key := "logs:" + root.Path
+	capped := "more than 12000 directories; later directories are not watched"
+	partial := &watchTracker{degraded: capped, partial: true}
+	r := newSrcRig(t, []Root{root}, SourceOptions{Watch: partial.watch, RescanMs: 50, HealthyRescanMs: 60_000})
+	r.start(t)
+	// Each new log is found by a later rescan, so at least two scans ran.
+	for _, id := range []string{"p1", "p2"} {
+		write(t, filepath.Join(root.Path, "proj", id+".jsonl"), []byte(toolLine(id)))
+		until(t, r.hasStart(id), "rescan to find "+id)
+	}
+	eq(t, [2]int32{partial.opened.Load(), partial.closed.Load()}, [2]int32{1, 0})
+	eq(t, r.statusesOf(key), []srcStatus{{key, wire.SourceState{State: "degraded", Detail: capped}}})
+	r.src.Stop()
+
+	failed := &watchTracker{degraded: "watcher error on root: ENOENT"}
+	r = newSrcRig(t, []Root{root}, SourceOptions{Watch: failed.watch, RescanMs: 50, HealthyRescanMs: 60_000})
+	r.start(t)
+	until(t, func() bool { return failed.opened.Load() >= 3 }, "the failed watcher to be replaced twice")
+	if got := failed.closed.Load(); got < 2 {
+		t.Errorf("closed %d watchers, want at least 2", got)
+	}
+}
+
 // LogSource never reads one file twice at once: a burst of appends emits each record once
 func TestLogSourceNoConcurrentReads(t *testing.T) {
 	dir := realDir(t)
@@ -368,12 +400,16 @@ func TestLogSourceUnreadableRoot(t *testing.T) {
 }
 
 // watchTracker counts the watchers a fake Watch opened and closed, so a test
-// can prove Stop released them.
-type watchTracker struct{ opened, closed atomic.Int32 }
+// can prove Stop released them. Its watchers report degraded and partial.
+type watchTracker struct {
+	opened, closed atomic.Int32
+	degraded       string
+	partial        bool
+}
 
 func (w *watchTracker) watch(string, func(string, watch.Op), watch.Options) watch.Watcher {
 	w.opened.Add(1)
-	return fakeWatcher{onClose: func() { w.closed.Add(1) }}
+	return fakeWatcher{degraded: w.degraded, partial: w.partial, onClose: func() { w.closed.Add(1) }}
 }
 
 func (w *watchTracker) live() int32 { return w.opened.Load() - w.closed.Load() }

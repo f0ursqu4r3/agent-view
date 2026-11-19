@@ -23,6 +23,9 @@ func TestFSEventsDropFlags(t *testing.T) {
 	if got, want := x.Degraded(), "events dropped under load"; got != want {
 		t.Errorf("Degraded() = %q, want %q", got, want)
 	}
+	if x.Partial() {
+		t.Error("Partial() = true after dropped events, want false")
+	}
 	want := []event{{filepath.Join("sub", "f.txt"), Rename}}
 	if got := r.events(); len(got) != 1 || got[0] != want[0] {
 		t.Errorf("events = %v, want %v", got, want)

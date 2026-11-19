@@ -192,6 +192,78 @@ func TestFsnotifyMaxDirs(t *testing.T) {
 	if got, want := w.Degraded(), "more than 3 directories; later directories are not watched"; got != want {
 		t.Errorf("Degraded() = %q, want %q", got, want)
 	}
+	if !w.Partial() {
+		t.Error("Partial() = false at the directory cap, want true")
+	}
+	w.Close()
+	if w.Partial() {
+		t.Error("Partial() = true after Close, want false")
+	}
+}
+
+// The directory cap leaves the watcher partial: it still reports changes in
+// the directories it watches. A later removal of the root needs a restart:
+// Partial turns false, and Degraded keeps the first reason.
+func TestFsnotifyPartialUntilRootRemoved(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "root")
+	for _, name := range []string{"a", "b", "c", "d"} {
+		mkdirAll(t, root, name)
+	}
+	r := newRecorder(t)
+	w := treeFsnotify(root, r.onChange, Options{MaxDirs: 3})
+	defer r.close(w)
+	capped := "more than 3 directories; later directories are not watched"
+	if got := w.Degraded(); got != capped {
+		t.Fatalf("Degraded() = %q, want %q", got, capped)
+	}
+	if !w.Partial() {
+		t.Fatal("Partial() = false at the directory cap, want true")
+	}
+	writeFile(t, filepath.Join(root, "f.txt"), "x")
+	r.waitRel("f.txt")
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(waitFor)
+	for w.Partial() {
+		if time.Now().After(deadline) {
+			t.Fatal("Partial() = true after the root was removed, want false")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := w.Degraded(); got != capped {
+		t.Errorf("Degraded() = %q, want the first reason %q", got, capped)
+	}
+}
+
+// A capacity failure on a directory (no inotify watches or file descriptors
+// left) leaves the watcher partial. Any other failure needs a restart.
+func TestFsnotifyFailCapacity(t *testing.T) {
+	cases := []struct {
+		err     error
+		code    string
+		partial bool
+	}{
+		{syscall.ENOSPC, "ENOSPC", true},
+		{syscall.EMFILE, "EMFILE", true},
+		{&fs.PathError{Op: "open", Path: "x", Err: syscall.ENFILE}, "ENFILE", true},
+		{syscall.EACCES, "EACCES", false},
+	}
+	for _, c := range cases {
+		s, failed := start(t.TempDir(), func(string, Op) {}, Options{})
+		if failed != nil {
+			t.Fatalf("start: %q", failed.Degraded())
+		}
+		x := &fsnotifyWatcher{state: s}
+		sub := filepath.Join(s.real, "sub")
+		x.fail("cannot watch", sub, c.err)
+		if got, want := x.Degraded(), "cannot watch "+sub+": "+c.code; got != want {
+			t.Errorf("%s: Degraded() = %q, want %q", c.code, got, want)
+		}
+		if got := x.Partial(); got != c.partial {
+			t.Errorf("%s: Partial() = %v, want %v", c.code, got, c.partial)
+		}
+	}
 }
 
 // a missing root sets degraded and does not throw, in both modes
@@ -201,6 +273,9 @@ func TestTreeMissingRoot(t *testing.T) {
 		w := b.tree(missing, func(string, Op) {}, Options{})
 		if got, want := w.Degraded(), "cannot watch "+missing+": ENOENT"; got != want {
 			t.Errorf("%s: Degraded() = %q, want %q", b.name, got, want)
+		}
+		if w.Partial() {
+			t.Errorf("%s: Partial() = true for a watcher that could not start", b.name)
 		}
 		w.Close()
 		w.Close()

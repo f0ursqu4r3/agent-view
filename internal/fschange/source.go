@@ -132,13 +132,20 @@ func (s *Source) SetRoots(roots []string) {
 	s.ctl.Lock()
 	defer s.ctl.Unlock()
 	// A watcher that has failed delivers no events. Report it, close it and
-	// drop it here; a later call restarts it.
+	// drop it here; a later call restarts it. A partial watcher (a capacity
+	// limit) still delivers the events of what it covers, and a restart
+	// would walk the whole tree again to hit the same limit: report it and
+	// keep it.
 	failed := map[string]bool{}
 	for _, root := range s.Roots() {
-		if s.watcher(root).Degraded() == "" {
+		w := s.watcher(root)
+		if w.Degraded() == "" {
 			continue
 		}
 		s.reportIfDegraded(root)
+		if w.Partial() {
+			continue
+		}
 		s.drop(root).Close()
 		failed[root] = true
 	}
