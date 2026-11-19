@@ -207,11 +207,11 @@ func drawRow(in Input, p *rowPlan, w int) *cells.Grid {
 const whereFrames = 6
 
 // state returns the agent's state word. STOPPED flashes once: it is inverse
-// on the inverse frames of the engine's fail flash, so the model starts that
-// flash (Anim.OnFail) when an agent is interrupted.
+// on the inverse frame of the engine's stop flash, which the model starts
+// (Anim.OnStopped) when an agent is interrupted.
 func (p *rowPlan) state(in Input) cards.StateWord {
 	st := cards.State(p.agent, p.open, p.hasKids, in.Now, store.DefaultStaleMs)
-	if st.Flash && p.f.Flash {
+	if st.Flash && p.f.StopFlash {
 		st.Style.Inverse = true
 	}
 	return st

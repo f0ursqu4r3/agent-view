@@ -472,6 +472,58 @@ func TestComposeAnimation(t *testing.T) {
 	}
 }
 
+// TestComposeStopFlash: an interrupt flashes the STOPPED word once, and the
+// call card stays as it is.
+func TestComposeStopFlash(t *testing.T) {
+	f := newFixture(t)
+	f.agent("a", "")
+	f.start("a", "c1", "command", "")
+	f.apply(schema.Envelope{Kind: "agent.status", AgentID: "a", Status: "interrupted"})
+	e := anim.New(false)
+	in := f.input(120, 40)
+	in.Anim = e
+	_, hits := Compose(in) // first sight: done values
+	ha := hitFor(t, hits, "a")
+	e.OnStopped("a")
+
+	word := func(g *cells.Grid) (plain, mask string) {
+		lines, masks := plainLines(g), strings.Split(cells.Mask(g), "\n")
+		for y := ha.Y; y < ha.Y+ha.H; y++ {
+			if i := strings.Index(lines[y], "! STOPPED"); i >= 0 {
+				x := width(lines[y][:i])
+				return at(g, x, y, 9), masks[y][x : x+9]
+			}
+		}
+		t.Fatalf("no STOPPED word:\n%s", cells.Plain(g))
+		return "", ""
+	}
+	card := func(g *cells.Grid) string {
+		masks := strings.Split(cells.Mask(g), "\n")
+		var b strings.Builder
+		for y := ha.Y; y < ha.Y+7; y++ {
+			b.WriteString(masks[y][ha.X+25 : ha.X+25+28])
+		}
+		return b.String()
+	}
+
+	g, _ := Compose(in)
+	if _, m := word(g); m != "#########" {
+		t.Errorf("frame 0: STOPPED mask %q, want inverse", m)
+	}
+	if m := card(g); strings.Contains(m, "#") {
+		t.Errorf("frame 0: the call card flashed: %s", m)
+	}
+	e.Step()
+	g, _ = Compose(in)
+	if _, m := word(g); strings.Contains(m, "#") {
+		t.Errorf("frame 1: STOPPED mask %q, want plain", m)
+	}
+	e.Step()
+	if e.Active() {
+		t.Errorf("the stop flash runs past 2 frames")
+	}
+}
+
 // TestComposeTallRows checks rows taller than the board's: the focused
 // command card grows to 10 output lines and its row grows with it, and a row
 // that collapses keeps its height for a frame with the tree line drawn on.

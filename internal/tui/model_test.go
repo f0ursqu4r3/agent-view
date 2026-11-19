@@ -604,15 +604,60 @@ func TestModelRoutesAnimations(t *testing.T) {
 		t.Errorf("history change animated: %+v", fr)
 	}
 
-	// A live sub-agent draws its gutter first; an interrupt flashes.
+	// A live sub-agent draws its gutter first; an interrupt flashes the
+	// state word once and not the call card.
 	f.batch(agentEnv("s", "a", f.clock))
 	if fr := f.m.anim.Frame("s", 9, 0); fr.GutterRows >= 9 {
 		t.Errorf("new sub-agent: gutter %d, want it drawing", fr.GutterRows)
 	}
 	f.frames(100)
 	f.batch(schema.Envelope{Kind: "agent.status", AgentID: "s", Status: "interrupted"})
-	if fr := f.m.anim.Frame("s", 9, 0); !fr.Flash {
-		t.Errorf("interrupted: no flash")
+	if fr := f.m.anim.Frame("s", 9, 0); !fr.StopFlash || fr.Flash {
+		t.Errorf("interrupted: StopFlash %v, Flash %v; want the state word only", fr.StopFlash, fr.Flash)
+	}
+	for i := 1; i <= 3; i++ {
+		f.send(frameMsg{})
+		if fr := f.m.anim.Frame("s", 9, 0); fr.StopFlash || fr.Flash {
+			t.Errorf("interrupted, frame %d: StopFlash %v, Flash %v; want both off", i, fr.StopFlash, fr.Flash)
+		}
+	}
+}
+
+// TestModelFlashesOnlyTheShownCall: a failed end flashes the call card only
+// when the card shows the failed call after the batch.
+func TestModelFlashesOnlyTheShownCall(t *testing.T) {
+	f := newModelFix(t, false, 120, 40)
+	f.batch(agentEnv("a", "", f.clock))
+	f.frames(100)
+
+	// Parallel calls: the older one fails while the newer one runs.
+	f.batch(startEnv("a", "old", "command", "", f.clock))
+	f.clock += 100
+	f.batch(startEnv("a", "new", "read", "/work/repo/new.go", f.clock))
+	f.frames(100)
+	f.clock += 100
+	f.batch(endEnv("a", "old", false, f.clock))
+	if fr := f.m.anim.Frame("a", 9, 0); fr.Flash || f.m.anim.Active() {
+		t.Errorf("an older parallel call failed: the newer card flashed")
+	}
+
+	// The shown call fails: its card flashes.
+	f.clock += 100
+	f.batch(endEnv("a", "new", false, f.clock))
+	if fr := f.m.anim.Frame("a", 9, 0); !fr.Flash {
+		t.Errorf("the shown call failed: no flash")
+	}
+	f.frames(100)
+
+	// The shown call fails in the batch that starts the next call: the new
+	// card prints and does not flash.
+	f.clock += 100
+	f.batch(startEnv("a", "c3", "command", "", f.clock))
+	f.frames(100)
+	f.clock += 100
+	f.batch(endEnv("a", "c3", false, f.clock), startEnv("a", "c4", "read", "/work/repo/c4.go", f.clock))
+	if fr := f.m.anim.Frame("a", 9, 0); fr.Flash || fr.CallRows != 0 {
+		t.Errorf("failure and new start in one batch: Flash %v, CallRows %d; want the new card printing, no flash", fr.Flash, fr.CallRows)
 	}
 }
 

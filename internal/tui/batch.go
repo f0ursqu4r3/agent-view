@@ -69,7 +69,7 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		for _, lc := range live {
 			c := lc.c
 			m.known[c.AgentID] = true
-			m.animate(c, lc.failed, after[c.AgentID] != before[c.AgentID])
+			m.animate(c, lc.failed, after[c.AgentID] != before[c.AgentID], after[c.AgentID] == c.CallID)
 		}
 	}
 	for id, only := range histOnly {
@@ -88,13 +88,16 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 }
 
 // animate starts the effects of a live change. shownChanged reports whether
-// the batch changed the call on the agent's call card.
-func (m *Model) animate(c store.Change, failed, shownChanged bool) {
+// the batch changed the call on the agent's call card; shown reports whether
+// the card shows the change's call after the batch. A failed call flashes
+// the card only when the card shows it: a failed older parallel call, or a
+// failure followed by a newer start, flashes nothing.
+func (m *Model) animate(c store.Change, failed, shownChanged, shown bool) {
 	switch c.Kind {
 	case store.CallStarted:
 		m.anim.OnChange(c, shownChanged)
 	case store.CallEnded:
-		if failed {
+		if failed && shown {
 			m.anim.OnFail(c.AgentID)
 		}
 	case store.AgentAdded:
@@ -102,7 +105,7 @@ func (m *Model) animate(c store.Change, failed, shownChanged bool) {
 		m.anim.OnAgentAdded(c.AgentID, ok && a.ParentID != nil)
 	case store.AgentStatus:
 		if c.Status == "interrupted" {
-			m.anim.OnFail(c.AgentID) // flashes the STOPPED word
+			m.anim.OnStopped(c.AgentID) // flashes the STOPPED word once
 		}
 	}
 }

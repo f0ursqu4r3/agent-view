@@ -103,6 +103,38 @@ func TestFailFlashes3Times(t *testing.T) {
 	}
 }
 
+// An interrupt flashes the STOPPED word once (one frame on, one off); the
+// call card does not flash.
+func TestStopFlashesOnce(t *testing.T) {
+	e := New(false)
+	e.Frame("a", 9, 0)
+	e.OnStopped("a")
+	var stop, card []bool
+	for i := 0; i < 2; i++ {
+		f := e.Frame("a", 9, 0)
+		stop, card = append(stop, f.StopFlash), append(card, f.Flash)
+		if !e.Active() {
+			t.Fatalf("inactive at frame %d", i)
+		}
+		e.Step()
+	}
+	if want := []bool{true, false}; !reflect.DeepEqual(stop, want) {
+		t.Fatalf("StopFlash = %v, want %v", stop, want)
+	}
+	if want := []bool{false, false}; !reflect.DeepEqual(card, want) {
+		t.Fatalf("Flash = %v, want %v: the card must not flash", card, want)
+	}
+	if f := e.Frame("a", 9, 0); f.StopFlash || e.Active() {
+		t.Fatal("stop flash did not end")
+	}
+	// Reduced motion: no flash.
+	r := New(true)
+	r.OnStopped("a")
+	if r.Frame("a", 9, 0).StopFlash || r.Active() {
+		t.Fatal("reduced motion flashed")
+	}
+}
+
 func TestHistoryShiftsBy3(t *testing.T) {
 	e := New(false)
 	e.Frame("a", 9, 4)

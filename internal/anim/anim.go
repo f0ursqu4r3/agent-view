@@ -13,6 +13,7 @@ const (
 	histPrintFrames = 4 // history card prints at the head
 	whereFrames     = 6 // "where" type-out
 	flashFrames     = 6 // fail flash: 3 on/off pairs
+	stopFrames      = 2 // stop flash: 1 on/off pair
 	shiftStart      = 15
 	shiftStep       = 3
 	shiftFrames     = shiftStart / shiftStep // frames from -15 to 0
@@ -28,12 +29,14 @@ const (
 // run (0 to 6); the composer shows len(text)*WhereChars/6 characters.
 // GutterRows is the number of drawn gutter lines of a new sub-agent, at most
 // the row height. RowH is the animated row height. Flash is true on the
-// inverse frames of the fail flash. HistOffset has one entry per history
+// inverse frames of the fail flash, which only the call card uses. StopFlash
+// is true on the inverse frame of the stop flash, which only the STOPPED
+// state word uses. HistOffset has one entry per history
 // card: the column offset of that card, 0 when it is in place (index 0 is
 // the card that prints; its offset is always 0).
 type AgentFrame struct {
 	CallRows, LeavingRows, HistPrintRows, WhereChars, GutterRows, RowH int
-	Flash                                                              bool
+	Flash, StopFlash                                                   bool
 	HistOffset                                                         []int
 }
 
@@ -43,6 +46,7 @@ type agentState struct {
 	histRows int  // 0..4
 	where    int  // 0..6
 	flash    int  // frames played, 6 = done
+	stop     int  // stop flash frames played, 2 = done
 	shift    int  // frames left of the history shift, 0..5
 	gutterOn bool // the gutter still draws
 	gutter   int  // gutter lines drawn
@@ -59,6 +63,7 @@ func newState() *agentState {
 		histRows: histPrintFrames,
 		where:    whereFrames,
 		flash:    flashFrames,
+		stop:     stopFrames,
 		target:   defaultRowH,
 	}
 }
@@ -66,7 +71,7 @@ func newState() *agentState {
 func (a *agentState) active() bool {
 	return a.gutterOn || a.callRows < callPrintFrames || a.leaving > 0 ||
 		a.histRows < histPrintFrames || a.where < whereFrames ||
-		a.flash < flashFrames || a.shift > 0 || (a.seen && a.rowH != a.target)
+		a.flash < flashFrames || a.stop < stopFrames || a.shift > 0 || (a.seen && a.rowH != a.target)
 }
 
 // Engine holds the animation state of all agents. It is not safe for
@@ -131,12 +136,22 @@ func (e *Engine) OnAgentAdded(agentID string, hasParent bool) {
 	a.gutter = 0
 }
 
-// OnFail starts the 6-frame flash of a call that ended in failure.
+// OnFail starts the 6-frame flash of the call card, for the shown call that
+// ended in failure.
 func (e *Engine) OnFail(agentID string) {
 	if e.reduced {
 		return
 	}
 	e.state(agentID).flash = 0
+}
+
+// OnStopped starts the 2-frame flash of the STOPPED state word, for an
+// agent that was interrupted: it flashes once. The call card does not flash.
+func (e *Engine) OnStopped(agentID string) {
+	if e.reduced {
+		return
+	}
+	e.state(agentID).stop = 0
 }
 
 // Settle makes the next Frame of an agent jump to the row height it is
@@ -176,6 +191,9 @@ func (e *Engine) Step() {
 		}
 		if a.flash < flashFrames {
 			a.flash++
+		}
+		if a.stop < stopFrames {
+			a.stop++
 		}
 		if a.shift > 0 {
 			a.shift--
@@ -240,6 +258,7 @@ func (e *Engine) Frame(agentID string, targetRowH, histCount int) AgentFrame {
 	f.HistPrintRows = a.histRows
 	f.WhereChars = a.where
 	f.Flash = a.flash < flashFrames && a.flash%2 == 0
+	f.StopFlash = a.stop < stopFrames && a.stop%2 == 0
 	if a.leaving > 0 {
 		f.LeavingRows = (callCardRows*a.leaving + leaveFrames - 1) / leaveFrames
 	}
