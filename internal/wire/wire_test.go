@@ -52,14 +52,18 @@ func testAgent() Agent {
 		Status: "working", LastEventAt: "T"}
 }
 
-func TestEncodeShapes(t *testing.T) {
+type shapeRow struct {
+	name string
+	ev   Event
+	want string
+}
+
+// shapeRows holds one envelope of every kind in its exact wire form (host h,
+// seq 3, ts T). The encode and decode tests share them.
+func shapeRows() []shapeRow {
 	full := Agent{ID: "a1", Provider: "codex", Name: "n", Role: "sub-agent", ParentID: strp("p"),
 		Link: "confirmed", Cwd: strp("/w"), ProjectRoot: strp("/r"), Model: "m", Status: "idle", LastEventAt: "L"}
-	rows := []struct {
-		name string
-		ev   Event
-		want string
-	}{
+	return []shapeRow{
 		{"hello", Hello{CollectorVersion: "0.2.0", Platform: "darwin-arm64", Now: "N"},
 			`{"v":1,"host":"h","seq":3,"kind":"hello","collectorVersion":"0.2.0","platform":"darwin-arm64","now":"N","ts":"T"}`},
 		{"hello demo", Hello{CollectorVersion: "0.2.0", Platform: "p", Now: "N", Demo: true},
@@ -113,7 +117,10 @@ func TestEncodeShapes(t *testing.T) {
 		}},
 			`{"v":1,"host":"h","seq":3,"kind":"coverage","coverage":{"logRoots":["/l"],"logsOpen":1,"logsDiscovered":2,"watchRoots":["/w"],"malformedRecords":3,"fsDropped":4,"sources":{"a":{"state":"ok"},"fs:/w":{"state":"down","detail":"d"}}},"ts":"T"}`},
 	}
-	for _, row := range rows {
+}
+
+func TestEncodeShapes(t *testing.T) {
+	for _, row := range shapeRows() {
 		t.Run(row.name, func(t *testing.T) {
 			got := string(EncodeLine(Envelope{V: SchemaVersion, Host: "h", Seq: 3, Ts: "T", Ev: row.ev}))
 			if got != row.want+"\n" {

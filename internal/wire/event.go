@@ -1,5 +1,6 @@
-// Package wire is the encode side of the collector's NDJSON schema. It
-// mirrors src/shared/schema.ts. Package schema decodes the same lines.
+// Package wire is the collector's NDJSON schema: it encodes and decodes the
+// envelopes. It mirrors src/shared/schema.ts. Package schema is the TUI's own
+// decoder of the same lines.
 package wire
 
 // SchemaVersion is the envelope version the collector writes.
@@ -197,6 +198,33 @@ func (ToolEnd) Kind() string           { return "tool.end" }
 func (FsChange) Kind() string          { return "fs.change" }
 func (SourceStatus) Kind() string      { return "source.status" }
 func (CoverageReport) Kind() string    { return "coverage" }
+
+// Raw is an event of a kind this version does not know. Fields is the event's
+// JSON object without the envelope keys, with the members as received, so the
+// hub forwards it unchanged. A nil Fields encodes as an empty object.
+type Raw struct {
+	KindName string
+	Fields   []byte
+}
+
+// Kind returns the kind that the line named.
+func (r Raw) Kind() string { return r.KindName }
+
+// MarshalJSON returns Fields, or an empty object when Fields is empty.
+func (r Raw) MarshalJSON() ([]byte, error) {
+	if len(r.Fields) == 0 {
+		return []byte("{}"), nil
+	}
+	return r.Fields, nil
+}
+
+// HostStatus is the state of one host's source. Detail is omitted when empty.
+type HostStatus struct {
+	Label  string `json:"label"`
+	Kind   string `json:"kind"`
+	State  string `json:"state"`
+	Detail string `json:"detail,omitempty"`
+}
 
 // SourceEvent is an event with its time, before the envelope adds the host
 // and the sequence number.

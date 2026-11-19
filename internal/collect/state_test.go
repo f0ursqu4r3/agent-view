@@ -329,8 +329,7 @@ func TestEndedCallMemoryIsBoundedLRU(t *testing.T) {
 	forwarded(t, s, end(aID, "k1", iso(0), nil))
 }
 
-// decodeGolden reads source events without envelopes. It decodes only the
-// kinds the golden file uses.
+// decodeGolden reads the source events of a golden file with the wire decoder.
 func decodeGolden(t *testing.T, path string) []wire.SourceEvent {
 	t.Helper()
 	f, err := os.Open(path)
@@ -345,45 +344,14 @@ func decodeGolden(t *testing.T, path string) []wire.SourceEvent {
 		if line == "" {
 			continue
 		}
-		var raw struct {
-			Kind      string       `json:"kind"`
-			Ts        string       `json:"ts"`
-			Agent     wire.Agent   `json:"agent"`
-			Call      wire.Call    `json:"call"`
-			AgentID   string       `json:"agentId"`
-			CallID    string       `json:"callId"`
-			Status    string       `json:"status"`
-			Ok        *bool        `json:"ok"`
-			Writes    []wire.Write `json:"writes"`
-			Files     []string     `json:"files"`
-			Chunk     string       `json:"chunk"`
-			Truncated bool         `json:"truncated"`
-			Path      string       `json:"path"`
-			Op        string       `json:"op"`
-		}
-		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+		se, err := wire.DecodeSourceEvent([]byte(line))
+		if err != nil {
 			t.Fatalf("decode %q: %v", line, err)
 		}
-		var ev wire.Event
-		switch raw.Kind {
-		case "agent.upsert":
-			ev = wire.AgentUpsert{Agent: raw.Agent}
-		case "agent.status":
-			ev = wire.AgentStatusChange{AgentID: raw.AgentID, Status: raw.Status}
-		case "tool.start":
-			ev = wire.ToolStart{Call: raw.Call}
-		case "tool.update":
-			ev = wire.ToolUpdate{AgentID: raw.AgentID, CallID: raw.CallID, Files: raw.Files}
-		case "tool.output":
-			ev = wire.ToolOutput{AgentID: raw.AgentID, CallID: raw.CallID, Chunk: raw.Chunk, Truncated: raw.Truncated}
-		case "tool.end":
-			ev = wire.ToolEnd{AgentID: raw.AgentID, CallID: raw.CallID, Ok: raw.Ok, Writes: raw.Writes}
-		case "fs.change":
-			ev = wire.FsChange{Path: raw.Path, Op: raw.Op}
-		default:
-			t.Fatalf("golden decoder: unknown kind %q", raw.Kind)
+		if _, raw := se.Ev.(wire.Raw); raw {
+			t.Fatalf("golden file holds an unknown kind %q", se.Ev.Kind())
 		}
-		out = append(out, wire.SourceEvent{Ts: raw.Ts, Ev: ev})
+		out = append(out, se)
 	}
 	if err := sc.Err(); err != nil {
 		t.Fatal(err)
