@@ -6,9 +6,11 @@ import (
 	"errors"
 )
 
-// marshalValue encodes v as JSON without HTML escaping and without the
-// trailing newline that json.Encoder adds.
-func marshalValue(v any) ([]byte, error) {
+// MarshalNoEscape encodes v as JSON without HTML escaping and without the
+// trailing newline that json.Encoder adds. Use it, or EncodeLine for an
+// Envelope, to write wire JSON. Never call json.Marshal on an Envelope: it
+// escapes <, > and & again.
+func MarshalNoEscape(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -26,7 +28,7 @@ func (e Envelope) MarshalJSON() ([]byte, error) {
 	if e.Ev == nil {
 		return nil, errors.New("wire: envelope has no event")
 	}
-	body, err := marshalValue(e.Ev)
+	body, err := MarshalNoEscape(e.Ev)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +41,11 @@ func (e Envelope) MarshalJSON() ([]byte, error) {
 		Seq  int64  `json:"seq"`
 		Kind string `json:"kind"`
 	}{e.V, e.Host, e.Seq, e.Ev.Kind()}
-	h, err := marshalValue(head)
+	h, err := MarshalNoEscape(head)
 	if err != nil {
 		return nil, err
 	}
-	ts, err := marshalValue(e.Ts)
+	ts, err := MarshalNoEscape(e.Ts)
 	if err != nil {
 		return nil, err
 	}

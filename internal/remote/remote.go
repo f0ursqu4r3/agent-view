@@ -9,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,12 +16,13 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
 
 	"agent-view/internal/logs"
+	"agent-view/internal/safe"
+	"agent-view/internal/sshhost"
 	"agent-view/internal/text"
 	"agent-view/internal/wire"
 )
@@ -46,14 +46,6 @@ const (
 	defaultMaxDelayMs   = 30000
 	readSize            = 64 << 10
 )
-
-// sshHostRE accepts host names and user@host: no leading "-" (ssh would read
-// an option), no spaces, no shell characters.
-var sshHostRE = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._@:-]*$`)
-
-// ValidSSHHost reports whether s is a host name or user@host that is safe to
-// pass to ssh.
-func ValidSSHHost(s string) bool { return sshHostRE.MatchString(s) }
 
 // shellQuote quotes s for a POSIX remote shell.
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
@@ -135,7 +127,7 @@ type listener struct{ fn func() }
 // New returns a Remote for o. It fails when o.SSHHost is not a valid ssh
 // host. It does not start the child.
 func New(o Options) (*Remote, error) {
-	if !ValidSSHHost(o.SSHHost) {
+	if !sshhost.Valid(o.SSHHost) {
 		return nil, errors.New("invalid ssh host: use a host name or user@host")
 	}
 	r := &Remote{
@@ -490,7 +482,7 @@ func (r *Remote) readStdout(f *os.File, hello chan<- struct{}) {
 		}
 		if len(chunk) > 0 {
 			for _, line := range split.Push(chunk) {
-				if jsTrim(line) == "" {
+				if text.JSTrim(line) == "" {
 					continue
 				}
 				env, err := wire.DecodeEnvelope([]byte(line))
@@ -522,7 +514,7 @@ func (r *Remote) readStdout(f *os.File, hello chan<- struct{}) {
 func readStderr(f *os.File) string {
 	var last string
 	take := func(b []byte) {
-		if s := jsTrim(strings.ToValidUTF8(string(b), "\uFFFD")); s != "" {
+		if s := text.JSTrim(strings.ToValidUTF8(string(b), "\uFFFD")); s != "" {
 			last = text.SliceUTF16(s, maxDetail)
 		}
 	}
@@ -569,14 +561,6 @@ func tailUTF16(b []byte, n int) []byte {
 	return slices.Clone(b[i:])
 }
 
-// jsTrim is String.prototype.trim: it drops white space and line terminators
-// at both ends.
-func jsTrim(s string) string {
-	return strings.TrimFunc(s, func(c rune) bool {
-		return c == '\uFEFF' || (c != '\u0085' && unicode.IsSpace(c))
-	})
-}
-
 // deliver calls each subscriber with env.
 func (r *Remote) deliver(env wire.Envelope) {
 	r.mu.Lock()
@@ -584,7 +568,7 @@ func (r *Remote) deliver(env wire.Envelope) {
 	r.mu.Unlock()
 	for _, s := range subs {
 		if !s.removed.Load() {
-			safely(func() { s.fn(env) })
+			safe.Call(func() { s.fn(env) })
 		}
 	}
 }
@@ -606,14 +590,7 @@ func (r *Remote) change(state, detail string, force bool) bool {
 	ls := slices.Clone(r.listeners)
 	r.mu.Unlock()
 	for _, l := range ls {
-		safely(l.fn)
+		safe.Call(l.fn)
 	}
 	return true
-}
-
-// safely calls fn and recovers a panic: one failing callback must not break
-// the others.
-func safely(fn func()) {
-	defer func() { _ = recover() }()
-	fn()
 }

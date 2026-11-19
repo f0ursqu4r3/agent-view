@@ -460,9 +460,6 @@ func TestNewRejectsBadHosts(t *testing.T) {
 		} else if err.Error() != "invalid ssh host: use a host name or user@host" {
 			t.Errorf("New(%q) error = %q", host, err)
 		}
-		if ValidSSHHost(host) {
-			t.Errorf("ValidSSHHost(%q) = true", host)
-		}
 	}
 	for _, host := range []string{"user@host.example", "_h-1.example:22"} {
 		if _, err := New(Options{SSHHost: host, Label: host}); err != nil {

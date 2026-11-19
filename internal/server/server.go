@@ -5,8 +5,6 @@ package server
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -135,7 +133,7 @@ func snapshotBody(h *hub.Hub) ([]byte, error) {
 	}
 	var buf bytes.Buffer
 	buf.WriteString(`{"hosts":`)
-	hb, err := marshalNoEscape(hosts)
+	hb, err := wire.MarshalNoEscape(hosts)
 	if err != nil {
 		return nil, err
 	}
@@ -153,16 +151,4 @@ func snapshotBody(h *hub.Hub) ([]byte, error) {
 	}
 	buf.WriteString(`]}`)
 	return buf.Bytes(), nil
-}
-
-// marshalNoEscape encodes v as JSON without escaping <, > and &, like
-// JSON.stringify.
-func marshalNoEscape(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, errors.New("server: " + err.Error())
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }

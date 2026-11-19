@@ -82,7 +82,7 @@ func (c Coverage) MarshalJSON() ([]byte, error) {
 	if p.Sources == nil {
 		p.Sources = map[string]SourceState{}
 	}
-	return marshalValue(p)
+	return MarshalNoEscape(p)
 }
 
 // Event is one collector event. Kind is the wire value of the "kind" key.
@@ -116,7 +116,7 @@ func (s Snapshot) MarshalJSON() ([]byte, error) {
 	if p.Files == nil {
 		p.Files = []FileTouch{}
 	}
-	return marshalValue(p)
+	return MarshalNoEscape(p)
 }
 
 // AgentUpsert adds or replaces an agent.
@@ -149,7 +149,7 @@ func (u ToolUpdate) MarshalJSON() ([]byte, error) {
 	if p.Files == nil {
 		p.Files = []string{}
 	}
-	return marshalValue(p)
+	return MarshalNoEscape(p)
 }
 
 // ToolOutput is one chunk of call output. Truncated always encodes.

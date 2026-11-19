@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agent-view/internal/remote"
+	"agent-view/internal/sshhost"
 )
 
 // DefaultPort is the port of serve and audit when --port is not given.
@@ -182,7 +182,7 @@ func Parse(argv []string) (Args, error) {
 			if err != nil {
 				return Args{}, err
 			}
-			if !remote.ValidSSHHost(v) {
+			if !sshhost.Valid(v) {
 				return Args{}, usagef("Invalid --remote value (use a host name or user@host, no spaces or shell characters)")
 			}
 			a.Remotes = append(a.Remotes, v)

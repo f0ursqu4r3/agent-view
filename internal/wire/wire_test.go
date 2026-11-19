@@ -194,3 +194,17 @@ func TestPlatform(t *testing.T) {
 		t.Errorf("Platform() = %q, want %q", got, runtime.GOOS+"-"+want)
 	}
 }
+
+// MarshalNoEscape keeps <, > and & literal and adds no trailing newline.
+func TestMarshalNoEscape(t *testing.T) {
+	got, err := MarshalNoEscape(map[string]string{"k": "<a>&</a>"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"k":"<a>&</a>"}`; string(got) != want {
+		t.Errorf("MarshalNoEscape = %s, want %s", got, want)
+	}
+	if _, err := MarshalNoEscape(func() {}); err == nil {
+		t.Error("MarshalNoEscape(func) returned no error")
+	}
+}

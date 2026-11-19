@@ -161,7 +161,7 @@ func rawEvent(kind string, ms []member) (Event, error) {
 		if buf.Len() > 1 {
 			buf.WriteByte(',')
 		}
-		k, err := marshalValue(m.key)
+		k, err := MarshalNoEscape(m.key)
 		if err != nil {
 			return nil, err
 		}

@@ -12,6 +12,7 @@ import (
 
 	"agent-view/internal/feed"
 	"agent-view/internal/hub"
+	"agent-view/internal/safe"
 	"agent-view/internal/schema"
 	"agent-view/internal/wire"
 )
@@ -242,7 +243,7 @@ func (b *Bridge) drain(resync bool) {
 // not yet sent are dropped: the hub's replay (hello, snapshot and coverage
 // per host) brings the TUI's store to the hub's state.
 func (b *Bridge) resyncFromHub() {
-	safely(b.unsub)
+	safe.Call(b.unsub)
 	b.mu.Lock()
 	b.gen++
 	b.queue = nil
@@ -294,17 +295,8 @@ func (b *Bridge) close() {
 	b.mu.Unlock()
 	unsub, offHosts := b.unsub, b.offHosts
 	b.unsub, b.offHosts = nil, nil
-	safely(unsub)
-	safely(offHosts)
+	safe.Call(unsub)
+	safe.Call(offHosts)
 }
 
-func (b *Bridge) diag(s string) { safely(func() { b.c.Diag(s) }) }
-
-// safely calls fn, when it is not nil, and recovers a panic.
-func safely(fn func()) {
-	if fn == nil {
-		return
-	}
-	defer func() { _ = recover() }()
-	fn()
-}
+func (b *Bridge) diag(s string) { safe.Call(func() { b.c.Diag(s) }) }

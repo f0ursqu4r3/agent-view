@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"agent-view/internal/collect"
+	"agent-view/internal/safe"
 	"agent-view/internal/wire"
 )
 
@@ -91,6 +92,6 @@ func (s *LocalSource) set(from, state, detail string) {
 	ls := slices.Clone(s.listeners)
 	s.mu.Unlock()
 	for _, l := range ls {
-		safely(l.fn)
+		safe.Call(l.fn)
 	}
 }

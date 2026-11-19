@@ -12,6 +12,7 @@ import (
 
 	"agent-view/internal/collect"
 	"agent-view/internal/lifecycle"
+	"agent-view/internal/safe"
 	"agent-view/internal/wire"
 )
 
@@ -62,7 +63,7 @@ type subscriber struct {
 	removed atomic.Bool
 }
 
-func (s *subscriber) send(env wire.Envelope) { safely(func() { s.fn(env) }) }
+func (s *subscriber) send(env wire.Envelope) { safe.Call(func() { s.fn(env) }) }
 
 func (s *subscriber) isRemoved() bool { return s.removed.Load() }
 
@@ -149,8 +150,8 @@ func (h *Hub) AddSource(s Source) error {
 	h.mu.Unlock()
 	if late {
 		// Stop took the mirror before it had these.
-		safely(off)
-		safely(offStatus)
+		safe.Call(off)
+		safe.Call(offStatus)
 	}
 	h.notifyHosts()
 	return nil
@@ -282,15 +283,15 @@ func (h *Hub) Stop() {
 		<-tickDone
 	}
 	for _, off := range offs {
-		safely(off)
+		safe.Call(off)
 	}
 	var wg sync.WaitGroup
 	for _, m := range mirrors {
-		wg.Go(func() { safely(m.source.Stop) })
+		wg.Go(func() { safe.Call(m.source.Stop) })
 	}
 	wg.Wait()
 	for _, off := range offStatus {
-		safely(off)
+		safe.Call(off)
 	}
 	h.notifyHosts()
 	h.listenMu.Lock()
@@ -372,7 +373,7 @@ func (h *Hub) tick() {
 	}
 	hubNow := h.now()
 	for _, m := range h.mirrors {
-		safely(func() { m.state.Tick(hubNow - m.offset) })
+		safe.Call(func() { m.state.Tick(hubNow - m.offset) })
 	}
 }
 
@@ -385,16 +386,6 @@ func (h *Hub) notifyHosts() {
 	}
 	hosts := h.Hosts()
 	for _, l := range ls {
-		safely(func() { l.fn(slices.Clone(hosts)) })
+		safe.Call(func() { l.fn(slices.Clone(hosts)) })
 	}
-}
-
-// safely calls fn, when it is not nil, and recovers a panic: one failing
-// callback must not break the others.
-func safely(fn func()) {
-	if fn == nil {
-		return
-	}
-	defer func() { _ = recover() }()
-	fn()
 }
