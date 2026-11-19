@@ -71,3 +71,13 @@ func TestRunDevNullIsNotATerminal(t *testing.T) {
 		t.Fatalf("message = %q, want %q", got, notTerminal)
 	}
 }
+
+// NO_COLOR set to any non-empty value turns color off, "0" and "yes" too.
+func TestNoColor(t *testing.T) {
+	for val, want := range map[string]bool{"": false, "1": true, "yes": true, "0": true, "false": true} {
+		t.Setenv("NO_COLOR", val)
+		if got := noColor(); got != want {
+			t.Errorf("NO_COLOR=%q: noColor() = %v, want %v", val, got, want)
+		}
+	}
+}

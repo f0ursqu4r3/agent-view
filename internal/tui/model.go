@@ -35,9 +35,11 @@ type (
 
 // Config configures a Model. Now nil uses the wall clock. LingerMs is the
 // window of the faults count; zero or less takes the lifecycle default.
+// NoColor encodes frames without color (cells.EncodeNoColor).
 type Config struct {
 	Store    *store.Store
 	Reduced  bool
+	NoColor  bool
 	Now      func() time.Time
 	LingerMs int64
 }
@@ -56,6 +58,7 @@ type Model struct {
 	log    *board.Log
 	now    func() time.Time
 	linger int64
+	encode func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
 
 	ui   board.UI
 	w, h int
@@ -105,8 +108,12 @@ func NewModel(c Config) *Model {
 	if s == nil {
 		s = store.New(store.Options{})
 	}
+	encode := cells.Encode
+	if c.NoColor {
+		encode = cells.EncodeNoColor
+	}
 	return &Model{
-		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger,
+		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger, encode: encode,
 		ui:        board.UI{Reduced: c.Reduced},
 		feedState: "connecting", hostState: map[string]string{},
 		hosts: map[string]*hostInfo{}, known: map[string]bool{},
@@ -218,7 +225,7 @@ func (m *Model) render() {
 		var g *cells.Grid
 		g, m.hits = Compose(in)
 		m.frozen, m.frozenHits, m.thaw = nil, nil, false
-		m.content = cells.Encode(g)
+		m.content = m.encode(g)
 		return
 	}
 	if m.frozen == nil || m.thaw || m.frozen.W != m.w || m.frozen.H != m.h {
@@ -234,7 +241,7 @@ func (m *Model) render() {
 	if drawPanel(g, in) {
 		m.hits = nil
 	}
-	m.content = cells.Encode(g)
+	m.content = m.encode(g)
 }
 
 // status returns the values of the status bar.

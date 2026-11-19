@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -699,6 +700,37 @@ func TestModelTimeoutEndOfOldCall(t *testing.T) {
 				t.Errorf("a is on the screen:\n%s", f.screen())
 			}
 		})
+	}
+}
+
+// TestModelNoColor: with NoColor the frame holds no color code; dim text is
+// faint (SGR 2), and bold and inverse stay.
+func TestModelNoColor(t *testing.T) {
+	sgr := regexp.MustCompile(`\x1b\[([0-9;]*)m`)
+	params := func(content string) map[string]bool {
+		out := map[string]bool{}
+		for _, m := range sgr.FindAllStringSubmatch(content, -1) {
+			for _, p := range strings.Split(m[1], ";") {
+				out[p] = true
+			}
+		}
+		return out
+	}
+	for _, noColor := range []bool{false, true} {
+		f := newModelFix(t, true, 120, 40)
+		f.m = NewModel(Config{Store: f.s, Reduced: true, NoColor: noColor, Now: func() time.Time { return time.UnixMilli(f.clock) }})
+		f.m.Init()
+		f.send(tea.WindowSizeMsg{Width: 120, Height: 40})
+		f.batch(agentEnv("a", "", f.clock), startEnv("a", "c1", "command", "", f.clock))
+		f.clock += 500
+		f.batch(endEnv("a", "c1", false, f.clock))
+		p := params(f.m.View().Content)
+		if noColor && (p["38"] || p["48"] || !p["2"] || !p["1"] || !p["7"]) {
+			t.Errorf("NoColor: SGR parameters %v; want no 38 or 48, and 2, 1, 7", p)
+		}
+		if !noColor && !p["38"] {
+			t.Errorf("color: SGR parameters %v; want 38", p)
+		}
 	}
 }
 

@@ -35,6 +35,11 @@ func bothTerminals(stdin, stdout *os.File, isTTY func(fd uintptr) bool) bool {
 	return isTTY(stdin.Fd()) && isTTY(stdout.Fd())
 }
 
+// noColor reports whether NO_COLOR is set to a non-empty value. Any value
+// turns color off, "0" and "false" too; Bubble Tea's own check reads it as a
+// boolean, so the model encodes frames without color itself.
+func noColor() bool { return os.Getenv("NO_COLOR") != "" }
+
 // diagWriter is the output of the log package while the TUI runs. It queues
 // lines without blocking; once started, a goroutine hands them to the
 // program, which owns the diagnostics buffer.
@@ -96,7 +101,7 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 
 	st := store.New(store.Options{LingerMs: int64(args.LingerMin) * 60_000})
 	model := tui.NewModel(tui.Config{
-		Store: st, Reduced: args.Reduced, LingerMs: int64(args.LingerMin) * 60_000,
+		Store: st, Reduced: args.Reduced, NoColor: noColor(), LingerMs: int64(args.LingerMin) * 60_000,
 	})
 	p := tea.NewProgram(model, tea.WithFPS(20))
 

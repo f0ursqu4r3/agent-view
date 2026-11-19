@@ -75,7 +75,7 @@ Run it against your real sessions:
 
 Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--reduced-motion` turns animation off. `--remote`, `serve`, and `collect` come in phase 2. The TUI needs a terminal. Without one, it exits with code 2.
 
-Set `NO_COLOR` to any value to turn color off. Bold, dim, and inverse still apply.
+Set `NO_COLOR` to any non-empty value (`1`, `yes`, even `0`) to turn color off. Bold and inverse still apply, and dim text uses the terminal's faint style.
 
 Set `AGENT_VIEW_COLLECTOR` to a JSON array of strings to replace the collector command, flags included. For example, `AGENT_VIEW_COLLECTOR='["./my-collector","--stdio"]' ./agent-view`.
 
