@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"agent-view/internal/lifecycle"
 	"agent-view/internal/schema"
 )
 
@@ -65,7 +66,7 @@ type Store struct {
 	Panics int
 
 	now          func() int64
-	lc           lifecycle
+	lc           windows
 	hosts        map[string]*hostState
 	hostOrder    []string // first appearance
 	orderCounter int
@@ -374,7 +375,7 @@ func revive(h *hostState, id string) bool {
 
 // ms returns a skew-corrected event time. A missing or invalid time is now.
 func (s *Store) ms(h *hostState, iso string) int64 {
-	t, ok := parseISO(iso)
+	t, ok := lifecycle.ParseISO(iso)
 	if !ok {
 		return s.now()
 	}
@@ -383,7 +384,7 @@ func (s *Store) ms(h *hostState, iso string) int64 {
 
 // agentMs returns a skew-corrected agent time. A missing or invalid time is the epoch.
 func agentMs(h *hostState, iso string) int64 {
-	t, ok := parseISO(iso)
+	t, ok := lifecycle.ParseISO(iso)
 	if !ok {
 		return 0
 	}

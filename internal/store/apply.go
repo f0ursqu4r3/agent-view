@@ -4,6 +4,7 @@ import (
 	"slices"
 	"unicode/utf8"
 
+	"agent-view/internal/lifecycle"
 	"agent-view/internal/schema"
 )
 
@@ -32,7 +33,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	switch e.Kind {
 	case "hello":
 		h.offset = 0
-		if t, ok := parseISO(e.Now); ok {
+		if t, ok := lifecycle.ParseISO(e.Now); ok {
 			h.offset = s.now() - t
 		}
 		h.demo = e.Demo

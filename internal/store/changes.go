@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 
+	"agent-view/internal/lifecycle"
 	"agent-view/internal/schema"
 )
 
@@ -165,7 +166,7 @@ func dropOpen(h *hostState, c *ViewCall) {
 
 // earliest returns the older of at and a skew-corrected ISO time. An invalid time is ignored.
 func earliest(h *hostState, iso string, at int64) int64 {
-	if t, ok := parseISO(iso); ok {
+	if t, ok := lifecycle.ParseISO(iso); ok {
 		return min(at, t+h.offset)
 	}
 	return at
