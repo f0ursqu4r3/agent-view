@@ -37,6 +37,19 @@ type Options struct {
 	Roots []logs.Root
 	// Sched is the demo's clock; nil means the wall clock.
 	Sched demo.Scheduler
+	// Diag receives the collector's diagnostics, one message at a time and
+	// without a prefix or a newline: a step that failed ("collector step
+	// failed: <v>"), watch roots that cannot be updated ("cannot update watch
+	// roots: <message>") and a snapshot that cannot be built ("snapshot
+	// failed: <v>"). Nil writes each one to os.Stderr as "agent-view: <msg>"
+	// and a newline.
+	//
+	// The collector calls Diag on its loop goroutine (a snapshot failure while
+	// a stopped collector greets a subscriber: on the caller's goroutine), so
+	// Diag must return quickly. It must not call back into the collector:
+	// Start, Stop, Subscribe and the like wait for the loop. A panic in Diag
+	// is recovered and dropped.
+	Diag func(msg string)
 }
 
 // Collector is one collector. It ports src/collector/collector.ts. The
@@ -415,14 +428,14 @@ func (c *Collector) drain() bool {
 	}
 }
 
-// handle runs one queued step. A panic in the step is recovered and written
-// to stderr, as TypeScript's .catch swallows it, and the item's done
-// channel still closes.
+// handle runs one queued step. A panic in the step is recovered and reported
+// (as TypeScript's .catch swallows it), and the item's done channel still
+// closes.
 func (c *Collector) handle(it item) {
 	closeDone := true
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "agent-view: collector step failed: %v\n", r)
+			c.diag(fmt.Sprintf("collector step failed: %v", r))
 		}
 		if closeDone && it.done != nil {
 			close(it.done)
@@ -505,7 +518,7 @@ func (c *Collector) syncRoots() {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "agent-view: cannot update watch roots: %v\n", r)
+			c.diag(fmt.Sprintf("cannot update watch roots: %v", r))
 		}
 	}()
 	fs.SetRoots(roots[:min(len(roots), maxWatchRoots)])
@@ -527,6 +540,17 @@ func (c *Collector) deliver(e wire.SourceEvent) {
 	}
 }
 
+// diag reports a diagnostic message to Options.Diag, or to os.Stderr when it
+// is nil.
+func (c *Collector) diag(msg string) {
+	if c.opts.Diag == nil {
+		fmt.Fprintf(os.Stderr, "agent-view: %s\n", msg)
+		return
+	}
+	defer func() { _ = recover() }()
+	c.opts.Diag(msg)
+}
+
 // greet sends hello and snapshot to s. It reports false once the
 // collector is stopped.
 func (c *Collector) greet(s *subscriber) bool {
@@ -540,15 +564,28 @@ func (c *Collector) greet(s *subscriber) bool {
 }
 
 // greeting returns the hello and snapshot envelopes. They carry the
-// current sequence number.
+// current sequence number. A Snapshot that panics gives an empty snapshot
+// (see snapshot), so a subscriber always gets both.
 func (c *Collector) greeting() (hello, snap wire.Envelope) {
 	now := wire.NowMs()
 	ts := wire.FormatISO(now)
 	hello = wire.Envelope{V: wire.SchemaVersion, Host: c.opts.Host, Seq: c.seq, Ts: ts, Ev: wire.Hello{
 		CollectorVersion: wire.CollectorVersion, Platform: wire.Platform(), Now: ts, Demo: c.opts.Demo,
 	}}
-	snap = wire.Envelope{V: wire.SchemaVersion, Host: c.opts.Host, Seq: c.seq, Ts: ts, Ev: c.state.Snapshot(now)}
+	snap = wire.Envelope{V: wire.SchemaVersion, Host: c.opts.Host, Seq: c.seq, Ts: ts, Ev: c.snapshot(now)}
 	return hello, snap
+}
+
+// snapshot is State.Snapshot. A panic in it is reported and gives an empty
+// snapshot.
+func (c *Collector) snapshot(now int64) (snap wire.Snapshot) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.diag(fmt.Sprintf("snapshot failed: %v", r))
+			snap = wire.Snapshot{}
+		}
+	}()
+	return c.state.Snapshot(now)
 }
 
 // Enrichment

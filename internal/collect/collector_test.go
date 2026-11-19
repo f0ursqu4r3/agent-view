@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agent-view/internal/demo"
+	"agent-view/internal/fschange"
 	"agent-view/internal/lifecycle"
 	"agent-view/internal/logs"
 	"agent-view/internal/wire"
@@ -689,47 +690,105 @@ func statusBatch(source string) []wire.SourceEvent {
 	return []wire.SourceEvent{{Ts: wire.FormatISO(wire.NowMs()), Ev: wire.SourceStatus{Source: source, SourceState: wire.SourceState{State: "ok"}}}}
 }
 
-// Go only: a step that panics is recovered, its done channel still closes, a
-// line goes to stderr, and the collector keeps delivering later envelopes.
-func TestStepPanicIsRecovered(t *testing.T) {
-	c, _ := newDemo()
-	var armed atomic.Bool
-	c.stepHook = func() {
-		if armed.CompareAndSwap(true, false) {
-			panic("boom")
-		}
-	}
-	rec := &recorder{}
-	c.Subscribe(rec.fn)
-	startCollector(t, c)
-
+// captureStderr redirects os.Stderr to a pipe. The returned function puts the
+// real stderr back and returns what was written; the collector's loop must
+// have ended (Stop returned) before the first call, as it reads os.Stderr. A
+// second call returns the same text.
+func captureStderr(t *testing.T) (finish func() string) {
+	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved := os.Stderr
 	os.Stderr = w
-	restored := false
-	restore := func() {
-		if !restored {
-			restored = true
+	finished := false
+	var out string
+	finish = func() string {
+		if !finished {
+			finished = true
 			os.Stderr = saved
 			w.Close()
+			b, err := io.ReadAll(r)
+			r.Close()
+			if err != nil {
+				t.Error(err)
+			}
+			out = string(b)
+		}
+		return out
+	}
+	t.Cleanup(func() { finish() })
+	return finish
+}
+
+// diagLog records the messages the Diag hook receives. The collector calls
+// the hook on its loop goroutine.
+type diagLog struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (d *diagLog) add(msg string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.msgs = append(d.msgs, msg)
+}
+
+func (d *diagLog) all() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Clone(d.msgs)
+}
+
+// panicOnce arms c's step hook: the next step panics with "boom".
+func panicOnce(c *Collector) *atomic.Bool {
+	var armed atomic.Bool
+	c.stepHook = func() {
+		if armed.CompareAndSwap(true, false) {
+			panic("boom")
 		}
 	}
-	defer restore()
+	return &armed
+}
+
+func hasSource(source string) func([]wire.Envelope) bool {
+	return func(envs []wire.Envelope) bool {
+		_, i := find(envs, func(e wire.SourceStatus) bool { return e.Source == source })
+		return i >= 0
+	}
+}
+
+func stopWithin(t *testing.T, c *Collector, d time.Duration) {
+	t.Helper()
+	stopped := make(chan struct{})
+	go func() {
+		c.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(d):
+		t.Fatal("Stop did not return")
+	}
+}
+
+// Go only: a step that panics is recovered, its done channel still closes, a
+// line goes to stderr (Diag is nil), and the collector keeps delivering later
+// envelopes.
+func TestStepPanicIsRecovered(t *testing.T) {
+	c, _ := newDemo()
+	armed := panicOnce(c)
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	startCollector(t, c)
+	finish := captureStderr(t)
 
 	armed.Store(true)
 	c.push(statusBatch("lost"))
 	c.push(statusBatch("kept"))
 	if !c.await(nil) {
 		t.Fatal("await did not complete")
-	}
-	hasSource := func(source string) func([]wire.Envelope) bool {
-		return func(envs []wire.Envelope) bool {
-			_, i := find(envs, func(e wire.SourceStatus) bool { return e.Source == source })
-			return i >= 0
-		}
 	}
 	if !hasSource("kept")(rec.all()) {
 		t.Error("the batch after the panic was not delivered")
@@ -738,24 +797,161 @@ func TestStepPanicIsRecovered(t *testing.T) {
 		t.Error("the batch that panicked was delivered")
 	}
 
-	stopped := make(chan struct{})
-	go func() {
-		c.Stop()
-		close(stopped)
-	}()
-	select {
-	case <-stopped:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Stop did not return")
+	stopWithin(t, c, 5*time.Second)
+	if want := "agent-view: collector step failed: boom\n"; !strings.Contains(finish(), want) {
+		t.Errorf("stderr = %q, want it to contain %q", finish(), want)
 	}
-	restore()
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
+}
+
+// Go only: with Diag set, a step failure goes to Diag, without the "agent-view:"
+// prefix, and nothing is written to stderr.
+func TestDiagReceivesStepFailure(t *testing.T) {
+	var diags diagLog
+	sched := demo.NewFakeScheduler(float64(wire.NowMs()))
+	c := New(Options{Host: "demo-host", Demo: true, Sched: sched, Diag: diags.add})
+	armed := panicOnce(c)
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	startCollector(t, c)
+	finish := captureStderr(t)
+
+	armed.Store(true)
+	c.push(statusBatch("lost"))
+	c.push(statusBatch("kept"))
+	if !c.await(nil) {
+		t.Fatal("await did not complete")
 	}
-	if want := "agent-view: collector step failed: boom\n"; !strings.Contains(string(out), want) {
-		t.Errorf("stderr = %q, want it to contain %q", out, want)
+	if !hasSource("kept")(rec.all()) {
+		t.Error("the batch after the panic was not delivered")
 	}
+	if hasSource("lost")(rec.all()) {
+		t.Error("the batch that panicked was delivered")
+	}
+
+	stopWithin(t, c, 5*time.Second)
+	if got, want := diags.all(), []string{"collector step failed: boom"}; !slices.Equal(got, want) {
+		t.Errorf("Diag got %q, want %q", got, want)
+	}
+	if out := finish(); out != "" {
+		t.Errorf("stderr = %q, want nothing", out)
+	}
+}
+
+// Go only: a Diag that panics does not stop the loop. The step's done channel
+// still closes and later envelopes still arrive.
+func TestPanickingDiagIsIgnored(t *testing.T) {
+	sched := demo.NewFakeScheduler(float64(wire.NowMs()))
+	c := New(Options{Host: "demo-host", Demo: true, Sched: sched, Diag: func(string) { panic("diag") }})
+	armed := panicOnce(c)
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	startCollector(t, c)
+
+	armed.Store(true)
+	c.push(statusBatch("lost"))
+	c.push(statusBatch("kept"))
+	if !c.await(nil) {
+		t.Fatal("await did not complete")
+	}
+	if !hasSource("kept")(rec.all()) {
+		t.Error("the batch after the failing Diag was not delivered")
+	}
+}
+
+// Go only: SetRoots that panics is reported through Diag, and the collector
+// goes on. A zero fschange.Source panics on the first missing root (its maps
+// are nil).
+func TestDiagReceivesWatchRootsFailure(t *testing.T) {
+	var diags diagLog
+	c := New(Options{Host: "mac", Watch: []string{filepath.Join(t.TempDir(), "missing")}, Diag: diags.add})
+	c.fs = &fschange.Source{}
+	c.ensureLoop()
+	t.Cleanup(c.Stop)
+	if !c.await(c.syncRoots) {
+		t.Fatal("await did not complete")
+	}
+	got := diags.all()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "cannot update watch roots: ") {
+		t.Errorf("Diag got %q, want one message that starts with %q", got, "cannot update watch roots: ")
+	}
+}
+
+// brokenSnapshot returns a collector whose State.Snapshot panics: a nil
+// agents map makes presentIDs dereference nil. Diag goes to diags.
+func brokenSnapshot(diags *diagLog) *Collector {
+	sched := demo.NewFakeScheduler(float64(wire.NowMs()))
+	c := New(Options{Host: "mac", Demo: true, Sched: sched, Diag: diags.add})
+	c.state.agents = nil
+	return c
+}
+
+// wantEmptySnapshotGreeting checks that envs is a hello followed by an empty
+// snapshot with the same sequence number.
+func wantEmptySnapshotGreeting(t *testing.T, envs []wire.Envelope) {
+	t.Helper()
+	if len(envs) != 2 {
+		t.Fatalf("got %d envelopes, want hello and snapshot", len(envs))
+	}
+	if k := envs[0].Ev.Kind(); k != "hello" {
+		t.Errorf("first kind = %s, want hello", k)
+	}
+	snap := snapshotOf(t, envs[1])
+	if len(snap.Agents)+len(snap.OpenCalls)+len(snap.Files) != 0 {
+		t.Errorf("snapshot = %+v, want empty", snap)
+	}
+	if envs[1].Seq != envs[0].Seq {
+		t.Errorf("snapshot seq = %d, hello seq = %d", envs[1].Seq, envs[0].Seq)
+	}
+}
+
+func wantSnapshotFailure(t *testing.T, diags *diagLog, want int) {
+	t.Helper()
+	got := diags.all()
+	if len(got) != want {
+		t.Fatalf("Diag got %q, want %d messages", got, want)
+	}
+	for _, m := range got {
+		if !strings.HasPrefix(m, "snapshot failed: ") || m == "snapshot failed: " {
+			t.Errorf("Diag message = %q, want %q and a reason", m, "snapshot failed: ")
+		}
+	}
+}
+
+// Go only: a Snapshot that panics while a subscriber is greeted still gives
+// the subscriber hello and then an empty snapshot, reports through Diag, and
+// leaves the subscriber on the list for later envelopes.
+func TestGreetSnapshotPanicSendsEmptySnapshot(t *testing.T) {
+	var diags diagLog
+	c := brokenSnapshot(&diags)
+	t.Cleanup(c.Stop)
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	wantEmptySnapshotGreeting(t, rec.all())
+	wantSnapshotFailure(t, &diags, 1)
+
+	c.push(statusBatch("after"))
+	if !c.await(nil) {
+		t.Fatal("await did not complete")
+	}
+	envs := rec.all()
+	if len(envs) != 3 || !hasSource("after")(envs) {
+		t.Fatalf("got %d envelopes, want a live source.status after the greeting", len(envs))
+	}
+	if envs[2].Seq != envs[1].Seq+1 {
+		t.Errorf("live seq = %d, snapshot seq = %d", envs[2].Seq, envs[1].Seq)
+	}
+}
+
+// Go only: the greeting a stopped collector gives on the caller's goroutine
+// takes the same way out of a Snapshot panic.
+func TestSubscribeAfterStopSnapshotPanic(t *testing.T) {
+	var diags diagLog
+	c := brokenSnapshot(&diags)
+	c.Stop()
+	rec := &recorder{}
+	c.Subscribe(rec.fn)
+	wantEmptySnapshotGreeting(t, rec.all())
+	wantSnapshotFailure(t, &diags, 1)
 }
 
 // Go only: a queue that never empties still runs the tick, so an open call
