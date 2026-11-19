@@ -130,31 +130,55 @@ type runner struct {
 }
 
 // runOnce runs one child to its end. It returns how long the child was up.
+//
+// The child leads its own process group. The pipes are plain files, not
+// exec's StdoutPipe, so the child can be reaped while its output is still
+// being read: once the child exits, the rest of its group is killed, so no
+// leftover process survives it, and a leftover that held the pipes no
+// longer keeps them open.
 func (r *runner) runOnce(ctx context.Context) time.Duration {
 	c := r.c
 	cmd := exec.Command(c.Argv[0], c.Argv[1:]...)
 	cmd.Dir = c.Dir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := cmd.StdoutPipe()
+	stdout, outW, err := os.Pipe()
 	if err != nil {
 		r.down(err.Error())
 		return 0
 	}
-	stderr, err := cmd.StderrPipe()
+	defer stdout.Close()
+	stderr, errW, err := os.Pipe()
 	if err != nil {
+		outW.Close()
 		r.down(err.Error())
 		return 0
 	}
+	defer stderr.Close()
+	cmd.Stdout, cmd.Stderr = outW, errW
 	started := time.Now()
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	// The child holds its own copies; the reads end when every holder closes.
+	outW.Close()
+	errW.Close()
+	if err != nil {
 		r.down(err.Error())
 		return 0
 	}
 	pid := cmd.Process.Pid
 
+	// Reaper: wait for the child, then kill what is left of its group.
+	// After the reap the group ID stays in use while any member lives, so
+	// the kill reaches only them; ESRCH (no member left) is ignored.
+	exited := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = cmd.Wait()
+		killGroup(pid, syscall.SIGKILL)
+		close(exited)
+	}()
+
 	// Terminator: on ctx done, SIGTERM the group, then SIGKILL it after the
 	// grace period. It ends when the child is reaped.
-	exited := make(chan struct{})
 	var termDone sync.WaitGroup
 	termDone.Add(1)
 	go func() {
@@ -215,11 +239,10 @@ func (r *runner) runOnce(ctx context.Context) time.Duration {
 
 	r.batch(envs)
 
-	// Wait closes the pipes, so every read must finish before it is called.
-	// Stdout is at EOF here; wait for the stderr reader too.
+	// Stdout is at EOF here: the child and its group are gone, or the child
+	// closed it. Wait for the stderr reader and the reap.
 	readers.Wait()
-	waitErr := cmd.Wait()
-	close(exited)
+	<-exited
 	termDone.Wait()
 	upFor := time.Since(started)
 	if ctx.Err() != nil {
@@ -308,6 +331,8 @@ func readLines(rd io.Reader, fn func([]byte)) {
 	}
 }
 
+// killGroup sends sig to the process group of pid. An error (ESRCH when no
+// member is left) is ignored.
 func killGroup(pid int, sig syscall.Signal) {
 	_ = syscall.Kill(-pid, sig)
 }

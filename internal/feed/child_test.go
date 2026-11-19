@@ -434,6 +434,40 @@ func TestRunKillsChildThatIgnoresTerm(t *testing.T) {
 	waitGone(t, pid, time.Second)
 }
 
+// When the collector exits, what is left of its process group is killed,
+// so repeated crashes leave no process behind. A leftover that holds the
+// collector's stdout must not keep the feed from seeing the exit.
+func TestRunKillsGroupAfterExit(t *testing.T) {
+	for name, holdsStdio := range map[string]bool{"detached": false, "holds stdout": true} {
+		t.Run(name, func(t *testing.T) {
+			bin := fakeCollector(t)
+			file := writeLines(t, 2)
+			gcFile := filepath.Join(t.TempDir(), "grandchild")
+			argv := []string{bin, "--grandchild", gcFile, "--exit-after", "1"}
+			if holdsStdio {
+				argv = append(argv, "--grandchild-stdio")
+			}
+			var r recorder
+			start(t, Config{Argv: append(argv, file), Batch: 10 * time.Millisecond, MinBackoff: time.Minute}, &r)
+			gc := startedPid(t, gcFile)
+			t.Cleanup(func() { _ = syscall.Kill(gc, syscall.SIGKILL) }) // this pid only, if the test fails
+
+			ev := r.waitFor(t, "down", func(ev []event) bool {
+				for _, s := range states(ev) {
+					if s.State == "down" {
+						return true
+					}
+				}
+				return false
+			})
+			if n := len(envelopes(ev)); n != 1 {
+				t.Errorf("%d envelopes before the down, want 1", n)
+			}
+			waitGone(t, gc, 3*time.Second)
+		})
+	}
+}
+
 func TestRunReturnsWhenCancelledDuringBackoff(t *testing.T) {
 	var r recorder
 	stop := start(t, Config{
