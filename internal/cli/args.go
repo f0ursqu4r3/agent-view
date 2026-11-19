@@ -2,18 +2,28 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"agent-view/internal/remote"
 )
+
+// DefaultPort is the port of serve and audit when --port is not given.
+const DefaultPort = 4317
 
 // Usage is the usage text printed after a usage error.
 const Usage = `usage: agent-view [--demo] [--demo-scale normal|stress] [--watch <dir>]...
                   [--linger <minutes>] [--reduced-motion]
        agent-view collect --stdio [--label <name>] [--demo] [--demo-scale normal|stress]
                   [--watch <dir>]... [--linger <minutes>]
+       agent-view serve [--port <n>] [--remote <ssh-host>]... [--demo]
+                  [--demo-scale normal|stress] [--watch <dir>]...
+                  [--linger <minutes>]
+       agent-view audit [--port <n>]
 
   --demo                         show a simulated event stream
   --demo-scale normal|stress     size of the simulated stream (default normal)
@@ -24,19 +34,28 @@ const Usage = `usage: agent-view [--demo] [--demo-scale normal|stress] [--watch 
   collect --stdio                write one NDJSON envelope per line to stdout
   --label <name>                 host name in the envelopes (collect only;
                                  default: this machine's host name)
+  serve                          run the headless hub: GET /api/snapshot on
+                                 127.0.0.1
+  --port <n>                     hub port (serve and audit; default 4317;
+                                 serve accepts 0 for a free port)
+  --remote <ssh-host>            add a remote machine over SSH (serve only;
+                                 repeatable)
+  audit                          check a running hub and print counts
 
 Set NO_COLOR to turn color off. Set AGENT_VIEW_COLLECTOR (a JSON array of
 strings) to replace the collector command.`
 
 // Args holds the parsed command line.
 type Args struct {
-	Mode      string // "tui" or "collect"
+	Mode      string // "tui", "collect", "serve" or "audit"
 	Demo      bool
 	DemoScale string   // "" when not given
 	Watch     []string // absolute paths
 	LingerMs  int64    // 0 when not given
 	Reduced   bool
-	Label     string // collect only; "" means the host name
+	Label     string   // collect only; "" means the host name
+	Port      int      // serve and audit; DefaultPort when not given
+	Remotes   []string // serve only; ssh hosts, in order
 }
 
 // UsageError is a command-line error. Msg names the offending token.
@@ -48,23 +67,29 @@ func usagef(format string, a ...any) UsageError {
 	return UsageError{Msg: fmt.Sprintf(format, a...)}
 }
 
-// Parse parses the arguments after the program name. "collect" must come
-// first and needs --stdio. The TUI rejects --remote, --port and serve (they
-// come in phase 2), and the retired --no-open.
+// Parse parses the arguments after the program name. "collect", "serve" and
+// "audit" must come first; collect needs --stdio. The TUI rejects --remote and
+// --port (they come with P2c), and the retired --no-open.
 func Parse(argv []string) (Args, error) {
 	a := Args{Mode: "tui"}
 	stdio := false
-	if len(argv) > 0 && argv[0] == "collect" {
-		a.Mode = "collect"
-		argv = argv[1:]
+	if len(argv) > 0 {
+		switch argv[0] {
+		case "collect", "serve", "audit":
+			a.Mode = argv[0]
+			argv = argv[1:]
+		}
 	}
-	collect := a.Mode == "collect"
+	if a.Mode == "serve" || a.Mode == "audit" {
+		a.Port = DefaultPort
+	}
+	mode := a.Mode
 	for i := 0; i < len(argv); i++ {
 		arg := argv[i]
 		name, value, hasValue := strings.Cut(arg, "=")
 		if !strings.HasPrefix(arg, "--") {
-			if arg == "serve" && !collect {
-				return Args{}, usagef("serve comes in phase 2")
+			if arg == "serve" || arg == "audit" {
+				return Args{}, usagef("%s must be the first argument", arg)
 			}
 			return Args{}, usagef("unexpected argument: %s", arg)
 		}
@@ -79,22 +104,30 @@ func Parse(argv []string) (Args, error) {
 			i++
 			return argv[i], nil
 		}
+		// audit takes only --port.
+		switch name {
+		case "--demo", "--reduced-motion", "--stdio", "--demo-scale", "--watch", "--linger", "--label", "--remote":
+			if mode == "audit" {
+				return Args{}, usagef("%s is not valid with audit", name)
+			}
+		}
 		switch name {
 		case "--demo", "--reduced-motion", "--stdio":
 			if hasValue {
 				return Args{}, usagef("%s takes no value", name)
 			}
-			switch {
-			case name == "--demo":
+			switch name {
+			case "--demo":
 				a.Demo = true
-			case name == "--stdio":
-				if !collect {
+			case "--stdio":
+				if mode != "collect" {
 					return Args{}, usagef("--stdio is only valid with collect")
 				}
 				stdio = true
-			case collect:
-				return Args{}, usagef("--reduced-motion is not valid with collect")
 			default:
+				if mode != "tui" {
+					return Args{}, usagef("--reduced-motion is not valid with %s", mode)
+				}
 				a.Reduced = true
 			}
 		case "--demo-scale":
@@ -130,7 +163,7 @@ func Parse(argv []string) (Args, error) {
 			}
 			a.LingerMs = ms
 		case "--label":
-			if !collect {
+			if mode != "collect" {
 				return Args{}, usagef("--label is only valid with collect")
 			}
 			v, err := next()
@@ -141,21 +174,97 @@ func Parse(argv []string) (Args, error) {
 				return Args{}, usagef("--label needs a name")
 			}
 			a.Label = v
-		case "--remote", "--port":
-			if collect {
-				return Args{}, usagef("%s is not valid with collect", name)
+		case "--remote":
+			if mode != "serve" {
+				if mode == "collect" {
+					return Args{}, usagef("--remote is not valid with collect")
+				}
+				return Args{}, usagef("--remote comes in phase 2")
 			}
-			return Args{}, usagef("%s comes in phase 2", name)
+			v, err := next()
+			if err != nil {
+				return Args{}, err
+			}
+			if !remote.ValidSSHHost(v) {
+				return Args{}, usagef("Invalid --remote value (use a host name or user@host, no spaces or shell characters)")
+			}
+			a.Remotes = append(a.Remotes, v)
+		case "--port":
+			if mode != "serve" && mode != "audit" {
+				if mode == "collect" {
+					return Args{}, usagef("--port is not valid with collect")
+				}
+				return Args{}, usagef("--port comes in phase 2")
+			}
+			v, err := next()
+			if err != nil {
+				return Args{}, err
+			}
+			n, ok := port(v)
+			if !ok {
+				return Args{}, usagef("Invalid port: %s", v)
+			}
+			if n == 0 && mode == "audit" {
+				return Args{}, usagef("Invalid port: %s (audit needs a port above 0)", v)
+			}
+			a.Port = n
 		case "--no-open":
 			return Args{}, usagef("--no-open is gone: the TUI opens no browser")
 		default:
 			return Args{}, usagef("unknown flag: %s", name)
 		}
 	}
-	if collect && !stdio {
+	if mode == "collect" && !stdio {
 		return Args{}, usagef("collect needs --stdio")
 	}
 	return a, nil
+}
+
+// port converts ASCII digits, at most 65535, to a port number. Leading zeros
+// are allowed, as in the TypeScript.
+func port(v string) (int, bool) {
+	if !allDigits(v) {
+		return 0, false
+	}
+	t := strings.TrimLeft(v, "0")
+	if len(t) > 5 {
+		return 0, false
+	}
+	n, _ := strconv.Atoi(t) // "" (all zeros) is 0
+	return n, n <= 65535
+}
+
+func allDigits(v string) bool {
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return v != ""
+}
+
+// RemoteCommandOverride ports remoteCommandOverride of src/cli.ts. TEST ONLY:
+// AGENT_VIEW_REMOTE_COMMAND holds a JSON array of strings, and serve runs that
+// argv for every remote instead of ssh. An empty value means no override and
+// returns nil. Anything but a non-empty JSON array of strings is a UsageError.
+func RemoteCommandOverride(value string) ([]string, error) {
+	if value == "" {
+		return nil, nil
+	}
+	bad := usagef("AGENT_VIEW_REMOTE_COMMAND must be a JSON array of strings (test only)")
+	var items []any
+	if err := json.Unmarshal([]byte(value), &items); err != nil || len(items) == 0 {
+		return nil, bad
+	}
+	argv := make([]string, len(items))
+	for i, it := range items {
+		s, ok := it.(string)
+		if !ok {
+			return nil, bad
+		}
+		argv[i] = s
+	}
+	return argv, nil
 }
 
 // maxLingerMs caps --linger so that adding it to a time cannot overflow.

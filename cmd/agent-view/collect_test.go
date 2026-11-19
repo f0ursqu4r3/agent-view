@@ -53,12 +53,19 @@ type collector struct {
 // startCollector runs the binary with argv and a pipe as stdout.
 func startCollector(t *testing.T, argv ...string) *collector {
 	t.Helper()
+	return startWithEnv(t, nil, argv...)
+}
+
+// startWithEnv is startCollector with extra environment entries (KEY=value).
+func startWithEnv(t *testing.T, env []string, argv ...string) *collector {
+	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := &collector{stdout: r, lines: bufio.NewReader(r), exited: make(chan error, 1)}
 	c.cmd = exec.Command(binPath, argv...)
+	c.cmd.Env = append(os.Environ(), env...)
 	c.cmd.Stdout = w
 	c.cmd.Stderr = &c.stderr
 	if err := c.cmd.Start(); err != nil {

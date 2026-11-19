@@ -1,6 +1,7 @@
 // Command agent-view shows what the coding agents on this machine do, in a
 // terminal. Phase 1 reads the TypeScript collector as a child process.
 // "agent-view collect --stdio" runs the Go collector and writes NDJSON.
+// "agent-view serve" runs the headless hub and "agent-view audit" checks it.
 package main
 
 import (
@@ -24,7 +25,7 @@ import (
 	"agent-view/internal/tui"
 )
 
-const notTerminal = "agent-view needs a terminal; agent-view serve comes in phase 2"
+const notTerminal = "agent-view needs a terminal; use agent-view serve for a headless hub"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -86,10 +87,17 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 1
 	}
-	if args.Mode == "collect" {
+	switch args.Mode {
+	case "collect":
 		signals, stop := collectSignals()
 		defer stop()
 		return runCollect(args, stdout, stderr, signals)
+	case "serve":
+		signals, stop := collectSignals()
+		defer stop()
+		return runServe(args, stdout, stderr, signals)
+	case "audit":
+		return runAudit(args, stdout, stderr)
 	}
 	if !bothTerminals(stdin, stdout, term.IsTerminal) {
 		fmt.Fprintln(stderr, notTerminal)

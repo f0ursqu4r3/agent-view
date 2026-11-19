@@ -75,11 +75,36 @@ Run it against your real sessions:
 ./agent-view
 ```
 
-Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--linger` takes decimal minutes above 0, for example `1.5`. `--reduced-motion` turns animation off. `--remote` and `serve` come in phase 2. The TUI needs a terminal. Without one, it exits with code 2.
+Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--linger` takes decimal minutes above 0, for example `1.5`. `--reduced-motion` turns animation off. `--remote` and `--port` are usage errors in the TUI until the TUI reads from the hub. The TUI needs a terminal. Without one, it exits with code 2 and points to `agent-view serve`.
 
 Set `NO_COLOR` to any non-empty value (`1`, `yes`, even `0`) to turn color off. Bold and inverse still apply, and dim text uses the terminal's faint style.
 
 Set `AGENT_VIEW_COLLECTOR` to a JSON array of strings to replace the collector command, flags included. For example, `AGENT_VIEW_COLLECTOR='["./my-collector","--stdio"]' ./agent-view`.
+
+### Go hub: `serve`
+
+`agent-view serve` runs the headless hub. It merges the local collector and any remote collectors. It serves one route, `GET /api/snapshot`, on `127.0.0.1`. It needs no terminal and no Bun.
+
+```bash
+./agent-view serve --demo
+# Agent View: http://127.0.0.1:4317
+curl -s http://127.0.0.1:4317/api/snapshot
+```
+
+The browser viewer at `/` and `/ws` are gone. No route but `/api/snapshot` exists, and no browser opens. A request needs a `Host` of `127.0.0.1:<port>` or `localhost:<port>` and no `Origin`, or an `Origin` of the same address. The reply is `{"hosts":[...],"envelopes":[...]}`.
+
+Flags: `--port <n>` (digits only, at most 65535; the default is 4317; `0` picks a free port), `--remote <ssh-host>` (repeatable; a host name or `user@host`), `--demo`, `--demo-scale normal|stress`, `--watch <dir>` (repeatable), and `--linger <minutes>`. `serve` must be the first argument. The hub runs `ssh -T <ssh-host> agent-view collect --stdio` for each remote, through your SSH config.
+
+`serve` prints `Agent View: <url>` to stdout when it listens. If the port is in use, it prints `agent-view: cannot start the server on port <n>: <message>` and exits with code 1. A remote that fails to connect shows as a `down` host and never stops the hub. A local collector failure prints a message and the hub keeps serving. SIGINT and SIGTERM stop the server and the hub and exit with code 0, within 2 s.
+
+### Go audit: `audit`
+
+`agent-view audit --port <n>` checks a running hub (default port 4317; `0` is a usage error). It reads `/api/snapshot`, runs the checks of `bun run audit:live`, and prints counts only: no path, name, command, or output. It prints a JSON report and exits with code 0, or prints `agent-view: audit: <message>` and exits with code 1.
+
+```bash
+./agent-view serve --demo &
+./agent-view audit --port 4317
+```
 
 ### Go collector: `collect --stdio`
 
