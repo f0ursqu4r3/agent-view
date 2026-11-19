@@ -1,6 +1,8 @@
 package watch
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,8 +10,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 // waitFor is how long a test waits for an event or a state. FSEvents
@@ -264,5 +269,24 @@ func TestTreeRootRemoved(t *testing.T) {
 			}
 			waitDegraded(t, w, "watcher error on "+root+": ENOENT")
 		})
+	}
+}
+
+// An fsnotify error maps to a degraded reason: overflow is a drop, EINVAL
+// from removing a watch the kernel already dropped is ignored, and any other
+// error is a watcher error on the root.
+func TestFsnotifyErrorReason(t *testing.T) {
+	cases := []struct {
+		err  error
+		want string
+	}{
+		{fsnotify.ErrEventOverflow, "events dropped under load"},
+		{fmt.Errorf("remove: %w", syscall.EINVAL), ""},
+		{&fs.PathError{Op: "read", Path: "/r/x", Err: syscall.EACCES}, "watcher error on /r: EACCES"},
+	}
+	for _, c := range cases {
+		if got := errorReason("/r", c.err); got != c.want {
+			t.Errorf("errorReason(%v) = %q, want %q", c.err, got, c.want)
+		}
 	}
 }

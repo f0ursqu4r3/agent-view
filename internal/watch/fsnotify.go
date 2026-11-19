@@ -55,13 +55,14 @@ func treeFsnotify(root string, onChange func(rel string, op Op), o Options) Watc
 	if x.maxDirs <= 0 {
 		x.maxDirs = defaultMaxDirs
 	}
+	go x.errorLoop()
 	x.addTree(s.real, false)
 	if _, ok := x.dirs[s.real]; !ok {
 		_ = w.Close()
+		<-x.errsDone
 		return stopped(x.Degraded())
 	}
 	go x.loop()
-	go x.errorLoop()
 	return x
 }
 
@@ -168,12 +169,24 @@ func (x *fsnotifyWatcher) loop() {
 func (x *fsnotifyWatcher) errorLoop() {
 	defer close(x.errsDone)
 	for err := range x.w.Errors {
-		if errors.Is(err, fsnotify.ErrEventOverflow) {
-			x.degrade("events dropped under load")
-		} else {
-			x.degrade("watcher error on " + x.root + ": " + fsutil.ErrCode(err))
+		if why := errorReason(x.root, err); why != "" {
+			x.degrade(why)
 		}
 	}
+}
+
+// errorReason is the degraded reason for an fsnotify error, or "" for an
+// error to ignore.
+func errorReason(root string, err error) string {
+	switch {
+	case errors.Is(err, fsnotify.ErrEventOverflow):
+		return "events dropped under load"
+	case errors.Is(err, syscall.EINVAL):
+		// Only from fsnotify removing a watch the kernel already dropped: a
+		// directory that was moved and then deleted. Nothing is lost.
+		return ""
+	}
+	return "watcher error on " + root + ": " + fsutil.ErrCode(err)
 }
 
 func (x *fsnotifyWatcher) handle(ev fsnotify.Event) {
