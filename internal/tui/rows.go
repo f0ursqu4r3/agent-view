@@ -284,11 +284,13 @@ func shownCard(in Input, p *rowPlan) *cells.Grid {
 }
 
 // callCard draws a call of the row's agent. An open call is stale when the
-// agent has had no event for the stale time.
+// agent has had no event for the stale time, unless the agent is WAITING on
+// its sub-agent: a parent that waits is not stale.
 func callCard(in Input, p *rowPlan, c *store.ViewCall, otherOpen, outputLines int) *cells.Grid {
+	stale := !c.Ended && in.Now-p.agent.LastEventMs > store.DefaultStaleMs && !cards.Waiting(p.agent, p.open, p.hasKids)
 	return cards.CallCard(cards.CallIn{
 		Call: c, ProjectRoot: root(p.agent), OtherOpen: otherOpen, Now: in.Now, Spin: in.Spin,
-		Stale:       !c.Ended && in.Now-p.agent.LastEventMs > store.DefaultStaleMs,
+		Stale:       stale,
 		LastEventMs: p.agent.LastEventMs, OutputLines: outputLines,
 	})
 }

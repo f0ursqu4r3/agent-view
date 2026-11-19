@@ -472,6 +472,36 @@ func TestComposeAnimation(t *testing.T) {
 	}
 }
 
+// TestComposeWaitingIsNotStale: a parent that waits on its sub-agent shows
+// WAITING, and its call card is not stale however long the parent is quiet.
+// An open call of an agent without a present child still goes stale.
+func TestComposeWaitingIsNotStale(t *testing.T) {
+	f := newFixture(t)
+	f.agent("a", "")
+	spawn := schema.Call{AgentID: "a", CallID: "spawn", StartedAt: iso(f.clock), Category: "agent", RawName: "Task"}
+	f.apply(schema.Envelope{Kind: "tool.start", Call: &spawn})
+	f.agent("s", "a")
+	f.agent("b", "")
+	f.start("b", "c2", "command", "")
+	f.clock += 3 * 60_000
+	f.start("s", "c1", "read", "/work/repo/x.go") // the child works; the parent is quiet for 3 min
+	g, hits := Compose(f.input(120, 60))
+	card := func(id string) string {
+		h := hitFor(t, hits, id)
+		var b strings.Builder
+		for y := h.Y; y < h.Y+7; y++ {
+			b.WriteString(at(g, h.X, y, 25+28) + "\n")
+		}
+		return b.String()
+	}
+	if got := card("a"); !strings.Contains(got, "WAITING") || strings.Contains(got, "no events") || !strings.Contains(got, "running") {
+		t.Errorf("waiting parent: want WAITING and a running card:\n%s", got)
+	}
+	if got := card("b"); !strings.Contains(got, "STALE") || !strings.Contains(got, "no events 3m") {
+		t.Errorf("quiet agent: want STALE and a stale card:\n%s", got)
+	}
+}
+
 // TestComposeStopFlash: an interrupt flashes the STOPPED word once, and the
 // call card stays as it is.
 func TestComposeStopFlash(t *testing.T) {

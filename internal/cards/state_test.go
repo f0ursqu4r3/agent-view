@@ -54,6 +54,9 @@ func TestStateOrder(t *testing.T) {
 			if got := State(tt.agent, tt.open, tt.child, nowMs, staleMs); got != tt.want {
 				t.Fatalf("State = %+v, want %+v", got, tt.want)
 			}
+			if got, want := Waiting(tt.agent, tt.open, tt.child), tt.want.Text == "• WAITING"; got != want {
+				t.Fatalf("Waiting = %v, want %v", got, want)
+			}
 		})
 	}
 }

@@ -27,7 +27,7 @@ func State(a store.ViewAgent, open []*store.ViewCall, hasPresentChild bool, now,
 		return StateWord{"✓ DONE", dim, false}
 	case a.Status == "idle":
 		return StateWord{"- IDLE", dim, false}
-	case len(open) > 0 && open[0].Category == "agent" && hasPresentChild:
+	case Waiting(a, open, hasPresentChild):
 		return StateWord{"• WAITING", cyan, false}
 	case len(open) > 0 && fresh:
 		return StateWord{"• WORKING", cells.Style{Role: cells.ROK, Bold: true}, false}
@@ -39,4 +39,16 @@ func State(a store.ViewAgent, open []*store.ViewCall, hasPresentChild bool, now,
 		return StateWord{"◌ STALE", dim, false}
 	}
 	return StateWord{"- IDLE", dim, false}
+}
+
+// Waiting reports whether the state word of an agent is WAITING: the shown
+// open call (open[0]) is an agent call, a sub-agent of the agent is present,
+// and no status row (STOPPED, DONE, IDLE) comes first. A waiting agent is
+// not stale, and neither is its call card.
+func Waiting(a store.ViewAgent, open []*store.ViewCall, hasPresentChild bool) bool {
+	switch a.Status {
+	case "interrupted", "finished", "idle":
+		return false
+	}
+	return len(open) > 0 && open[0].Category == "agent" && hasPresentChild
 }
