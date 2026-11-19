@@ -93,9 +93,9 @@ curl -s http://127.0.0.1:4317/api/snapshot
 
 The browser viewer at `/` and `/ws` are gone. No route but `/api/snapshot` exists, and no browser opens. A request needs a `Host` of `127.0.0.1:<port>` or `localhost:<port>` and no `Origin`, or an `Origin` of the same address. The reply is `{"hosts":[...],"envelopes":[...]}`.
 
-Flags: `--port <n>` (digits only, at most 65535; the default is 4317; `0` picks a free port), `--remote <ssh-host>` (repeatable; a host name or `user@host`), `--demo`, `--demo-scale normal|stress`, `--watch <dir>` (repeatable), and `--linger <minutes>`. `serve` must be the first argument. The hub runs `ssh -T <ssh-host> agent-view collect --stdio` for each remote, through your SSH config.
+Flags: `--port <n>` (digits only, at most 65535; the default is 4317; `0` picks a free port), `--remote <ssh-host>` (repeatable; a host name or `user@host`), `--demo`, `--demo-scale normal|stress`, `--watch <dir>` (repeatable), and `--linger <minutes>`. `serve` must be the first argument. The hub runs `ssh -T <ssh-host> agent-view collect --stdio` for each remote, through your SSH config. The command uses `-o BatchMode=yes`, so the remote host needs non-interactive authentication, such as a key or an agent. A host that accepts only a password shows as `down` with `ssh failed: <message>`.
 
-`serve` prints `Agent View: <url>` to stdout when it listens. If the port is in use, it prints `agent-view: cannot start the server on port <n>: <message>` and exits with code 1. A remote that fails to connect shows as a `down` host and never stops the hub. A local collector failure prints a message and the hub keeps serving. SIGINT and SIGTERM stop the server and the hub and exit with code 0, within 2 s.
+`serve` prints `Agent View: <url>` to stdout when it listens. If the port is in use, it prints `agent-view: cannot start the server on port <n>: <message>` and exits with code 1. A remote that fails to connect shows as a `down` host and never stops the hub. A local collector failure prints a message and the hub keeps serving. SIGINT, SIGTERM and SIGHUP stop the server and the hub and exit with code 0, within 2 s. Each remote child gets SIGTERM. If a remote child ignores SIGTERM, `serve` sends SIGKILL to its process group before the 2 s run out.
 
 ### Go audit: `audit`
 
