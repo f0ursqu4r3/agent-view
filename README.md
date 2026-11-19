@@ -51,6 +51,46 @@ Check real sessions on a running hub. This prints counts only. Pass a port as th
 bun run audit:live
 ```
 
+## Go TUI (phase 1)
+
+A terminal viewer in Go is in progress. It draws each agent as a row of text cards. In phase 1 it starts the TypeScript collector as a child process, so Bun is still required. Run it from the repository root.
+
+Build it:
+
+```bash
+go build -o agent-view ./cmd/agent-view
+```
+
+Run it with a simulated event stream:
+
+```bash
+./agent-view --demo
+```
+
+Run it against your real sessions:
+
+```bash
+./agent-view
+```
+
+Flags: `--demo`, `--demo-scale normal|stress`, `--watch <dir>`, `--linger <minutes>`, and `--reduced-motion`. `--reduced-motion` turns animation off. `--remote`, `serve`, and `collect` come in phase 2. The TUI needs a terminal. Without one, it exits with code 2.
+
+Set `NO_COLOR` to any value to turn color off. Bold, dim, and inverse still apply.
+
+Set `AGENT_VIEW_COLLECTOR` to a JSON array of strings to replace the collector command, flags included. For example, `AGENT_VIEW_COLLECTOR='["./my-collector","--stdio"]' ./agent-view`.
+
+| Key | Action |
+|---|---|
+| `j` / `↓`, `k` / `↑` | Move the selection between rows. |
+| `g` / `G` | First / last row. |
+| `Enter`, or a mouse click on an agent card | Focus the selected (or clicked) agent. Enter again clears it. |
+| `Esc` | Clear the focus, close a panel. |
+| `Space` | Pause the board and the log. Events still arrive. |
+| `l` | Toggle the tall log. |
+| `c` | Coverage panel. |
+| `?` | Help. |
+| `q`, `Ctrl-C` | Quit. |
+
 ## Flags
 
 | Flag | Meaning |

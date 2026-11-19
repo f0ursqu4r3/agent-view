@@ -5,3 +5,4 @@ work/
 .superpowers/
 dist/
 test/.tmp/
+/agent-view
