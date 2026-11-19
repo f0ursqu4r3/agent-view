@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"agent-view/internal/cells"
 	"agent-view/internal/schema"
 	"agent-view/internal/store"
@@ -242,6 +244,26 @@ func TestCallCardHeight(t *testing.T) {
 		}
 		if g := CallCard(CallIn{Call: tc.call, Now: callStart + 1000, OutputLines: tc.lines}); g.H != tc.want {
 			t.Errorf("%s: CallCard is %d high, want %d", tc.name, g.H, tc.want)
+		}
+	}
+}
+
+// Emoji whose grapheme width and wcwidth differ are written so the card's
+// right border stays in its column by the renderer's wcwidth measure.
+func TestCallCardEmojiKeepsBorders(t *testing.T) {
+	family := "👨‍👩‍👧‍👦"
+	tests := []*store.ViewCall{
+		mkCall("read", -1, nil, func(c *store.ViewCall) { c.Files = []string{callRoot + "/⚠️ notes/❤️👍🏽.md"} }),
+		mkCall("command", 900, bptr(true), func(c *store.ViewCall) {
+			c.Command, c.Output = "echo "+family+" ⚠️ ❤️ 👍🏽 done", "⚠️ warning ❤️\n"+family+" 👍🏽 ok\n"
+		}),
+	}
+	for _, c := range tests {
+		g := CallCard(CallIn{Call: c, ProjectRoot: callRoot, Now: callStart + 1000})
+		for y, line := range strings.Split(cells.Plain(g), "\n") {
+			if w := ansi.StringWidthWc(line); w != CallW {
+				t.Errorf("%s line %d %q: wcwidth %d, want %d", c.Category, y, line, w, CallW)
+			}
 		}
 	}
 }

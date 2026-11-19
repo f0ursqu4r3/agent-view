@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rivo/uniseg"
-
 	"agent-view/internal/cards"
 	"agent-view/internal/cells"
 	"agent-view/internal/schema"
@@ -325,11 +323,5 @@ func drawLogLine(g *cells.Grid, y int, ln LogLine) {
 	g.Text(durX+max(logDurW-cellWidth(dur), 0), y, logDurW, dur, cells.Style{Role: cells.RDim})
 }
 
-// cellWidth returns the layout width of s.
-func cellWidth(s string) int {
-	n := 0
-	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		n += min(max(gr.Width(), 0), 2)
-	}
-	return n
-}
+// cellWidth returns the layout width of s, as Grid.Text counts it.
+func cellWidth(s string) int { return cells.Width(s) }

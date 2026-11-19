@@ -3,6 +3,8 @@ package cells
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 var plain = Style{Role: RText}
@@ -47,6 +49,49 @@ func TestTextWideGraphemes(t *testing.T) {
 	n := g.Text(0, 0, 4, "日本語", plain)
 	if got := Plain(g); got != "日… " || n != 3 {
 		t.Fatalf("Plain = %q written = %d", got, n)
+	}
+}
+
+// Bubble Tea measures text with wcwidth unless the terminal reports mode
+// 2027, which common terminals do not. A grapheme whose grapheme width and
+// wcwidth differ is written as its first rune when that rune's two widths
+// agree, else as "?", so every written cell has the width the renderer
+// gives it and the border after the text stays in its column.
+func TestTextWidthsMatchTheRenderer(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"⚠️ x", "⚠ x"},      // U+26A0 U+FE0F: grapheme 2, wcwidth 1
+		{"❤️ x", "❤ x"},      // U+2764 U+FE0F: grapheme 2, wcwidth 1
+		{"👍🏽 x", "👍 x"},      // a skin tone: grapheme 2, wcwidth 4
+		{"👨‍👩‍👧‍👦 x", "👨 x"}, // a ZWJ family: grapheme 2, wcwidth 8
+		{"ೳ x", "? x"},       // one rune: grapheme 1, wcwidth 0
+		{"漢字 x", "漢字 x"},     // CJK: both 2
+		{"é x", "é x"},     // a combining mark: both 1
+	} {
+		g := New(14, 3)
+		g.Box(0, 0, 14, 3, Square, plain)
+		g.Text(1, 1, 12, tt.in, plain)
+		row := g.C[g.W : 2*g.W]
+		var text strings.Builder
+		cellsW := 0
+		for x, c := range row {
+			text.WriteString(c.G)
+			cellsW += int(c.W)
+			if c.W != 0 && ansi.StringWidthWc(c.G) != int(c.W) {
+				t.Errorf("%q: cell %d holds %q of width %d, wcwidth %d", tt.in, x, c.G, c.W, ansi.StringWidthWc(c.G))
+			}
+		}
+		if got := ansi.StringWidthWc(text.String()); got != cellsW || got != g.W {
+			t.Errorf("%q: row %q has wcwidth %d, cells %d, want %d", tt.in, text.String(), got, cellsW, g.W)
+		}
+		if got := strings.TrimRight(text.String()[len("│"):], " │"); got != tt.want {
+			t.Errorf("%q: wrote %q, want %q", tt.in, got, tt.want)
+		}
+		// The right border stays in the last column on every line.
+		for y, line := range strings.Split(Plain(g), "\n") {
+			if w := ansi.StringWidthWc(line); w != g.W || !strings.HasSuffix(line, "┐") && !strings.HasSuffix(line, "│") && !strings.HasSuffix(line, "┘") {
+				t.Errorf("%q: line %d %q has wcwidth %d, want %d and a border at the end", tt.in, y, line, w, g.W)
+			}
+		}
 	}
 }
 

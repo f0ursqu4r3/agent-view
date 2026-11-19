@@ -4,7 +4,9 @@ package cells
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )
 
@@ -100,11 +102,59 @@ func (g *Grid) putWide(x, y, w int, s string, st Style) {
 	}
 }
 
+// glyph returns what Text writes for one grapheme and its width in cells,
+// or width 0 for a grapheme that Text skips (a control or a zero-width
+// grapheme). Bubble Tea measures text with wcwidth unless the terminal
+// reports mode 2027, which common terminals do not. A grapheme whose
+// grapheme width and wcwidth differ (an emoji with a variation selector or a
+// skin tone, a ZWJ sequence) would move every cell after it on the screen,
+// so it becomes its first rune when that rune's two widths agree, else "?".
+// Either way the glyph has the same width by both measures, 1 or 2.
+func glyph(gr string) (string, int) {
+	if len(gr) == 1 && gr[0] < utf8.RuneSelf { // ASCII, the common case
+		if gr[0] < 0x20 || gr[0] == 0x7f {
+			return "", 0
+		}
+		return gr, 1
+	}
+	if strings.IndexFunc(gr, unicode.IsControl) >= 0 {
+		return "", 0
+	}
+	w := ansi.StringWidth(gr)
+	if w == ansi.StringWidthWc(gr) && w <= 2 {
+		return gr, w
+	}
+	r, _ := utf8.DecodeRuneInString(gr)
+	first := string(r)
+	if w := ansi.StringWidth(first); w >= 1 && w <= 2 && w == ansi.StringWidthWc(first) {
+		return first, w
+	}
+	return "?", 1
+}
+
+// GraphemeWidth returns the cells Text uses for one grapheme: 0 for a
+// grapheme it skips, else 1 or 2.
+func GraphemeWidth(gr string) int {
+	_, w := glyph(gr)
+	return w
+}
+
+// Width returns the layout width of s as Text counts it.
+func Width(s string) int {
+	n := 0
+	for gr := uniseg.NewGraphemes(s); gr.Next(); {
+		n += GraphemeWidth(gr.Str())
+	}
+	return n
+}
+
 // Text writes s at (x, y) using at most max cells and returns the number of
 // cells used. If s is wider than max, the last used cell is "…"; a wide
 // grapheme that does not fit also becomes "…". The count is the layout width,
 // so it includes cells that fall outside the grid and were clipped. Control
-// graphemes and zero-width graphemes are skipped.
+// graphemes and zero-width graphemes are skipped. A grapheme whose grapheme
+// width and wcwidth differ is replaced (see glyph), so each cell holds a
+// glyph as wide as the cells it takes by either measure.
 func (g *Grid) Text(x, y, max int, s string, st Style) int {
 	if max <= 0 {
 		return 0
@@ -116,16 +166,9 @@ func (g *Grid) Text(x, y, max int, s string, st Style) int {
 	var ps []piece
 	total := 0
 	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		str := gr.Str()
-		if strings.IndexFunc(str, unicode.IsControl) >= 0 {
-			continue
-		}
-		w := gr.Width()
+		str, w := glyph(gr.Str())
 		if w <= 0 {
 			continue
-		}
-		if w > 2 {
-			w = 2
 		}
 		ps = append(ps, piece{str, w})
 		total += w

@@ -153,20 +153,14 @@ func targetParts(c *store.ViewCall) (name, suffix string) {
 }
 
 // cellWidth returns the layout width of s, as Grid.Text counts it.
-func cellWidth(s string) int {
-	n := 0
-	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		n += min(max(gr.Width(), 0), 2)
-	}
-	return n
-}
+func cellWidth(s string) int { return cells.Width(s) }
 
 // clipWidth returns the longest prefix of s that fits in w cells.
 func clipWidth(s string, w int) string {
 	n := 0
 	var b strings.Builder
 	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		gw := min(max(gr.Width(), 0), 2)
+		gw := cells.GraphemeWidth(gr.Str())
 		if n+gw > w {
 			break
 		}

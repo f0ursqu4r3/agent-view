@@ -186,19 +186,13 @@ func drawBoard(in Input, w, h int) (*cells.Grid, []Hit) {
 }
 
 // width returns the layout width of s, as Grid.Text counts it.
-func width(s string) int {
-	n := 0
-	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		n += min(max(gr.Width(), 0), 2)
-	}
-	return n
-}
+func width(s string) int { return cells.Width(s) }
 
 // prefix returns the longest prefix of s that is at most n cells wide.
 func prefix(s string, n int) string {
 	used, end := 0, 0
 	for gr := uniseg.NewGraphemes(s); gr.Next(); {
-		gw := min(max(gr.Width(), 0), 2)
+		gw := cells.GraphemeWidth(gr.Str())
 		if used+gw > n {
 			break
 		}
