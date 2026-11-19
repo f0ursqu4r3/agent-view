@@ -288,6 +288,66 @@ func TestLogSourceKeepsPartialWatcher(t *testing.T) {
 	}
 }
 
+// A watcher hint that does not fit in the buffer is dropped, and the next
+// poll starts a rescan: a new log behind a dropped hint is found without
+// waiting for the safety rescan.
+func TestLogSourceDroppedHintRescans(t *testing.T) {
+	dir := realDir(t)
+	root := claudeRoot(dir)
+	main := filepath.Join(root.Path, "proj", "main.jsonl")
+	writeLog(t, main, toolLine("t0"))
+	// The first scan opens the watcher before Start returns.
+	var hint func(string, watch.Op)
+	watchFn := func(_ string, cb func(string, watch.Op), _ watch.Options) watch.Watcher {
+		hint = cb
+		return fakeWatcher{}
+	}
+	var mu sync.Mutex
+	var ids []string
+	var hold atomic.Bool
+	held, release := make(chan struct{}), make(chan struct{})
+	src := NewSource(SourceOptions{
+		Host: "mac", Roots: []Root{root}, PollMs: 50, RescanMs: 60_000, HealthyRescanMs: 60_000, Watch: watchFn,
+		Emit: func(b []wire.SourceEvent) {
+			if hold.CompareAndSwap(true, false) {
+				close(held)
+				<-release
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, s := range only[wire.ToolStart](b) {
+				ids = append(ids, s.Call.CallID)
+			}
+		},
+		OnStatus: func(string, wire.SourceState) {},
+	})
+	t.Cleanup(src.Stop)
+	if err := src.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Hold the source goroutine in Emit (the poll reads t1), so the hints
+	// fill the buffer and the hint for the new log is dropped.
+	hold.Store(true)
+	appendTo(t, main, []byte(toolLine("t1")))
+	select {
+	case <-held:
+	case <-time.After(srcDeadline):
+		close(release)
+		t.Fatal("the poll did not read t1")
+	}
+	writeLog(t, filepath.Join(root.Path, "proj", "new.jsonl"), toolLine("n1"))
+	for range hintBuffer {
+		hint(filepath.Join("proj", "main.jsonl"), watch.Change)
+	}
+	hint(filepath.Join("proj", "new.jsonl"), watch.Rename)
+	close(release)
+	until(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Contains(ids, "n1")
+	}, "a rescan to find n1")
+}
+
 // LogSource never reads one file twice at once: a burst of appends emits each record once
 func TestLogSourceNoConcurrentReads(t *testing.T) {
 	dir := realDir(t)

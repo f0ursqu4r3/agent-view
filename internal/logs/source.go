@@ -24,7 +24,8 @@ const (
 	// so a burst of new files costs one scan.
 	rescanDebounce = 50 * time.Millisecond
 	// hintBuffer is how many watcher hints wait for the source goroutine. A
-	// hint that does not fit is dropped: the poll covers it.
+	// hint that does not fit is dropped: the poll re-reads the selected
+	// logs, and after a drop it also starts a rescan to find a new log.
 	hintBuffer = 256
 )
 
@@ -85,6 +86,8 @@ type Source struct {
 	done          chan struct{} // closed when the source goroutine ends
 	// The coverage counts, written by the source goroutine.
 	open, malformed, discovered atomic.Int64
+	// hintDropped is set when a watcher hint did not fit in hints.
+	hintDropped atomic.Bool
 
 	// mu guards the fields below. It is never held while a consumer
 	// callback runs.
@@ -265,6 +268,10 @@ func (s *Source) run(ready chan<- struct{}) {
 		case <-s.quit:
 			return
 		case <-poll.C:
+			if s.hintDropped.Swap(false) && debounceC == nil {
+				debounce = time.NewTimer(rescanDebounce)
+				debounceC = debounce.C
+			}
 			for _, file := range s.order {
 				s.readFile(file)
 			}
@@ -470,6 +477,7 @@ func (s *Source) ensureWatcher(root Root, code string) {
 			select {
 			case s.hints <- filepath.Join(root.Path, rel):
 			default:
+				s.hintDropped.Store(true)
 			}
 		}, watch.Options{})
 		s.watchers[root.Path] = w
