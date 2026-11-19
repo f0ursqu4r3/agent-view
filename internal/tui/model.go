@@ -20,9 +20,9 @@ const (
 	spinEvery  = 125 * time.Millisecond // spinner and elapsed bar, while a call is open
 	clockEvery = time.Second            // status clock, touches, host summaries
 
-	diagCap   = 200    // diagnostics lines kept
-	rateMs    = 60_000 // the window of calls per minute
-	summaryMs = 3_000  // a host's summary goes out this long after its hello
+	diagCap = 200    // diagnostics lines kept
+	rateMs  = 60_000 // the window of calls per minute
+	quietMs = 2_000  // a host's summary goes out after this long without a history change
 )
 
 // The tick messages. Each tick re-arms itself only while its condition
@@ -88,6 +88,7 @@ var _ tea.Model = (*Model)(nil)
 // hostInfo is what the model tracks for one host.
 type hostInfo struct {
 	helloMs    int64 // arrival of the first hello; 0 for none
+	histMs     int64 // arrival of the last history change; 0 for none
 	summarized bool  // the "loaded" line went out
 	due        bool  // the summary waits for the pause to end
 	degraded   int   // the degraded sources last logged

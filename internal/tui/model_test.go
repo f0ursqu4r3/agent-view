@@ -483,24 +483,38 @@ func TestModelHostSummary(t *testing.T) {
 		}
 	}
 
-	// 3 s after the hello, with no live change.
+	// With no live change: once the host has had no history change for 2 s
+	// after its hello, so a scan longer than 3 s is counted whole.
 	g := newModelFix(t, true, 120, 40)
-	g.batch(
-		schema.Envelope{Kind: "hello", Now: iso(g.clock)},
-		agentEnv("a", "", old), startEnv("a", "h1", "read", "/work/repo/h1.go", old), endEnv("a", "h1", true, old+10),
-		startEnv("a", "h2", "read", "/work/repo/h2.go", old+20), endEnv("a", "h2", true, old+30),
-	)
-	g.clock += 2000
-	g.send(clockMsg{})
-	if strings.Contains(g.screen(), "loaded") {
-		t.Errorf("summary before 3 s")
+	hist := func(id string, at int64) []schema.Envelope {
+		return []schema.Envelope{startEnv("a", id, "read", "/work/repo/"+id+".go", at), endEnv("a", id, true, at+10)}
+	}
+	g.batch(append([]schema.Envelope{{Kind: "hello", Now: iso(g.clock)}, agentEnv("a", "", old)}, hist("h1", old)...)...)
+	for i, id := range []string{"h2", "h3", "h4"} { // the scan goes on for 4.5 s
+		g.clock += 1500
+		g.batch(hist(id, old+int64(i+1)*100)...)
+		g.send(clockMsg{})
+		if strings.Contains(g.screen(), "loaded") {
+			t.Fatalf("summary during the scan, %d ms after the hello:\n%s", g.clock-nowMs, g.screen())
+		}
 	}
 	g.clock += 1000
 	g.send(clockMsg{})
+	if strings.Contains(g.screen(), "loaded") {
+		t.Errorf("summary after 1 s of quiet:\n%s", g.screen())
+	}
 	g.clock += 1000
 	g.send(clockMsg{})
-	if n := strings.Count(g.screen(), summary); n != 1 {
-		t.Errorf("summary %d times after 3 s:\n%s", n, g.screen())
+	full := "HOST  devbox loaded 1 agents, 4 calls from logs"
+	if n, all := strings.Count(g.screen(), full), strings.Count(g.screen(), "loaded"); n != 1 || all != 1 {
+		t.Errorf("after 2 s of quiet: %d full summaries, %d in all; want 1:\n%s", n, all, g.screen())
+	}
+	// Once per host: later history and quiet write no second line.
+	g.batch(hist("h5", old+500)...)
+	g.clock += 3000
+	g.send(clockMsg{})
+	if n := strings.Count(g.screen(), "loaded"); n != 1 {
+		t.Errorf("%d summaries after more history, want 1:\n%s", n, g.screen())
 	}
 }
 

@@ -49,6 +49,7 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 				if _, ok := histOnly[c.AgentID]; !ok {
 					histOnly[c.AgentID] = true
 				}
+				m.host(c.Host).histMs = now
 				continue
 			}
 			histOnly[c.AgentID] = false
@@ -160,8 +161,9 @@ func (m *Model) host(label string) *hostInfo {
 }
 
 // summaryAt writes a host's startup history summary at its first live
-// change, before the line of that change. The counts leave out what the
-// live change itself added. While paused, the summary waits.
+// change, before the line of that change, unless checkHosts wrote it after
+// a quiet period first. The counts leave out what the live change itself
+// added. While paused, the summary waits.
 func (m *Model) summaryAt(label string, changes []store.Change, now int64) {
 	if label == "" {
 		return
@@ -201,15 +203,16 @@ func (m *Model) summarize(label string, agents, calls int, now int64) {
 	h.summarized, h.due = true, false
 }
 
-// checkHosts writes the host lines that are due: a summary 3 s after the
-// hello (or held by a pause), and a change of the degraded sources.
+// checkHosts writes the host lines that are due: a summary once the host
+// has had no history change for 2 s after its hello, so the scan is loaded
+// (or held by a pause), and a change of the degraded sources.
 func (m *Model) checkHosts(now int64) {
 	if m.ui.Paused {
 		return
 	}
 	for _, label := range m.store.Hosts() {
 		h := m.host(label)
-		if !h.summarized && (h.due || h.helloMs != 0 && now-h.helloMs >= summaryMs) {
+		if !h.summarized && (h.due || h.helloMs != 0 && now-max(h.helloMs, h.histMs) >= quietMs) {
 			a, n := m.store.HostStats(label)
 			m.summarize(label, a, n, now)
 		}
