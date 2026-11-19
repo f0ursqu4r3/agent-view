@@ -362,9 +362,9 @@ func fixtureHome(t *testing.T) string {
 	return home
 }
 
-// requireKinds fails when the stream lacks a kind, so a run that read no
-// logs cannot pass.
-func requireKinds(t *testing.T, s stream, kinds ...string) {
+// requireContent fails when the TypeScript stream lacks one of kinds or a
+// coverage envelope, so a run that read no logs cannot pass.
+func requireContent(t *testing.T, s stream, kinds ...string) {
 	t.Helper()
 	seen := map[string]bool{}
 	for _, e := range s.ordered {
@@ -376,9 +376,19 @@ func requireKinds(t *testing.T, s stream, kinds ...string) {
 			t.Errorf("the TypeScript stream has no %s envelope", k)
 		}
 	}
-	if len(s.statuses) == 0 || len(s.timeouts) == 0 || s.coverage == nil {
-		t.Errorf("statuses %d, timeouts %d, coverage %v: want each present", len(s.statuses), len(s.timeouts), s.coverage != nil)
+	if s.coverage == nil {
+		t.Error("the TypeScript stream has no coverage envelope")
 	}
+}
+
+// coverageCount returns a number field of the last coverage, or -1.
+func coverageCount(s stream, key string) int {
+	cov, _ := s.coverage["coverage"].(map[string]any)
+	n, ok := cov[key].(float64)
+	if !ok {
+		return -1
+	}
+	return int(n)
 }
 
 // The Go and TypeScript collectors give the same stream for the fixture logs.
@@ -387,7 +397,10 @@ func TestParityFixtures(t *testing.T) {
 	home := fixtureHome(t)
 	goRun, tsRun := runBoth(t, home, false)
 	tsS := compareRuns(t, goRun, tsRun, false)
-	requireKinds(t, tsS, "hello", "snapshot", "agent.upsert", "agent.status", "tool.start", "tool.output", "tool.end")
+	requireContent(t, tsS, "hello", "snapshot", "agent.upsert", "agent.status", "tool.start", "tool.output", "tool.end")
+	if len(tsS.statuses) == 0 || len(tsS.timeouts) == 0 {
+		t.Errorf("statuses %d, timeouts %d: want both above 0", len(tsS.statuses), len(tsS.timeouts))
+	}
 }
 
 // localRoot is where a real log root goes inside the temporary HOME, so the
@@ -465,8 +478,14 @@ func TestParityLocal(t *testing.T) {
 	home := t.TempDir() // removed at the end, the copy with it
 	n := copyLocalLogs(t, home)
 	goRun, tsRun := runBoth(t, home, true)
-	compareRuns(t, goRun, tsRun, true)
+	tsS := compareRuns(t, goRun, tsRun, true)
 	t.Logf("copied %d logs", n)
+	// Both streams can match while holding nothing: the copies must be found
+	// and read.
+	requireContent(t, tsS, "agent.upsert", "tool.start")
+	if got := coverageCount(tsS, "logsDiscovered"); got != n {
+		t.Errorf("the TypeScript collector discovered %d of the %d copied logs", got, n)
+	}
 }
 
 // eventValue is a demo event as the TypeScript script prints it: the event
