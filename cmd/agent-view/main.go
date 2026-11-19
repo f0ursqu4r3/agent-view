@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/term"
 
 	"agent-view/internal/cli"
 	"agent-view/internal/feed"
@@ -28,10 +29,10 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-// isTerminal reports whether f is a character device.
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+// bothTerminals reports whether stdin and stdout are terminals, as decided by
+// isTTY. A character device such as /dev/null is not a terminal.
+func bothTerminals(stdin, stdout *os.File, isTTY func(fd uintptr) bool) bool {
+	return isTTY(stdin.Fd()) && isTTY(stdout.Fd())
 }
 
 // diagWriter is the output of the log package while the TUI runs. It queues
@@ -79,7 +80,7 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 1
 	}
-	if !isTerminal(stdin) || !isTerminal(stdout) {
+	if !bothTerminals(stdin, stdout, term.IsTerminal) {
 		fmt.Fprintln(stderr, notTerminal)
 		return 2
 	}
