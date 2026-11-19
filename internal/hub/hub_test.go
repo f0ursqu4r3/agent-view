@@ -341,9 +341,11 @@ func TestSnapshotReplacesMirror(t *testing.T) {
 
 	before := len(rec.all())
 	// A source decodes each line and skips the ones that fail, as the remote
-	// does. TypeScript forwards these lines and its state throws on them; the
-	// Go decoder rejects them, so they reach neither the subscribers nor the
-	// mirror.
+	// does. TypeScript forwards these lines: its state throws on the
+	// tool.start and the agent.upsert, and its hub stores and replays the
+	// null coverage. The Go decoder rejects all three (for coverage a known
+	// difference: the last valid coverage stays), so they reach neither the
+	// subscribers nor the mirror.
 	for _, line := range []string{
 		`{"kind":"tool.start","call":null,"ts":"` + tsNow + `"}`,
 		`{"kind":"agent.upsert","ts":"` + tsNow + `"}`,

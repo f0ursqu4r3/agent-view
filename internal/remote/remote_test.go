@@ -427,11 +427,13 @@ func TestRemoteSpawnFailure(t *testing.T) {
 
 // an oversize line without a newline is dropped and counted once; the stream
 // continues
+//
+// The big line is a valid envelope, so only the size rule keeps it out.
 func TestRemoteOversizeLine(t *testing.T) {
 	hello := `{"v":1,"kind":"hello","host":"x","seq":0,"ts":"t","collectorVersion":"0","platform":"t","now":"t"}`
 	script := strings.Join([]string{
 		printLines(hello),
-		`printf '{"v":1,"kind":"agent.upsert","host":"x","seq":1,"ts":"t","pad":"'; head -c 300000 /dev/zero | tr '\0' x; printf '"}\n'; `,
+		`printf '{"v":1,"kind":"agent.upsert","host":"x","seq":1,"ts":"t","agent":{"id":"big"},"pad":"'; head -c 300000 /dev/zero | tr '\0' x; printf '"}\n'; `,
 		printLines(upsertLine("x", 2)),
 		"exec sleep 30",
 	}, "")

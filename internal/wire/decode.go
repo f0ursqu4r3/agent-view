@@ -99,9 +99,12 @@ func decodeAs[T Event](line []byte) (Event, error) {
 	return ev, nil
 }
 
-// requiredObject names the member that a kind cannot do without. The state
-// cannot apply such an event when the member is missing or null (TypeScript's
-// apply throws), so the line is an error.
+// requiredObject names the member that a kind cannot do without; a line
+// where it is missing or null is an error. For agent and call this matches
+// TypeScript, whose state apply throws on such a line. For coverage it is a
+// known difference: the TypeScript hub stores a coverage envelope unchecked
+// and replays it, while Go keeps the last valid coverage, because a replayed
+// null coverage would break the audit.
 var requiredObject = map[string]string{"agent.upsert": "agent", "tool.start": "call", "coverage": "coverage"}
 
 // decodeEvent builds the event of the given kind. A kind this version does not
