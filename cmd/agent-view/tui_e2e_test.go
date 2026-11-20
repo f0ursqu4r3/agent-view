@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -63,7 +64,25 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 	cmd := exec.Command("tmux", argv...)
 	cmd.Env = append(env, o.env...)
 	// kill-server leaves the socket file, so the file goes after the server.
+	// kill-server sends SIGHUP, which a program that already has a shutdown
+	// request ignores: a program that still runs gets SIGKILL by its PID
+	// first, and the cleanup waits until tmux sees it dead, so that it cannot
+	// start a remote child again. The stubPIDs cleanup, registered before,
+	// then kills the recorded stubs.
 	t.Cleanup(func() {
+		paneDead := func() string {
+			out, _ := exec.Command("tmux", "-L", p.sock, "list-panes", "-t", "main", "-F", "#{pane_dead}").Output()
+			return strings.TrimSpace(string(out))
+		}
+		if paneDead() == "0" {
+			out, _ := exec.Command("tmux", "-L", p.sock, "list-panes", "-t", "main", "-F", "#{pane_pid}").Output()
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && pid > 1 {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+				for deadline := time.Now().Add(exitWait); paneDead() == "0" && time.Now().Before(deadline); {
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+		}
 		path, _ := exec.Command("tmux", "-L", p.sock, "display-message", "-p", "#{socket_path}").Output()
 		_ = exec.Command("tmux", "-L", p.sock, "kill-server").Run()
 		if s := strings.TrimSpace(string(path)); s != "" {

@@ -23,7 +23,7 @@ var binPath string
 
 func TestMain(m *testing.M) {
 	if os.Getenv(helperEnv) == "prerun-panic" {
-		beforeRun = func() { panic("PRE-RUN-PANIC-MARKER") }
+		beforeRun = func(<-chan struct{}) { panic("PRE-RUN-PANIC-MARKER") }
 		os.Exit(runTUI(cli.Args{Mode: "tui", Demo: true}, os.Stderr))
 	}
 	os.Exit(testMain(m))

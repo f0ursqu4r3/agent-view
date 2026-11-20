@@ -149,8 +149,9 @@ func (w *diagWriter) rest() []string {
 // is closed when a shutdown signal has arrived.
 var beforeStart = func(requested <-chan struct{}) {}
 
-// beforeRun runs just before the program starts (a test hook).
-var beforeRun = func() {}
+// beforeRun runs just before the program starts (a test hook). requested is
+// closed when a shutdown signal has arrived.
+var beforeRun = func(requested <-chan struct{}) {}
 
 // run is main without os.Exit; it returns the exit code.
 func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
@@ -257,7 +258,7 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 		}
 	}()
 
-	beforeRun()
+	beforeRun(sigs.Requested())
 	_, runErr := p.Run()
 	shutdown()
 	restore() // every captured line is queued when it returns

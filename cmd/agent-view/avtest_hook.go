@@ -34,16 +34,26 @@ func init() {
 		// The signal reaches the watcher on another goroutine: wait for it,
 		// so that the run sees it before the sources start.
 		if signalWhenAsked("signal-before-start") {
-			select {
-			case <-requested:
-			case <-time.After(5 * time.Second):
-			}
+			waitRequested(requested)
 		}
 	}
-	beforeRun = func() {
-		run()
+	beforeRun = func(requested <-chan struct{}) {
+		run(requested)
 		go writeWhenAsked()
-		signalWhenAsked("signal-before-run")
+		// Wait until the watcher has the signal, then give the quit goroutine
+		// time to act, so that its quit always comes before the program runs.
+		if signalWhenAsked("signal-before-run") {
+			waitRequested(requested)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// waitRequested waits until requested is closed, for up to 5 s.
+func waitRequested(requested <-chan struct{}) {
+	select {
+	case <-requested:
+	case <-time.After(5 * time.Second):
 	}
 }
 
