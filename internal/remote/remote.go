@@ -356,9 +356,8 @@ func (r *Remote) run(delay *time.Duration) string {
 		stableC, killC, graceC <-chan time.Time
 	)
 	helloTimerC := arm(r.helloTimeout)
-	// sawHello is set when run has read the hello. timedOut is set when the
-	// hello timer sent the signal.
-	sawHello, timedOut := false, false
+	// timedOut is set when the hello timer sent the signal.
+	timedOut := false
 	for open := 2; exitedC != nil || open > 0; {
 		select {
 		case <-exitedC:
@@ -371,14 +370,14 @@ func (r *Remote) run(delay *time.Duration) string {
 				finishedC, graceC = nil, nil
 			}
 		case <-helloC:
-			helloC, sawHello = nil, true
+			helloC = nil
 			stableC = arm(r.stableUp)
 		case <-helloTimerC:
 			helloTimerC = nil
-			// Not after a hello, a stop or the exit of the child. A hello
-			// that the reader has counted but run has not read yet is found
-			// by signalSilentChild.
-			if !sawHello && stopC != nil && exitedC != nil && r.signalSilentChild(pid, syscall.SIGTERM) {
+			// Not after a stop. signalSilentChild decides, under the lock,
+			// whether the child is silent: a hello, even one that run has not
+			// read yet, and the exit of the child both stop it.
+			if stopC != nil && r.signalSilentChild(pid, syscall.SIGTERM) {
 				timedOut = true
 				killC = arm(killAfter)
 			}
