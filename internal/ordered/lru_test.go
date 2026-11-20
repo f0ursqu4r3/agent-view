@@ -120,3 +120,22 @@ func TestLRUAsSet(t *testing.T) {
 		t.Fatalf("Len = %d, want 2", s.Len())
 	}
 }
+
+// A path cache is an LRU[string, string]: after a Get makes "a" the newest and
+// "c" pushes out "b", Get misses b and returns the stored value of a and c.
+func TestLRUStringCacheEvictsTheLeastRecentlyUsed(t *testing.T) {
+	c := NewLRU[string, string](2)
+	c.Set("a", "A")
+	c.Set("b", "B")
+	c.Get("a")
+	c.Set("c", "C")
+
+	if _, ok := c.Get("b"); ok {
+		t.Error("b was not evicted")
+	}
+	for k, want := range map[string]string{"a": "A", "c": "C"} {
+		if got, ok := c.Get(k); !ok || got != want {
+			t.Errorf("Get(%s) = %q, %v, want %q, true", k, got, ok, want)
+		}
+	}
+}

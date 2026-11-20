@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-view/internal/ordered"
 	"agent-view/internal/text"
 	"agent-view/internal/wire"
 )
@@ -45,11 +46,11 @@ type CodexAdapter struct {
 	emitted map[string]*emittedState
 	// sources maps a log file to the thread agent that owns its direct records.
 	sources map[string]string
-	pending *orderedMap[codexPending]
+	pending *ordered.Map[string, codexPending]
 	// started and ended remember calls that already produced a tool.start or
 	// tool.end. Native and direct receipts share call IDs.
-	started *boundedSet
-	ended   *boundedSet
+	started *ordered.LRU[string, struct{}]
+	ended   *ordered.LRU[string, struct{}]
 }
 
 // NewCodexAdapter returns an adapter whose agent ids start with host.
@@ -59,9 +60,9 @@ func NewCodexAdapter(host string) *CodexAdapter {
 		agents:  map[string]*agentState{},
 		emitted: map[string]*emittedState{},
 		sources: map[string]string{},
-		pending: newOrderedMap[codexPending](),
-		started: newBoundedSet(MaxPending),
-		ended:   newBoundedSet(MaxPending),
+		pending: ordered.NewMap[string, codexPending](),
+		started: ordered.NewLRU[string, struct{}](MaxPending),
+		ended:   ordered.NewLRU[string, struct{}](MaxPending),
 	}
 }
 
@@ -362,10 +363,10 @@ func (a *CodexAdapter) directCall(r *codexRecord, agent *agentState, agentID str
 		return
 	}
 	key := agentID + ":" + callID
-	if a.started.has(key) {
+	if a.started.Has(key) {
 		return
 	}
-	a.started.add(key)
+	a.started.Set(key, struct{}{})
 	raw := p.Get("arguments")
 	if raw == nil {
 		raw = p.Get("input")
@@ -376,9 +377,11 @@ func (a *CodexAdapter) directCall(r *codexRecord, agent *agentState, agentID str
 	}
 	category := categoryOf(name)
 	writes := patchWrites(name, input, agent.cwd)
-	a.pending.set(key, codexPending{name: name, category: category, writes: writes})
-	if a.pending.len() > MaxPending {
-		a.pending.deleteOldest()
+	a.pending.Set(key, codexPending{name: name, category: category, writes: writes})
+	if a.pending.Len() > MaxPending {
+		if oldest, _, ok := a.pending.First(); ok {
+			a.pending.Delete(oldest)
+		}
 	}
 
 	agent.status = "working"
@@ -404,12 +407,12 @@ func (a *CodexAdapter) directOutput(r *codexRecord, agentID string, p *Obj) {
 		return
 	}
 	key := agentID + ":" + callID
-	call, found := a.pending.get(key)
+	call, found := a.pending.Get(key)
 	if !found {
 		return
 	}
-	a.pending.delete(key)
-	a.ended.add(key)
+	a.pending.Delete(key)
+	a.ended.Set(key, struct{}{})
 	text := codexOutputText(p.Get("output"))
 
 	if call.category == "command" {
@@ -494,13 +497,13 @@ func (a *CodexAdapter) nativeItem(r *codexRecord, file string, p *Obj, prefix st
 	}
 
 	key := agentID + ":" + callID
-	alreadyStarted := a.started.has(key)
-	if a.ended.has(key) {
+	alreadyStarted := a.started.Has(key)
+	if a.ended.Has(key) {
 		return
 	}
-	a.started.add(key)
-	a.ended.add(key)
-	a.pending.delete(key)
+	a.started.Set(key, struct{}{})
+	a.ended.Set(key, struct{}{})
+	a.pending.Delete(key)
 
 	category := wire.CategoryFor("codex", typ)
 	success := item.Get("status") == "completed"

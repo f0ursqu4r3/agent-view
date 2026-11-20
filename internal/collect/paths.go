@@ -1,76 +1,44 @@
 package collect
 
 import (
-	"container/list"
 	"os"
 	"path/filepath"
 	"slices"
 
 	"agent-view/internal/fsutil"
+	"agent-view/internal/ordered"
 )
 
 // pathCacheSize is the number of entries each path cache holds.
 const pathCacheSize = 5000
 
-// pathCache is a least-recently-used cache of resolved paths. Misses are
-// never stored: the path may exist a moment later.
-type pathCache struct {
-	max   int
-	items map[string]*list.Element
-	order list.List // least recently used first
-}
-
-type pathEntry struct{ key, val string }
-
-func newPathCache(max int) *pathCache {
-	return &pathCache{max: max, items: map[string]*list.Element{}}
-}
-
-func (c *pathCache) get(key string) (string, bool) {
-	el, ok := c.items[key]
-	if !ok {
-		return "", false
-	}
-	c.order.MoveToBack(el)
-	return el.Value.(*pathEntry).val, true
-}
-
-func (c *pathCache) set(key, val string) {
-	if el, ok := c.items[key]; ok {
-		el.Value.(*pathEntry).val = val
-		c.order.MoveToBack(el)
-		return
-	}
-	c.items[key] = c.order.PushBack(&pathEntry{key, val})
-	if c.order.Len() > c.max {
-		oldest := c.order.Front()
-		c.order.Remove(oldest)
-		delete(c.items, oldest.Value.(*pathEntry).key)
-	}
-}
-
 // paths resolves the paths that events carry to real paths. It is not safe
-// for concurrent use: the collector's loop goroutine owns it.
+// for concurrent use: the collector's loop goroutine owns it. Each cache maps
+// a path to its resolved path. Misses are never stored: the path may exist a
+// moment later.
 type paths struct {
-	dirs         *pathCache
-	projectRoots *pathCache
+	dirs         *ordered.LRU[string, string]
+	projectRoots *ordered.LRU[string, string]
 }
 
 func newPaths() *paths {
-	return &paths{dirs: newPathCache(pathCacheSize), projectRoots: newPathCache(pathCacheSize)}
+	return &paths{
+		dirs:         ordered.NewLRU[string, string](pathCacheSize),
+		projectRoots: ordered.NewLRU[string, string](pathCacheSize),
+	}
 }
 
 // projectRootFor returns the real path of the project root of cwd. It
 // reports false when that path does not exist.
 func (p *paths) projectRootFor(cwd string) (string, bool) {
-	if root, ok := p.projectRoots.get(cwd); ok {
+	if root, ok := p.projectRoots.Get(cwd); ok {
 		return root, true
 	}
 	root, err := realpath(fsutil.FindProjectRoot(cwd))
 	if err != nil {
 		return "", false
 	}
-	p.projectRoots.set(cwd, root)
+	p.projectRoots.Set(cwd, root)
 	return root, true
 }
 
@@ -101,11 +69,11 @@ func (p *paths) realDir(dir string) (string, bool) {
 	var missing []string
 	cur := dir
 	for {
-		real, ok := p.dirs.get(cur)
+		real, ok := p.dirs.Get(cur)
 		if !ok {
 			if rp, err := realpath(cur); err == nil {
 				real, ok = rp, true
-				p.dirs.set(cur, rp)
+				p.dirs.Set(cur, rp)
 			}
 		}
 		if ok {

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"agent-view/internal/ordered"
 	"agent-view/internal/text"
 	"agent-view/internal/wire"
 )
@@ -25,7 +26,7 @@ type ClaudeAdapter struct {
 	host    string
 	agents  map[string]*agentState
 	emitted map[string]*emittedState
-	pending *orderedMap[pendingCall]
+	pending *ordered.Map[string, pendingCall]
 }
 
 // NewClaudeAdapter returns an adapter whose agent ids start with host.
@@ -34,7 +35,7 @@ func NewClaudeAdapter(host string) *ClaudeAdapter {
 		host:    host,
 		agents:  map[string]*agentState{},
 		emitted: map[string]*emittedState{},
-		pending: newOrderedMap[pendingCall](),
+		pending: ordered.NewMap[string, pendingCall](),
 	}
 }
 
@@ -241,15 +242,17 @@ func (a *ClaudeAdapter) toolUse(agent *agentState, agentID string, cwd *string, 
 		return
 	}
 	key := agentID + ":" + callID
-	if a.pending.has(key) {
+	if a.pending.Has(key) {
 		return
 	}
 	input := obj(b.Get("input")) // nil reads as an empty object
 	category := wire.CategoryFor("claude", name)
 	files, writes := callFiles(name, category, input, cwd)
-	a.pending.set(key, pendingCall{category: category, input: input, files: files, writes: writes})
-	if a.pending.len() > MaxPending {
-		a.pending.deleteOldest()
+	a.pending.Set(key, pendingCall{category: category, input: input, files: files, writes: writes})
+	if a.pending.Len() > MaxPending {
+		if oldest, _, ok := a.pending.First(); ok {
+			a.pending.Delete(oldest)
+		}
 	}
 
 	agent.status = "working"
@@ -269,11 +272,11 @@ func (a *ClaudeAdapter) toolResult(agent *agentState, agentID, root string, b, r
 		return
 	}
 	key := agentID + ":" + callID
-	call, found := a.pending.get(key)
+	call, found := a.pending.Get(key)
 	if !found {
 		return
 	}
-	a.pending.delete(key)
+	a.pending.Delete(key)
 	success := b.Get("is_error") != true
 
 	// An Agent/Task result that names the sub-agent confirms the parent link.

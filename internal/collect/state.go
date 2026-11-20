@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"agent-view/internal/lifecycle"
+	"agent-view/internal/ordered"
 	"agent-view/internal/wire"
 )
 
@@ -28,12 +29,12 @@ type State struct {
 	Home string
 
 	opts   lifecycle.Options
-	agents *omap[*wire.Agent]
-	open   *omap[*openCall]
+	agents *ordered.Map[string, *wire.Agent]
+	open   *ordered.Map[string, *openCall]
 	files  map[string]wire.FileTouch
 	// ended holds the keys of ended calls, oldest first. It only drops
 	// duplicate events.
-	ended *lruSet
+	ended *ordered.LRU[string, struct{}]
 }
 
 // NewState returns an empty state. A zero field of o takes its default.
@@ -42,10 +43,10 @@ func NewState(o lifecycle.Options) *State {
 	return &State{
 		Home:   home,
 		opts:   o.WithDefaults(),
-		agents: newOmap[*wire.Agent](),
-		open:   newOmap[*openCall](),
+		agents: ordered.NewMap[string, *wire.Agent](),
+		open:   ordered.NewMap[string, *openCall](),
 		files:  map[string]wire.FileTouch{},
-		ended:  newLRUSet(endedLimit),
+		ended:  ordered.NewLRU[string, struct{}](endedLimit),
 	}
 }
 
@@ -79,7 +80,7 @@ func (s *State) Apply(e wire.SourceEvent) (wire.SourceEvent, bool) {
 	case wire.AgentUpsert:
 		s.applyUpsert(ev, e.Ts)
 	case wire.AgentStatusChange:
-		if a, ok := s.agents.get(ev.AgentID); ok {
+		if a, ok := s.agents.Get(ev.AgentID); ok {
 			a.Status = ev.Status
 		}
 		s.bump(ev.AgentID, e.Ts)
@@ -88,7 +89,7 @@ func (s *State) Apply(e wire.SourceEvent) (wire.SourceEvent, bool) {
 	case wire.ToolUpdate:
 		s.applyUpdate(ev, e.Ts)
 	case wire.ToolOutput:
-		if o, ok := s.open.get(callKey(ev.AgentID, ev.CallID)); ok {
+		if o, ok := s.open.Get(callKey(ev.AgentID, ev.CallID)); ok {
 			o.lastEventMs = max(o.lastEventMs, lifecycle.MsOf(e.Ts))
 		}
 		s.bump(ev.AgentID, e.Ts)
@@ -104,17 +105,17 @@ func (s *State) Apply(e wire.SourceEvent) (wire.SourceEvent, bool) {
 // they opened, and drops old file touches.
 func (s *State) Tick(now int64) []wire.SourceEvent {
 	var out []wire.SourceEvent
-	s.open.each(func(key string, o *openCall) {
+	for key, o := range s.open.All() {
 		if now-o.lastEventMs < s.opts.CallTimeoutMs {
-			return
+			continue
 		}
-		s.open.delete(key)
-		s.ended.add(key)
+		s.open.Delete(key)
+		s.ended.Set(key, struct{}{})
 		out = append(out, wire.SourceEvent{
 			Ts: wire.FormatISO(now),
 			Ev: wire.ToolEnd{AgentID: o.call.AgentID, CallID: o.call.CallID},
 		})
-	})
+	}
 	for path, f := range s.files {
 		if now-lifecycle.MsOf(f.LastTouchAt) >= s.opts.FileTTLMs {
 			delete(s.files, path)
@@ -133,11 +134,11 @@ func (s *State) Snapshot(now int64) wire.Snapshot {
 		OpenCalls: []wire.Call{},
 		Files:     []wire.FileTouch{},
 	}
-	s.agents.each(func(_ string, a *wire.Agent) {
+	for _, a := range s.agents.All() {
 		if present[a.ID] {
 			snap.Agents = append(snap.Agents, cloneAgent(*a))
 		}
-	})
+	}
 	slices.SortFunc(snap.Agents, func(a, b wire.Agent) int { return strings.Compare(a.ID, b.ID) })
 
 	type keyed struct {
@@ -145,11 +146,11 @@ func (s *State) Snapshot(now int64) wire.Snapshot {
 		o   *openCall
 	}
 	var calls []keyed
-	s.open.each(func(k string, o *openCall) {
+	for k, o := range s.open.All() {
 		if present[o.call.AgentID] {
 			calls = append(calls, keyed{k, o})
 		}
-	})
+	}
 	slices.SortFunc(calls, func(a, b keyed) int {
 		return cmp.Or(
 			cmp.Compare(lifecycle.MsOf(a.o.call.StartedAt), lifecycle.MsOf(b.o.call.StartedAt)),
@@ -174,18 +175,18 @@ func (s *State) Snapshot(now int64) wire.Snapshot {
 // event time when that is later than its start: a later Tick never ends a call
 // before the collector itself would.
 func (s *State) Load(snap wire.Snapshot) {
-	s.agents = newOmap[*wire.Agent]()
+	s.agents = ordered.NewMap[string, *wire.Agent]()
 	for _, a := range snap.Agents {
 		c := cloneAgent(a)
-		s.agents.set(c.ID, &c)
+		s.agents.Set(c.ID, &c)
 	}
-	s.open = newOmap[*openCall]()
+	s.open = ordered.NewMap[string, *openCall]()
 	for _, c := range snap.OpenCalls {
 		agentMs := int64(0)
-		if a, ok := s.agents.get(c.AgentID); ok {
+		if a, ok := s.agents.Get(c.AgentID); ok {
 			agentMs = lifecycle.MsOf(a.LastEventAt)
 		}
-		s.open.set(callKey(c.AgentID, c.CallID), &openCall{
+		s.open.Set(callKey(c.AgentID, c.CallID), &openCall{
 			call:        cloneCall(c),
 			lastEventMs: max(lifecycle.MsOf(c.StartedAt), agentMs),
 		})
@@ -194,7 +195,7 @@ func (s *State) Load(snap wire.Snapshot) {
 	for _, f := range snap.Files {
 		s.files[f.Path] = f
 	}
-	s.ended = newLRUSet(endedLimit)
+	s.ended = ordered.NewLRU[string, struct{}](endedLimit)
 }
 
 // WatchRoots returns the project roots of present agents, newest event first,
@@ -202,11 +203,11 @@ func (s *State) Load(snap wire.Snapshot) {
 func (s *State) WatchRoots(now int64, limit int) []string {
 	present := s.presentIDs(now)
 	var agents []*wire.Agent
-	s.agents.each(func(_ string, a *wire.Agent) {
+	for _, a := range s.agents.All() {
 		if present[a.ID] {
 			agents = append(agents, a)
 		}
-	})
+	}
 	slices.SortStableFunc(agents, func(a, b *wire.Agent) int {
 		return cmp.Compare(lifecycle.MsOf(b.LastEventAt), lifecycle.MsOf(a.LastEventAt))
 	})
@@ -229,7 +230,7 @@ func (s *State) WatchRoots(now int64, limit int) []string {
 
 // Agent returns a copy of the agent with the given ID.
 func (s *State) Agent(id string) (wire.Agent, bool) {
-	a, ok := s.agents.get(id)
+	a, ok := s.agents.Get(id)
 	if !ok {
 		return wire.Agent{}, false
 	}
@@ -241,13 +242,15 @@ func (s *State) Agent(id string) (wire.Agent, bool) {
 func (s *State) FileCount() int { return len(s.files) }
 
 func (s *State) presentIDs(now int64) map[string]bool {
-	agents := make([]wire.Agent, 0, len(s.agents.idx))
-	s.agents.each(func(_ string, a *wire.Agent) { agents = append(agents, *a) })
+	agents := make([]wire.Agent, 0, s.agents.Len())
+	for _, a := range s.agents.All() {
+		agents = append(agents, *a)
+	}
 	return lifecycle.PresentAgentIDs(agents, now, s.opts)
 }
 
 func (s *State) bump(agentID, ts string) {
-	if a, ok := s.agents.get(agentID); ok {
+	if a, ok := s.agents.Get(agentID); ok {
 		a.LastEventAt = lifecycle.LaterISO(a.LastEventAt, ts)
 	}
 }
@@ -271,11 +274,11 @@ func (s *State) touch(path, ts, attribution, agentID string) {
 func (s *State) applyUpsert(e wire.AgentUpsert, ts string) {
 	in := e.Agent
 	seen := lifecycle.LaterISO(in.LastEventAt, ts)
-	cur, ok := s.agents.get(in.ID)
+	cur, ok := s.agents.Get(in.ID)
 	if !ok {
 		c := cloneAgent(in)
 		c.LastEventAt = seen
-		s.agents.set(c.ID, &c)
+		s.agents.Set(c.ID, &c)
 		return
 	}
 	// Copy the descriptive fields. Status and lastEventAt stay. A missing
@@ -292,14 +295,14 @@ func (s *State) applyUpsert(e wire.AgentUpsert, ts string) {
 func (s *State) applyStart(e wire.ToolStart, ts string) bool {
 	c := e.Call
 	key := callKey(c.AgentID, c.CallID)
-	if s.open.has(key) || s.ended.has(key) {
-		if s.ended.has(key) {
-			s.ended.add(key)
+	if s.open.Has(key) || s.ended.Has(key) {
+		if s.ended.Has(key) {
+			s.ended.Set(key, struct{}{})
 		}
 		return false
 	}
-	s.open.set(key, &openCall{call: cloneCall(c), lastEventMs: lifecycle.MsOf(ts)})
-	if a, ok := s.agents.get(c.AgentID); ok {
+	s.open.Set(key, &openCall{call: cloneCall(c), lastEventMs: lifecycle.MsOf(ts)})
+	if a, ok := s.agents.Get(c.AgentID); ok {
 		a.Status = "working"
 	}
 	s.bump(c.AgentID, ts)
@@ -313,7 +316,7 @@ func (s *State) applyStart(e wire.ToolStart, ts string) bool {
 
 func (s *State) applyUpdate(e wire.ToolUpdate, ts string) {
 	key := callKey(e.AgentID, e.CallID)
-	o, isOpen := s.open.get(key)
+	o, isOpen := s.open.Get(key)
 	s.bump(e.AgentID, ts)
 	switch {
 	case isOpen:
@@ -330,7 +333,7 @@ func (s *State) applyUpdate(e wire.ToolUpdate, ts string) {
 				s.touch(p, ts, "confirmed", e.AgentID)
 			}
 		}
-	case !s.ended.has(key):
+	case !s.ended.Has(key):
 		for _, p := range e.Files {
 			s.touch(p, ts, "confirmed", e.AgentID)
 		}
@@ -339,12 +342,12 @@ func (s *State) applyUpdate(e wire.ToolUpdate, ts string) {
 
 func (s *State) applyEnd(e wire.ToolEnd, ts string) bool {
 	key := callKey(e.AgentID, e.CallID)
-	if s.ended.has(key) {
-		s.ended.add(key)
+	if s.ended.Has(key) {
+		s.ended.Set(key, struct{}{})
 		return false
 	}
-	s.open.delete(key)
-	s.ended.add(key)
+	s.open.Delete(key)
+	s.ended.Set(key, struct{}{})
 	s.bump(e.AgentID, ts)
 	for _, w := range e.Writes {
 		s.touch(w.Path, ts, "confirmed", e.AgentID)

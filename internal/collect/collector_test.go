@@ -668,23 +668,6 @@ func TestRealPathTrailingSlash(t *testing.T) {
 	}
 }
 
-// Go only: the path cache drops the least recently used entry.
-func TestPathCacheLRU(t *testing.T) {
-	c := newPathCache(2)
-	c.set("a", "A")
-	c.set("b", "B")
-	c.get("a")
-	c.set("c", "C")
-	if _, ok := c.get("b"); ok {
-		t.Error("b was not evicted")
-	}
-	for k, want := range map[string]string{"a": "A", "c": "C"} {
-		if got, ok := c.get(k); !ok || got != want {
-			t.Errorf("get(%s) = %q, %v", k, got, ok)
-		}
-	}
-}
-
 // statusBatch is a one-event source batch for the push tests.
 func statusBatch(source string) []wire.SourceEvent {
 	return []wire.SourceEvent{{Ts: wire.FormatISO(wire.NowMs()), Ev: wire.SourceStatus{Source: source, SourceState: wire.SourceState{State: "ok"}}}}
