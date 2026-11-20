@@ -475,3 +475,181 @@ func TestBridgeStopIsClean(t *testing.T) {
 	}
 	untilWithin(t, 2*time.Second, func() bool { return runtime.NumGoroutine() <= before }, "the goroutines to end")
 }
+
+// sawAgent reports whether a recorded envelope names the agent, as an upsert
+// or in a snapshot.
+func (s *sink) sawAgent(id string) bool {
+	for _, e := range s.envelopes() {
+		if e.Agent != nil && e.Agent.ID == id {
+			return true
+		}
+		if slices.ContainsFunc(e.Agents, func(a schema.Agent) bool { return a.ID == id }) {
+			return true
+		}
+	}
+	return false
+}
+
+// countDiag counts the diagnostics lines that are exactly line.
+func countDiag(diags []string, line string) int {
+	n := 0
+	for _, d := range diags {
+		if d == line {
+			n++
+		}
+	}
+	return n
+}
+
+// A panic in Send loses its batch. The bridge resyncs from the hub, so the
+// replayed hello and snapshot reach the TUI in a later batch.
+func TestPanicInSendResyncsFromTheHub(t *testing.T) {
+	h, src := newHub(t, "up")
+	src.emit(upsert("a1")) // the hub's snapshot holds this agent
+	s := &sink{}
+	var batches atomic.Int32
+	send := func(m tea.Msg) {
+		if _, ok := m.(feed.EnvelopesMsg); ok && batches.Add(1) == 1 {
+			panic("boom") // the first batch is lost
+		}
+		s.send(m)
+	}
+	b := Start(Config{Hub: h, Send: send, Batch: 5 * time.Millisecond, Diag: s.diag})
+	defer b.Stop()
+
+	untilWithin(t, 2*time.Second, func() bool { return s.sawAgent("a1") }, "the replayed snapshot")
+	envs := s.envelopes()
+	if envs[0].Kind != "hello" || envs[1].Kind != "snapshot" {
+		t.Fatalf("first kinds after the panic = %s %s, want hello snapshot", envs[0].Kind, envs[1].Kind)
+	}
+	diags := s.allDiags()
+	if !hasDiag(diags, "recovered a panic: boom") {
+		t.Fatalf("diagnostics = %q, want the panic", diags)
+	}
+	if n := countDiag(diags, diagResync); n != 1 {
+		t.Fatalf("diagnostics = %q, want one resync line", diags)
+	}
+}
+
+// A panic that repeats on every batch makes one resync per gap, not a loop,
+// and its message is reported once per gap.
+func TestRepeatedPanicsResyncOncePerGap(t *testing.T) {
+	h, src := newHub(t, "up")
+	s := &sink{}
+	send := func(m tea.Msg) {
+		s.send(m) // record the batch, then fail
+		if _, ok := m.(feed.EnvelopesMsg); ok {
+			panic("boom")
+		}
+	}
+	b := Start(Config{Hub: h, Send: send, Batch: 5 * time.Millisecond, Diag: s.diag, PanicResyncGap: time.Hour})
+	defer b.Stop()
+
+	for i := range 20 {
+		id := fmt.Sprintf("a%d", i)
+		src.emit(upsert(id))
+		until(t, func() bool { return s.sawAgent(id) }, "a batch with "+id)
+	}
+	diags := s.allDiags()
+	if n := countDiag(diags, diagResync); n != 1 {
+		t.Fatalf("%d resync lines, want 1; diagnostics = %q", n, diags)
+	}
+	if n := countDiag(diags, "bridge: recovered a panic: boom"); n != 1 {
+		t.Fatalf("%d panic lines, want 1; diagnostics = %q", n, diags)
+	}
+}
+
+// When the gap is over, the next panic resyncs again.
+func TestPanicResyncRepeatsAfterTheGap(t *testing.T) {
+	h, src := newHub(t, "up")
+	s := &sink{}
+	send := func(m tea.Msg) {
+		if _, ok := m.(feed.EnvelopesMsg); ok {
+			panic("boom")
+		}
+	}
+	b := Start(Config{Hub: h, Send: send, Batch: 5 * time.Millisecond, Diag: s.diag, PanicResyncGap: 20 * time.Millisecond})
+	defer b.Stop()
+
+	until(t, func() bool {
+		src.emit(upsert("a1")) // each poll gives the bridge a batch to fail on
+		return countDiag(s.allDiags(), diagResync) >= 3
+	}, "three resyncs")
+}
+
+// Start fills in the default gap.
+func TestPanicResyncGapDefault(t *testing.T) {
+	h, _ := newHub(t, "up")
+	b := Start(Config{Hub: h})
+	defer b.Stop()
+	if b.c.PanicResyncGap != 5*time.Second {
+		t.Fatalf("PanicResyncGap = %v, want 5s", b.c.PanicResyncGap)
+	}
+}
+
+// A panic in the stop path does not ask for a resync, so Stop ends and does
+// no hub work after the stop began.
+func TestPanicWhileStoppingEnds(t *testing.T) {
+	h, _ := newHub(t, "up")
+	s := &sink{}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enteredOnce, releaseOnce sync.Once
+	var stopped atomic.Bool
+	var late atomic.Int32
+	send := func(m tea.Msg) {
+		if stopped.Load() {
+			late.Add(1)
+		}
+		if _, ok := m.(feed.EnvelopesMsg); !ok {
+			return
+		}
+		enteredOnce.Do(func() { close(entered) })
+		<-release
+		panic("boom")
+	}
+	b := Start(Config{Hub: h, Send: send, Batch: 5 * time.Millisecond, Diag: s.diag})
+	defer b.Stop()
+	defer releaseOnce.Do(func() { close(release) })
+
+	select {
+	case <-entered:
+	case <-time.After(deadline):
+		t.Fatal("Send did not get a batch")
+	}
+	// Stop begins while Send is in progress; the panic happens after that.
+	stopReturned := make(chan struct{})
+	go func() { b.Stop(); close(stopReturned) }()
+	until(t, func() bool {
+		select {
+		case <-b.stop:
+			return true
+		default:
+			return false
+		}
+	}, "the stop to begin")
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case <-stopReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after a panic in Send")
+	}
+	stopped.Store(true)
+
+	diags := s.allDiags()
+	if !hasDiag(diags, "recovered a panic: boom") {
+		t.Fatalf("diagnostics = %q, want the panic", diags)
+	}
+	if n := countDiag(diags, diagResync); n != 0 {
+		t.Fatalf("diagnostics = %q, want no resync after the stop began", diags)
+	}
+	b.mu.Lock()
+	asked := b.resync
+	b.mu.Unlock()
+	if asked {
+		t.Fatal("the panic handler asked for a resync after the stop began")
+	}
+	if n := late.Load(); n != 0 {
+		t.Fatalf("%d messages after Stop returned", n)
+	}
+}

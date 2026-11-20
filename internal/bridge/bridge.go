@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	defaultBatch    = 50 * time.Millisecond
-	defaultMaxQueue = 50_000
+	defaultBatch          = 50 * time.Millisecond
+	defaultMaxQueue       = 50_000
+	defaultPanicResyncGap = 5 * time.Second
 
 	diagResync    = "bridge: the display fell behind; resynced from the hub"
 	diagUndecoded = "bridge: skipped an envelope the TUI cannot decode"
@@ -39,6 +40,9 @@ type Config struct {
 	MaxQueue int
 	// Diag receives diagnostics lines. Nil drops them.
 	Diag func(string)
+	// PanicResyncGap is the shortest time between two resyncs that follow a
+	// recovered panic (default 5 s). A panic inside the gap is only reported.
+	PanicResyncGap time.Duration
 }
 
 // entry is one queued item: an encoded envelope line, or a host list.
@@ -76,6 +80,10 @@ type Bridge struct {
 	timer     *time.Timer
 	sent      map[string]wire.HostStatus // the last state sent, per label
 	undecoded int
+
+	lastPanicResync time.Time // when a recovered panic last asked for a resync
+	lastPanicMsg    string    // the last panic line reported
+	lastPanicDiag   time.Time // when that line was reported
 }
 
 // Start subscribes to c.Hub and starts the run goroutine. The first messages
@@ -93,6 +101,9 @@ func Start(c Config) *Bridge {
 	}
 	if c.MaxQueue <= 0 {
 		c.MaxQueue = defaultMaxQueue
+	}
+	if c.PanicResyncGap <= 0 {
+		c.PanicResyncGap = defaultPanicResyncGap
 	}
 	b := &Bridge{
 		c:    c,
@@ -167,7 +178,8 @@ func (b *Bridge) poke() {
 	}
 }
 
-// run is the bridge's goroutine. A panic is reported and the loop goes on.
+// run is the bridge's goroutine. A panic is reported, the TUI is resynced
+// from the hub, and the loop goes on.
 func (b *Bridge) run() {
 	defer close(b.done)
 	for !b.loop() {
@@ -179,7 +191,7 @@ func (b *Bridge) run() {
 func (b *Bridge) loop() (stopped bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			b.diag(fmt.Sprintf("bridge: recovered a panic: %v", r))
+			b.recovered(r)
 			stopped = false
 		}
 	}()
@@ -200,6 +212,36 @@ func (b *Bridge) loop() (stopped bool) {
 			b.flush()
 		}
 	}
+}
+
+// recovered reports a recovered panic and asks for a resync from the hub. The
+// panic leaves half-handled work behind, and a panic in Send loses its batch;
+// the replay from the hub brings the TUI's store back to the hub's state.
+//
+// A panic that repeats on every wake must not make a resync loop. A resync
+// follows at most once per PanicResyncGap, and an identical message is
+// reported at most once per gap, so the diagnostics stay bounded. A panic
+// after the stop began asks for no resync: the stop path ends without it.
+func (b *Bridge) recovered(r any) {
+	now := time.Now()
+	gap := b.c.PanicResyncGap
+	if msg := fmt.Sprintf("bridge: recovered a panic: %v", r); msg != b.lastPanicMsg || now.Sub(b.lastPanicDiag) >= gap {
+		b.lastPanicMsg, b.lastPanicDiag = msg, now
+		b.diag(msg)
+	}
+	select {
+	case <-b.stop:
+		return
+	default:
+	}
+	if !b.lastPanicResync.IsZero() && now.Sub(b.lastPanicResync) < gap {
+		return
+	}
+	b.lastPanicResync = now
+	b.mu.Lock()
+	b.resync = true
+	b.mu.Unlock()
+	b.poke()
 }
 
 // drain takes the queue and handles every entry. After an overflow it
