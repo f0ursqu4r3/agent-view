@@ -5,7 +5,7 @@
 // bytes, so the client must do the WebSocket handshake and framing itself. Not newline-delimited JSON.
 // TRANSPORT=proxy (default) spawns `codex app-server proxy`; TRANSPORT=socket connects to the unix socket directly.
 // OPT-IN: the probe sends thread/resume to the owner's loaded threads. It runs only with AGENT_VIEW_PROBE_RESUME=1,
-// after the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run") are met.
+// after the preconditions in the old M0 results (git show b553ff5:docs/superpowers/spikes/2026-11-17-m0-results.md) ("Before the next probe run") are met.
 // WARNING (run of 2026-11-18): `initialize` itself is NOT free of side effects on the shared daemon. The first client
 // after a daemon start sets the daemon-wide originator (written into every thread the daemon creates later, and sent
 // upstream); every client's initialize sets the daemon-wide User-Agent suffix "(<clientInfo.name>; <version>)".
@@ -299,7 +299,7 @@ async function main() {
   if (!RESUME_OPT_IN) {
     console.log([
       'codex-daemon-probe: not run. The probe sends thread/resume to loaded Codex threads, so it needs AGENT_VIEW_PROBE_RESUME=1.',
-      'Before you set it, meet the preconditions in docs/superpowers/spikes/2026-11-17-m0-results.md ("Before the next probe run"),',
+      'Before you set it, meet the preconditions in the old M0 results (git show b553ff5:docs/superpowers/spikes/2026-11-17-m0-results.md) ("Before the next probe run"),',
       'and warn the owner of the loaded threads: the probe does not answer server requests, which can stall their turn.',
       'initialize also changes daemon-wide state (originator, User-Agent suffix) until `codex app-server daemon restart`.',
     ].join('\n'))

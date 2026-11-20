@@ -1,6 +1,6 @@
 # Agent View Go collector P2b-1 — follow-ups
 
-Date: 2026-11-18. Branch: go-p2b1-collector. Plan: `docs/superpowers/plans/2026-11-18-agent-view-go-p2b1-collector.md`.
+Date: 2026-11-18. Branch: go-p2b1-collector. Plan: removed from the tree; read it with `git show b553ff5:docs/superpowers/plans/2026-11-18-agent-view-go-p2b1-collector.md`.
 
 These are the findings that the per-task reviews and the final review deferred. The final fix wave fixed these, so they are left out: a partial watch root restarted every other tick (the directory limit, ENOSPC, EMFILE, ENFILE, and an unreadable subdirectory); a dropped watcher hint for a new log; the `TestRealScheduler` clock flake; the README notes on cgo and exit time. Items resolved during the tasks are also left out (the Task 5 log shapes, now in the parity fixtures; the test helper names; the start of the fsnotify error loop; the fsnotify EINVAL error; the local parity guard).
 

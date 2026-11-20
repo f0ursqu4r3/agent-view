@@ -2,7 +2,7 @@
 //
 // Compares FSEvents (github.com/fsnotify/fsevents, cgo, darwin only) with
 // fsnotify (kqueue on darwin, inotify on linux). The probe repeats the M0
-// scenarios of docs/superpowers/spikes/2026-11-17-m0-results.md; the scale
+// scenarios of the old M0 results (git show b553ff5:docs/superpowers/spikes/2026-11-17-m0-results.md); the scale
 // mode measures setup time, descriptors, memory, idle CPU, and the cost of
 // churn in an ignored directory.
 //

@@ -1,6 +1,6 @@
 # Agent View Go P2c switch — follow-ups
 
-Date: 2026-11-19. Branch: go-p2c-switch. Plan: `docs/superpowers/plans/2026-11-19-agent-view-go-p2c-switch.md`.
+Date: 2026-11-19. Branch: go-p2c-switch. Plan: removed from the tree; read it with `git show b553ff5:docs/superpowers/plans/2026-11-19-agent-view-go-p2c-switch.md`.
 
 These are the findings that the per-task reviews and the final review deferred. The review ledger of the run is not tracked, so this file is the only record after the merge. The final fix wave fixed these, so they are left out: no test pinned the stderr capture and `log.SetOutput` in `runTUI` (now `TestTUIProcessOwnWrites`); tests and a script that stopped processes by name; the `--skip 08` base-8 error in `tools/perf/measure.sh`; the untested environment override and the 500 ms deadlines in the `tools/dist` tests; the `.gitignore` comment position; the stale `feed.StateMsg` comment; the headline of the performance file and the README wording. Items resolved during the tasks are also left out.
 

@@ -86,7 +86,7 @@ Three layouts of tree and timeline were mocked up:
 
 The owner picked **C**.
 
-The mockups are in `.superpowers/brainstorm/` (local, not committed): `visual-style.html` and `layout.html`. They are the reference for motion and feel.
+The mockups were in `.superpowers/brainstorm/` (local, never committed): `visual-style.html` and `layout.html`. They were the reference for motion and feel. The folder was deleted in the P2c cleanup.
 
 ## Decisions
 

@@ -20,7 +20,7 @@ The spike passes the spec's rule for FSEvents: no missed events in the M0 scenar
 
 ## Method
 
-Same as M0 (`docs/superpowers/spikes/2026-11-17-m0-results.md`, section 2): 1,000 files, 10 sub-directories x 100 files, written over 2,000 ms. Watcher armed 300 ms before the first write. Latency is measured from just before the write to the first event for that file. Settle time 1,500 ms. 3 runs per class and backend.
+Same as M0 (section 2 of the removed M0 results; read it with `git show b553ff5:docs/superpowers/spikes/2026-11-17-m0-results.md`): 1,000 files, 10 sub-directories x 100 files, written over 2,000 ms. Watcher armed 300 ms before the first write. Latency is measured from just before the write to the first event for that file. Settle time 1,500 ms. 3 runs per class and backend.
 
 - `fsevents`: one stream on the root, flags `FileEvents`, latency 50 ms (`NoDefer` tested as a variant).
 - `fsnotify` (kqueue on macOS, inotify on Linux): one watch per directory, found by a walk that skips the ignored directory names of `fs-changes.ts`. A new directory is added on its Create event and then read, so files written before the add are reported. This is the TypeScript per-dir mode.

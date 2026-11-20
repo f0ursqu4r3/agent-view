@@ -337,7 +337,7 @@ All animation moves in whole cells. A frame draws at most every 50 ms (20 fps), 
 - **Store:** the 421 lines of `test/viewer/store.test.ts` ported, plus startup history, double counting, and counters past the call cap.
 - **Phase 1 integration:** the Go binary with `AGENT_VIEW_COLLECTOR` pointing at a fake collector that writes recorded NDJSON; child exit and restart with backoff.
 - **Phase 2 parity:** every TypeScript test for the collector, hub, remote, schema, lifecycle, and NDJSON is ported. A parity test runs the TypeScript collector and the Go collector on the same fixture logs and demo seed and compares the normalized envelope streams (times and sequence numbers removed). It must match before the TypeScript code is deleted. The golden fixtures in `test/fixtures/` move to `testdata/`.
-- **File watching (phase 2 spike):** the M0 scenarios from `docs/superpowers/spikes/2026-11-17-m0-results.md` against FSEvents and kqueue on macOS and inotify on Linux.
+- **File watching (phase 2 spike):** the M0 scenarios from the removed M0 results (`git show b553ff5:docs/superpowers/spikes/2026-11-17-m0-results.md`) against FSEvents and kqueue on macOS and inotify on Linux.
 - **CLI:** argument parsing, `--port` only with `serve`, `--remote` rejected in phase 1, non-TTY exit code 2.
 
 ## Milestones

@@ -1,6 +1,6 @@
 # Agent View Go TUI P1 — follow-ups
 
-Date: 2026-11-18. Branch: go-tui-p1. Plan: `docs/superpowers/plans/2026-11-18-agent-view-go-tui-p1.md`.
+Date: 2026-11-18. Branch: go-tui-p1. Plan: removed from the tree; read it with `git show b553ff5:docs/superpowers/plans/2026-11-18-agent-view-go-tui-p1.md`.
 
 These are the minor findings that per-task and final reviews deferred, plus the item parked after the final fix wave. Items fixed later in the run are left out (Apply recover, deterministic test helpers, Top clamp, FS merge across sweeps, shared width helpers, README NO_COLOR wording).
 

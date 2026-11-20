@@ -1,6 +1,6 @@
 # Agent View Go hub P2b-2 — follow-ups
 
-Date: 2026-11-19. Branch: go-p2b2-hub. Plan: `docs/superpowers/plans/2026-11-18-agent-view-go-p2b2-hub.md`.
+Date: 2026-11-19. Branch: go-p2b2-hub. Plan: removed from the tree; read it with `git show b553ff5:docs/superpowers/plans/2026-11-18-agent-view-go-p2b2-hub.md`.
 
 These are the findings that the per-task reviews and the final review deferred. The final fix wave fixed these, so they are left out: a remote child that ignored SIGTERM outlived `serve`; the server matched the decoded path (`/api/%73napshot` reached the route); the `TestServePortInUse` comment overstated what it guards; the README did not name SIGHUP, the stubborn-remote kill, or `BatchMode=yes`. Items resolved during the tasks are also left out (the oversize-line test, the coverage comments, the Task 8 report output).
 
