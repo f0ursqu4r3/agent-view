@@ -67,7 +67,7 @@ Set `NO_COLOR` to any non-empty value to turn color off. Bold, dim and inverse t
 
 The program needs a terminal on stdin and stdout. Without one, it prints `agent-view needs a terminal; use agent-view serve for a headless hub` and exits with code 2. A usage error prints the usage and exits with code 2. Other failures exit with code 1.
 
-While the TUI runs, agent-view writes nothing to the terminal except its own screen. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal. A remote command that opens `/dev/tty` can still write to the terminal. A crash can also write to it: see "Known limitations".
+While the TUI runs, agent-view writes nothing to the terminal except its own screen. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal. The `ssh` child of a remote host has no controlling terminal (see "Hosts"). A crash can write to the terminal: see "Known limitations".
 
 ### Keys
 
@@ -84,7 +84,7 @@ While the TUI runs, agent-view writes nothing to the terminal except its own scr
 | `ctrl+z` | Suspend. |
 | `q`, `ctrl+c` | Quit. |
 
-`SIGTERM` and `SIGHUP` also end the program. It restores the terminal and stops its collectors and `ssh` children.
+`SIGINT`, `SIGTERM` and `SIGHUP` quit the program like `q`. This also works while the program starts. The program restores the terminal, stops its collectors and `ssh` children, and exits with code 0. It ignores a repeated signal during the shutdown, so the held diagnostics still print.
 
 ## Hosts
 
@@ -97,7 +97,7 @@ agent-view --remote devbox --remote build@lab
 For each remote host, the program runs this command:
 
 ```sh
-ssh -T -o BatchMode=yes -o ServerAliveInterval=15 <ssh-host> agent-view collect --stdio --label '<label>'
+ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 <ssh-host> agent-view collect --stdio --label '<label>'
 ```
 
 Set up each remote host as follows:
@@ -107,7 +107,9 @@ Set up each remote host as follows:
 3. Make SSH work without a prompt. `BatchMode=yes` forbids a password or passphrase prompt, so use a key and load it in your SSH agent.
 4. Check the setup: `ssh -o BatchMode=yes <ssh-host> command -v agent-view`.
 
-A remote host that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. The program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
+A remote host that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. `ConnectTimeout=10` limits the connect time of `ssh` to 10 s. A host that sends no hello in 15 s shows `down` with `no hello after 15 s`: the program ends the child. After each of these, the program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
+
+The `ssh` child runs in its own session and has no controlling terminal. A prompt on `/dev/tty` fails at once, so it cannot corrupt the screen.
 
 Two hosts with the same label get a suffix: `--remote box --remote box` shows `box` and `box#2`. A remote host sends nothing to a third party. Its output and file paths travel over your SSH connection.
 
@@ -170,6 +172,7 @@ Idle CPU is under 2% of one core in steady state (0.2–0.3% measured). The firs
 ## Known limitations
 
 - A crash on a goroutine outside `main` and Bubble Tea prints the crash text on the terminal. It cannot restore the terminal state.
+- A remote host that needs more than 15 s to send its hello never connects: the program ends the child at 15 s and tries again with backoff. You cannot change this limit.
 - Two hosts that send the same agent ID share one row, because a row is identified by the agent ID today. Agent IDs carry the unique host label, so this needs a source that sends an ID without the label.
 - With two or more hosts, the content of the coverage panel can be taller than the panel. The panel then cuts the newest diagnostic lines first and shows a `… N more lines` marker, so the failure reason of a host can be hidden.
 
