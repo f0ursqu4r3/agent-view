@@ -30,9 +30,11 @@ type tuiPane struct {
 	sock string
 }
 
-// tuiOpts configures startTUI. A zero home gets a new temporary directory.
+// tuiOpts configures startTUI. A zero home gets a new temporary directory; a
+// zero bin runs the binary that TestMain built.
 type tuiOpts struct {
 	home string
+	bin  string
 	env  []string // extra KEY=value entries
 	args []string
 }
@@ -47,12 +49,15 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 	if o.home == "" {
 		o.home = t.TempDir()
 	}
+	if o.bin == "" {
+		o.bin = binPath
+	}
 	name := regexp.MustCompile(`[^A-Za-z0-9]+`).ReplaceAllString(t.Name(), "-")
 	p := &tuiPane{t: t, sock: fmt.Sprintf("av-%s-%d", name, os.Getpid())}
 
 	env := isolatedEnv(o.home)
 	argv := []string{"-L", p.sock, "-f", "/dev/null", "new-session", "-d", "-s", "main",
-		"-x", "100", "-y", "30", "-c", t.TempDir(), "--", binPath}
+		"-x", "100", "-y", "30", "-c", t.TempDir(), "--", o.bin}
 	argv = append(argv, o.args...)
 	argv = append(argv, ";", "set-option", "-t", "main", "remain-on-exit", "on")
 	cmd := exec.Command("tmux", argv...)
@@ -101,8 +106,18 @@ func (p *tuiPane) tmux(args ...string) string {
 // screen returns the visible pane.
 func (p *tuiPane) screen() string { return p.tmux("capture-pane", "-p", "-t", "main") }
 
+// screenJoined is screen with each wrapped line joined to the next, so a text
+// that wraps at the pane edge stays in one piece.
+func (p *tuiPane) screenJoined() string { return p.tmux("capture-pane", "-p", "-J", "-t", "main") }
+
 // history returns the pane with its scrollback.
 func (p *tuiPane) history() string { return p.tmux("capture-pane", "-p", "-S", "-", "-t", "main") }
+
+// historyJoined is history with each wrapped line joined to one line, so a
+// text longer than the pane width stays in one piece.
+func (p *tuiPane) historyJoined() string {
+	return p.tmux("capture-pane", "-p", "-J", "-S", "-", "-t", "main")
+}
 
 func (p *tuiPane) format(f string) string {
 	return strings.TrimSpace(p.tmux("list-panes", "-t", "main", "-F", f))
@@ -457,5 +472,100 @@ func TestTUIQuietTerminal(t *testing.T) {
 	}
 	if !strings.Contains(out, "fakehost collector down: ssh failed: "+mark) {
 		t.Fatalf("held diagnostics missing after exit:\n%s", out)
+	}
+}
+
+// buildAvtest builds the program with the avtest tag (see avtest_hook.go) and
+// returns the path of the binary.
+func buildAvtest(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "agent-view-avtest")
+	if out, err := exec.Command("go", "build", "-tags", "avtest", "-o", path, ".").CombinedOutput(); err != nil {
+		t.Fatalf("go build -tags avtest: %v\n%s", err, out)
+	}
+	return path
+}
+
+// waitFile polls every 20 ms until path exists, for up to paneWait.
+func waitFile(t *testing.T, path string) {
+	t.Helper()
+	for deadline := time.Now().Add(paneWait); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+	}
+	t.Fatalf("timed out waiting for %s", filepath.Base(path))
+}
+
+// The program itself writes to os.Stderr and calls log.Printf while the TUI
+// runs. Neither text may show on the board. After q each shows once on the
+// real terminal. This pins the stderr capture and log.SetOutput in runTUI;
+// TestTUIQuietTerminal sends its text through a remote child, which never
+// touches fd 2 of the program.
+//
+// The log package writes to fd 2 by default, so the capture alone also takes a
+// short log line. The capture cuts a line to 4,096 bytes and log.SetOutput
+// does not: the log line is longer than that, and its tail arrives only
+// through log.SetOutput. The test binary has the avtest tag, which adds a
+// goroutine that writes on request (avtest_hook.go).
+func TestTUIProcessOwnWrites(t *testing.T) {
+	home := t.TempDir()
+	hook := filepath.Join(home, "avtest-hook")
+	if err := os.MkdirAll(hook, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p := startTUI(t, tuiOpts{home: home, bin: buildAvtest(t)})
+	p.waitScreen("the board", func(s string) bool { return hostUp(s, localLabel()) })
+
+	nonce := fmt.Sprintf("%d-%06d", os.Getpid(), rand.IntN(1_000_000))
+	stderrMark, logHead, logTail := "AVTEST-STDERR-"+nonce, "AVTEST-LOGHEAD-"+nonce, "AVTEST-LOGTAIL-"+nonce
+	marks := []string{stderrMark, logHead, logTail}
+	// A text written at the pane edge wraps, so the joined screen is read.
+	noMarks := func() {
+		s := p.screenJoined()
+		for _, m := range marks {
+			if strings.Contains(s, m) {
+				t.Fatalf("the board shows %s:\n%s", m, s)
+			}
+		}
+	}
+	// The hook reads the request only when the file is complete: write, then rename.
+	ask := filepath.Join(hook, "go")
+	if err := os.WriteFile(ask+".tmp", []byte(strings.Join(marks, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(ask+".tmp", ask); err != nil {
+		t.Fatal(err)
+	}
+
+	// The program has written when done exists. The board is watched all the
+	// time from the request, and for a while after the writes.
+	done := filepath.Join(hook, "done")
+	for deadline := time.Now().Add(paneWait); ; time.Sleep(20 * time.Millisecond) {
+		noMarks()
+		if _, err := os.Stat(done); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the program did not write within %v; pane:\n%s", paneWait, p.screen())
+		}
+	}
+	for end := time.Now().Add(time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		noMarks()
+	}
+	// Both texts reached the diagnostics: the coverage panel shows them.
+	p.keys("c")
+	p.waitScreen("the texts in the coverage panel", func(s string) bool {
+		return strings.Contains(s, stderrMark) && strings.Contains(s, logHead)
+	})
+	p.keys("q")
+	if code := p.waitExit(); code != 0 {
+		t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
+	}
+	out := p.historyJoined()
+	for _, m := range marks {
+		if n := strings.Count(out, m); n != 1 {
+			t.Fatalf("%s shows %d times after exit, want 1:\n%s", m, n, out)
+		}
 	}
 }
