@@ -82,7 +82,13 @@ func TestCheckSizes(t *testing.T) {
 	}
 }
 
+// TestBuildLinuxArm64 builds with an inherited environment that asks for a
+// different target. The target's own settings must win: the file is an ELF
+// file for arm64, built without cgo.
 func TestBuildLinuxArm64(t *testing.T) {
+	t.Setenv("GOOS", "darwin")
+	t.Setenv("GOARCH", "amd64")
+	t.Setenv("CGO_ENABLED", "1")
 	root, err := findModuleRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -226,15 +232,21 @@ func TestSmokeRejectsBadFirstLine(t *testing.T) {
 			t.Errorf("smoke waited for the stub to end by itself: %v", time.Since(start))
 		}
 	})
-	for _, c := range []struct{ mode, want string }{
-		{"snapshot", "not a hello"},
-		{"garbage", "not a hello"},
-		{"exit", "before"},
-		{"silent", "within"},
+	// Only silent waits for the whole deadline. The other stubs fail as soon as
+	// they print or exit, so a long deadline costs no time and a loaded machine
+	// cannot make them fail with "within".
+	for _, c := range []struct {
+		mode, want string
+		deadline   time.Duration
+	}{
+		{"snapshot", "not a hello", 5 * time.Second},
+		{"garbage", "not a hello", 5 * time.Second},
+		{"exit", "before", 5 * time.Second},
+		{"silent", "within", 500 * time.Millisecond},
 	} {
 		t.Run(c.mode+" fails", func(t *testing.T) {
 			cmd := helperCmd(c.mode)
-			err := smoke(cmd, 500*time.Millisecond)
+			err := smoke(cmd, c.deadline)
 			if err == nil {
 				t.Fatal("smoke accepted the stub")
 			}
