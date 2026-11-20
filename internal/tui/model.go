@@ -70,12 +70,15 @@ type Model struct {
 	// label, as the store keys its hosts. A host without an entry is
 	// connecting.
 	hostState map[string]string
-	hosts     map[string]*hostInfo
-	known     map[string]bool // agents that may have animation state
-	starts    []int64         // arrival times of live call starts
-	fails     []int64         // arrival times of live failed ends
-	diag      []string
-	panics    int // store panics already reported
+	// hostDetail is the detail of the last StateMsg of each host, under the
+	// same key, so a repeated message adds no second diagnostic.
+	hostDetail map[string]string
+	hosts      map[string]*hostInfo
+	known      map[string]bool // agents that may have animation state
+	starts     []int64         // arrival times of live call starts
+	fails      []int64         // arrival times of live failed ends
+	diag       []string
+	panics     int // store panics already reported
 
 	content    string // the last frame, encoded
 	hits       []Hit  // the agent cards of the last frame
@@ -117,7 +120,7 @@ func NewModel(c Config) *Model {
 	return &Model{
 		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger, encode: encode,
 		ui:        board.UI{Reduced: c.Reduced},
-		hostState: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[string]bool{},
+		hostState: map[string]string{}, hostDetail: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[string]bool{},
 	}
 }
 

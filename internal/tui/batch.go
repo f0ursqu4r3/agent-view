@@ -257,7 +257,10 @@ func (m *Model) takeTouches(now int64) {
 // that host; labels are cleaned only where they are drawn. The bridge always
 // sets the label. An empty one is shown as "local" and, like any label,
 // touches no other host's state. A change writes a HOST line; a detail goes
-// to the diagnostics, so the coverage panel shows it.
+// to the diagnostics, so the coverage panel shows it. The bridge sends every
+// host state again after a resync, so a state and detail that equal the
+// host's last message add no second diagnostic. A host without an earlier
+// message counts as connecting with no detail.
 func (m *Model) setState(msg feed.StateMsg) {
 	host, state, detail := msg.Host, text.Clean(msg.State), text.Clean(msg.Detail)
 	if host == "" {
@@ -267,8 +270,10 @@ func (m *Model) setState(msg feed.StateMsg) {
 	if !ok {
 		prev = stateConnecting
 	}
+	prevDetail := m.hostDetail[host]
 	m.hostState[host] = state
-	if detail != "" {
+	m.hostDetail[host] = detail
+	if detail != "" && (state != prev || detail != prevDetail) {
 		m.addDiag(host + " collector " + state + ": " + detail) // addDiag cleans the line
 	}
 	if state != prev && !m.ui.Paused {

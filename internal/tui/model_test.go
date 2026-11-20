@@ -514,6 +514,78 @@ func TestEmptyHostStateIsTheLocalLabel(t *testing.T) {
 	}
 }
 
+// countDiag returns how many diagnostics equal line.
+func countDiag(f *modelFix, line string) int {
+	n := 0
+	for _, d := range f.m.Diagnostics() {
+		if d == line {
+			n++
+		}
+	}
+	return n
+}
+
+// TestRepeatedHostStateAddsNoSecondDiagnostic: the bridge sends every host
+// state again after a resync. A state with the same detail as the host's last
+// one adds no second diagnostic, and the state did not change, so the log
+// gets no second HOST line.
+func TestRepeatedHostStateAddsNoSecondDiagnostic(t *testing.T) {
+	const diag = "devbox collector down: ssh failed: x"
+	f := newModelFix(t, true, 120, 40)
+	down := feed.StateMsg{Host: "devbox", State: "down", Detail: "ssh failed: x"}
+	f.send(down)
+	f.send(down)
+	if got := countDiag(f, diag); got != 1 || len(f.m.Diagnostics()) != 1 {
+		t.Errorf("diagnostics = %q, want the one line %q", f.m.Diagnostics(), diag)
+	}
+	if got := strings.Count(f.screen(), "HOST  devbox down"); got != 1 || f.m.log.Len() != 1 {
+		t.Errorf("%d HOST line(s) on the screen, log of %d; want 1, 1:\n%s", got, f.m.log.Len(), f.screen())
+	}
+}
+
+// TestChangedDetailAddsADiagnostic: the same state with another detail is a
+// new diagnostic. The state did not change, so the log gets no second line.
+func TestChangedDetailAddsADiagnostic(t *testing.T) {
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "ssh failed: x"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "ssh failed: y"})
+	want := []string{"devbox collector down: ssh failed: x", "devbox collector down: ssh failed: y"}
+	if got := f.m.Diagnostics(); !reflect.DeepEqual(got, want) {
+		t.Errorf("diagnostics = %q, want %q", got, want)
+	}
+	if f.m.log.Len() != 1 {
+		t.Errorf("log of %d line(s), want 1", f.m.log.Len())
+	}
+}
+
+// TestChangedStateSameDetailAddsADiagnostic: another state with the same
+// detail is a new diagnostic, since the line names the state.
+func TestChangedStateSameDetailAddsADiagnostic(t *testing.T) {
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "devbox", State: "connecting", Detail: "retry in 5 s"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "retry in 5 s"})
+	want := []string{"devbox collector connecting: retry in 5 s", "devbox collector down: retry in 5 s"}
+	if got := f.m.Diagnostics(); !reflect.DeepEqual(got, want) {
+		t.Errorf("diagnostics = %q, want %q", got, want)
+	}
+}
+
+// TestDownAgainAfterUpAddsADiagnostic: a host that comes up and goes down
+// again for the same reason is a new event, so it adds a second diagnostic.
+func TestDownAgainAfterUpAddsADiagnostic(t *testing.T) {
+	const diag = "devbox collector down: ssh failed: x"
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "ssh failed: x"})
+	f.send(feed.StateMsg{Host: "devbox", State: "up"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "ssh failed: x"})
+	if got := countDiag(f, diag); got != 2 || len(f.m.Diagnostics()) != 2 {
+		t.Errorf("diagnostics = %q, want %q twice", f.m.Diagnostics(), diag)
+	}
+	if f.m.log.Len() != 3 {
+		t.Errorf("log of %d line(s), want 3 (down, up, down)", f.m.log.Len())
+	}
+}
+
 // TestModelCoveragePanelShowsEveryHost: the panel holds one block per store
 // host, in the store's order, each with its own coverage.
 func TestModelCoveragePanelShowsEveryHost(t *testing.T) {
