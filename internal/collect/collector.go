@@ -6,10 +6,10 @@ import (
 	"os"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"agent-view/internal/demo"
+	"agent-view/internal/fanout"
 	"agent-view/internal/fschange"
 	"agent-view/internal/lifecycle"
 	"agent-view/internal/logs"
@@ -76,7 +76,7 @@ type Collector struct {
 
 	// Owned by the loop goroutine.
 	seq       int64
-	subs      []*subscriber
+	subs      []*fanout.Sub
 	ticker    *time.Ticker
 	covTicker *time.Ticker
 
@@ -107,23 +107,9 @@ type Collector struct {
 // item is handled.
 type item struct {
 	events []wire.SourceEvent
-	sub    *subscriber
+	sub    *fanout.Sub
 	run    func()
 	done   chan struct{}
-}
-
-type subscriber struct {
-	fn      func(wire.Envelope)
-	removed atomic.Bool
-}
-
-func (s *subscriber) unsubscribe() { s.removed.Store(true) }
-
-// send calls the subscriber. A subscriber that panics must not break the
-// others.
-func (s *subscriber) send(env wire.Envelope) {
-	defer func() { _ = recover() }()
-	s.fn(env)
 }
 
 // New returns a collector that does nothing until Start or Subscribe.
@@ -196,18 +182,18 @@ func (c *Collector) Stop() {
 // Stop or Subscribe, which wait for the loop; it may call them on another
 // goroutine (go c.Stop()).
 func (c *Collector) Subscribe(fn func(wire.Envelope)) (unsubscribe func()) {
-	s := &subscriber{fn: fn}
+	s := fanout.NewSub(fn)
 	c.ensureLoop()
 	done := make(chan struct{})
 	if c.enqueue(item{sub: s, done: done}) {
 		select {
 		case <-done:
-			return s.unsubscribe
+			return s.Remove
 		case <-c.loopDone:
 		}
 		select {
 		case <-done:
-			return s.unsubscribe
+			return s.Remove
 		default:
 		}
 	} else {
@@ -216,9 +202,9 @@ func (c *Collector) Subscribe(fn func(wire.Envelope)) (unsubscribe func()) {
 	// The collector stopped before the loop took the request. The state no
 	// longer changes, so greet here, as TypeScript does after stop.
 	hello, snap := c.greeting()
-	s.send(hello)
-	s.send(snap)
-	return s.unsubscribe
+	s.Send(hello)
+	s.Send(snap)
+	return s.Remove
 }
 
 // Coverage describes what the collector watches. It is safe from any
@@ -533,10 +519,10 @@ func (c *Collector) deliver(e wire.SourceEvent) {
 	}
 	c.seq++
 	env := wire.Envelope{V: wire.SchemaVersion, Host: c.opts.Host, Seq: c.seq, Ts: e.Ts, Ev: e.Ev}
-	c.subs = slices.DeleteFunc(c.subs, func(s *subscriber) bool { return s.removed.Load() })
+	c.subs = slices.DeleteFunc(c.subs, (*fanout.Sub).Removed)
 	for _, s := range c.subs {
-		if !s.removed.Load() {
-			s.send(env)
+		if !s.Removed() {
+			s.Send(env)
 		}
 	}
 }
@@ -554,13 +540,13 @@ func (c *Collector) diag(msg string) {
 
 // greet sends hello and snapshot to s. It reports false once the
 // collector is stopped.
-func (c *Collector) greet(s *subscriber) bool {
+func (c *Collector) greet(s *fanout.Sub) bool {
 	if c.isStopped() {
 		return false
 	}
 	hello, snap := c.greeting()
-	s.send(hello)
-	s.send(snap)
+	s.Send(hello)
+	s.Send(snap)
 	return true
 }
 

@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"agent-view/internal/fanout"
 	"agent-view/internal/logs"
 	"agent-view/internal/safe"
 	"agent-view/internal/sshhost"
@@ -103,7 +104,7 @@ type Remote struct {
 	mu        sync.Mutex
 	state     string
 	detail    string
-	subs      []*subscriber
+	subs      []*fanout.Sub
 	listeners []*listener
 	started   bool
 	stopped   bool
@@ -116,11 +117,6 @@ type Remote struct {
 	child int
 	// killed is set by Kill: a child that starts after it gets SIGKILL.
 	killed bool
-}
-
-type subscriber struct {
-	fn      func(wire.Envelope)
-	removed atomic.Bool
 }
 
 type listener struct{ fn func() }
@@ -172,15 +168,15 @@ func (r *Remote) MalformedLines() int { return int(r.malformed.Load()) }
 // Subscribe calls fn with every envelope of every child, on the goroutine
 // that reads the child's stdout. A panic in fn is recovered.
 func (r *Remote) Subscribe(fn func(wire.Envelope)) (unsubscribe func()) {
-	s := &subscriber{fn: fn}
+	s := fanout.NewSub(fn)
 	r.mu.Lock()
 	r.subs = append(r.subs, s)
 	r.mu.Unlock()
 	return func() {
-		s.removed.Store(true)
+		s.Remove()
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		r.subs = slices.DeleteFunc(r.subs, func(x *subscriber) bool { return x == s })
+		r.subs = slices.DeleteFunc(r.subs, func(x *fanout.Sub) bool { return x == s })
 	}
 }
 
@@ -568,8 +564,8 @@ func (r *Remote) deliver(env wire.Envelope) {
 	subs := slices.Clone(r.subs)
 	r.mu.Unlock()
 	for _, s := range subs {
-		if !s.removed.Load() {
-			safe.Call(func() { s.fn(env) })
+		if !s.Removed() {
+			s.Send(env)
 		}
 	}
 }

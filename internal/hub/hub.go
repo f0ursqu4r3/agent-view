@@ -8,10 +8,10 @@ import (
 	"slices"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"agent-view/internal/collect"
+	"agent-view/internal/fanout"
 	"agent-view/internal/lifecycle"
 	"agent-view/internal/safe"
 	"agent-view/internal/wire"
@@ -59,15 +59,6 @@ type mirror struct {
 	offStatus func()
 }
 
-type subscriber struct {
-	fn      func(wire.Envelope)
-	removed atomic.Bool
-}
-
-func (s *subscriber) send(env wire.Envelope) { safe.Call(func() { s.fn(env) }) }
-
-func (s *subscriber) isRemoved() bool { return s.removed.Load() }
-
 type hostListener struct{ fn func([]wire.HostStatus) }
 
 // Hub merges the sources. For each host it keeps a collect.State mirror, so a
@@ -86,7 +77,7 @@ type Hub struct {
 	mu       sync.Mutex
 	mirrors  []*mirror // in the order the sources were added
 	labels   map[string]bool
-	subs     []*subscriber
+	subs     []*fanout.Sub
 	stopped  bool
 	tickStop chan struct{}
 	tickDone chan struct{}
@@ -168,17 +159,17 @@ func (h *Hub) AddSource(s Source) error {
 // (Subscribe, Stop, AddSource, SnapshotAll, Hosts, StoredFileCount,
 // UniqueLabel), which take the same lock. A panic in fn is recovered.
 func (h *Hub) Subscribe(fn func(wire.Envelope)) (unsubscribe func()) {
-	s := &subscriber{fn: fn}
+	s := fanout.NewSub(fn)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, env := range h.snapshotAll() {
-		s.send(env)
+		s.Send(env)
 	}
 	if !h.stopped {
-		h.subs = slices.DeleteFunc(h.subs, (*subscriber).isRemoved)
+		h.subs = slices.DeleteFunc(h.subs, (*fanout.Sub).Removed)
 		h.subs = append(h.subs, s)
 	}
-	return func() { s.removed.Store(true) }
+	return s.Remove
 }
 
 // SnapshotAll returns each host's hello, snapshot, and coverage, for the
@@ -311,10 +302,10 @@ func (h *Hub) ingest(m *mirror, env wire.Envelope) {
 	env.Host = m.label
 	m.seq = env.Seq
 	h.record(m, env)
-	h.subs = slices.DeleteFunc(h.subs, (*subscriber).isRemoved)
+	h.subs = slices.DeleteFunc(h.subs, (*fanout.Sub).Removed)
 	for _, s := range h.subs {
-		if !s.isRemoved() {
-			s.send(env)
+		if !s.Removed() {
+			s.Send(env)
 		}
 	}
 }
