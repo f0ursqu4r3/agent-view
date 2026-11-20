@@ -72,8 +72,9 @@ func (m *Map[K, V]) First() (K, V, bool) {
 }
 
 // All yields the entries in insertion order, oldest first. The loop body may
-// delete the current key only: the next entry is read before the yield, so
-// deleting the next key ends the loop early.
+// delete the current key only. All reads the next entry before it yields the
+// current one. If the body deletes that next key, the loop yields the deleted
+// entry once and then stops, so the entries after it are skipped.
 func (m *Map[K, V]) All() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		for e := m.entries.Front(); e != nil; {
