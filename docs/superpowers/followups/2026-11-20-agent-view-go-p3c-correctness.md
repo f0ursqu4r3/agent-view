@@ -2,18 +2,74 @@
 
 Date: 2026-11-20. Branch: go-p3c-correctness. Plan: `docs/superpowers/plans/2026-11-20-agent-view-go-p3c-correctness.md`. Spec: `docs/superpowers/specs/2026-11-19-agent-view-p3-design.md`, section "P3c Correctness".
 
-P3c fixes three correctness defects: equal agent IDs on two hosts, the coverage panel cuts, and the working count. This file holds the diagnosis of the working count. The tasks that follow add what they fix, and what stays open.
+P3c fixed three correctness defects: equal agent IDs on two hosts, the coverage panel cuts, and the working count. The finished items of the older lists are in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`, under "Done in P3c".
+
+The review ledger of the run is not tracked. This file is the only record of what P3c finished, of what stays open, of the findings that the task reviews deferred, and of the diagnosis of the working count.
+
+P3c changes two golden files: `testdata/compose/coverage_one_host.golden` and `testdata/compose/coverage_two_hosts.golden`, in their `short box` cases only. It changes two kinds of drawn text: the markers of the coverage panel (`… N more hosts` and `… M more lines, N more hosts`) and the `working` count of the status bar. It changes no event schema, no wire format and no CLI.
+
+At the end of P3c, the full test suite and the race tests of `internal/store`, `internal/board`, `internal/anim` and `internal/tui` pass. The frame benchmark `BenchmarkFrame50Agents3Hosts200Envelopes` has a median of 1,607,564 ns/op. The base commit (eb0067e, the code before P3c) has 1,544,839 ns/op in the same session (ratio 1.04; five alternating runs of each, one run at a time). The gate was at most 1.10. The runs of the branch were 1,663,175, 1,561,178, 1,607,564, 1,531,693 and 1,705,208 ns/op. The runs of the base were 1,549,939, 1,544,839, 1,608,162, 1,508,185 and 1,499,021 ns/op.
+
+## What P3c finished
+
+- **Row identity (host, agent ID).** `store.AgentKey{Host, ID}` (`internal/store/store.go`) identifies an agent. `Store.Agent`, `Counters`, `OpenCalls` and `RecentEnded` take a key, and `LaneOrder` returns keys. `ViewAgent`, `ViewCall` and `Change` have a `Key()` method. The board (`UI.Selected`, `UI.Focus`, `Row.Key()` and the focus filter of the log in `internal/board`), the animation (`internal/anim`) and the TUI (`Hit.Key`, `known`, `prune` and the key handlers in `internal/tui`) use the key. Two hosts with an agent of the same ID give two rows. The selection, the focus, the calls, the counters and the animation of a row follow the host and the ID. No key is a joined string. Tests: `TestAgentLookupByHostAndID` and `TestAgentKeysDoNotJoinStrings` (store), `TestEqualAgentIDsOnTwoHosts` (its subtest `rows show their own host` runs now), `TestSelectionAndFocusFollowTheHost` and `TestPruneForgetsOnlyTheHostThatLeft` (tui), `TestRowsParentOnAnotherHostIsNoParent` and `TestLogFocusFiltersByHostAndID` (board), `TestEqualIDsOnTwoHostsAnimateApart` (anim).
+- **The coverage panel cuts by one rule.** `CoveragePanel` (`internal/tui/panels.go`) has one layout for any number of hosts. It reserves the newest four diagnostic lines (`diagKept`), so the reason that a host is down stays visible. It cuts the coverage instead, in whole host blocks, and shows `… N more hosts` (`… 1 more host`). When not even the first block fits whole, it shows the first lines of that block and `… M more lines, N more hosts`. With one host the marker is `… M more lines`. Two goldens changed, in their `short box` cases:
+  - `coverage_one_host` (72 × 12). The old panel showed the 9 lines of the coverage and no diagnostic. The new panel shows the first 4 lines, `… 5 more lines`, and 3 diagnostic lines.
+  - `coverage_two_hosts` (72 × 14). The old panel showed `host box` with its 9 lines and `… 15 more lines`, and no diagnostic. The new panel shows the first 6 lines of the first block, `… 4 more lines, 1 more host`, and 3 diagnostic lines.
+  - Every other case of both files is byte-identical to the base. Tests: `TestCoveragePanelKeepsNewestFourDiagnostics`, `TestCoveragePanelCutsFirstBlockWhenNoneFits` and the other `TestCoveragePanel*` tests in `internal/tui/panels_test.go`.
+- **The status bar counts the agents that work.** `Model.status` (`internal/tui/model.go`) counts in `working` each agent whose status is `working` and whose row does not say STALE. A WAITING parent counts, although the store marks it stale. `agents` still counts every present agent. The README states the rule. Tests: `TestStatusWorkingMatchesTheRows` (`internal/tui/model_test.go`) and `TestWorkingCountMatchesTheRows` (`cmd/agent-view/working_stale_test.go`). The diagnosis is in the last section of this file.
+
+## What stays open by design
+
+- **The collector reads at most 120 logs.** The limit is `defaultMaxLogs` (`internal/logs/source.go`), and `collect.Options` has no field for it. A setup with more logs shows at most 120 agents, and all of them can be STALE. P3c leaves the cap. The "120 working" that the owner saw most likely comes from this cap (see the last section).
+- **At 80 × 24, two or more hosts show only the first block.** With four or more diagnostics the body of the panel has 12 lines (18 lines inside the panel, 6 for the reserve). A host block has 10 lines in the test fixture (the `host` line and 9 lines of coverage), and more for a host with several log or watch roots. The first block shows whole, or cut by lines, and the coverage of the other hosts stays hidden until the terminal is taller. The reasons of failing hosts still show in the diagnostics, as long as they are among the newest lines.
+- **A host that never sent an envelope has no block in the panel.** The store adds a host with the first envelope that it accepts (`Store.Apply`), and the panel lists the hosts of the store. The state of such a host shows in the status bar, and the reason of a failure shows in the diagnostics.
+- **A box smaller than the reserve shows the diagnostics only.** When the inside of the panel has fewer lines than the reserve (6, or fewer with fewer than four diagnostics), the panel shows the last lines of the diagnostics section. With a body of 0 or 1 line it shows no coverage or only the marker. The smallest screen (80 × 24) gives the panel 20 lines, so a user cannot reach these cases.
+- **The bar and the rows use the same 2 min rule, from two places.** `Store.Agents` and `Store.Agent` set `Stale` with `Options.StaleMs`. The rows use `store.DefaultStaleMs` (`cards.State` in `internal/tui/rows.go`). `runTUI` sets only `LingerMs` and no other production code sets `StaleMs`, so the two agree today. A store with another `StaleMs` could show a bar that disagrees with the rows. The inline stale test in `callCard` (`internal/tui/rows.go`) is a third copy of the rule. It is open since P3a (see "TUI rows (final review)" in `docs/superpowers/followups/2026-11-19-agent-view-go-p3a-consolidation.md`).
+- **`agents` counts every present agent, STALE agents included.** The fixture of the diagnosis shows `140 agents` and `40 working`. The spec sentence for the status bar does not say whether a STALE agent is a working agent. P3c chose to follow the state words of the rows.
+- **Only one test pins the WAITING rule.** The generated logs of `TestWorkingCountMatchesTheRows` hold no WAITING parent (the ancestors of group c have no open call, so they are STALE). `TestStatusWorkingMatchesTheRows` is the only test that fails when `status` drops the WAITING exception.
+- **The measurements of the diagnosis are not all tests.** The run with 10,000 logs, the three controls and the run with a WAITING parent were throwaway runs. Only the table of the fixture is a test. `TestWorkingCountMatchesTheRows` runs a real collector on temporary roots. It waits for no file event, but a busy `fseventsd` can slow the start of the file watcher.
+- **The frame allocates 6.5% more bytes than before P3c.** The benchmark gave about 6.42 MB per frame on the base commit and about 6.83 MB on the branch, and 4,824 and 4,825 allocations. The time is inside the gate. Nobody traced the extra bytes. A memory profile of the benchmark on both commits would show them. The README performance table keeps the numbers of P2c (1.52 ms for a batch of 200 envelopes and one frame). In the session of P3c the same benchmark gave 1.54 ms on the base commit and 1.61 ms on the branch, so the table is not changed.
+
+## Deferred during the P3c task reviews
+
+Task 5 fixed T1-M1, T1-M2 and T1-M5. Task 2 fixed T1-M4. Task 6 fixed T5-M1 and T5-M2. This list leaves them out. The items below stay open.
+
+- **Diagnosis (Task 1):**
+  - **T1-M3.** `TestWorkingCountMatchesTheRows` (`cmd/agent-view/working_stale_test.go`) reads the wall clock (`countWorking`). Group d has about 115 s of margin before its rows read STALE. `tui.Config.Now` could pin the clock.
+- **Store key (Task 2):**
+  - **T2-M1.** `refOpen` and `refEnded` in `internal/store/index_test.go` find the host with `s.stored`, the helper that the code under test uses. They would repeat a bug of that helper.
+  - **T2-M2.** Loop variables in `internal/store/index_test.go` shadow the test helper `k` (`internal/store/store_test.go`). Rename the helper, for example `key`.
+  - **T2-M3.** The `Errorf` for `Agent` in `TestAgentLookupByHostAndID` tests `a.ID` but does not print it.
+  - **T2-M4.** The doc comments of `Store.OpenCalls` and `Store.RecentEnded` do not say that an unknown host gives nil.
+  - **T2-M5.** `TestEqualAgentIDsOnTwoHosts` (`internal/tui/model_test.go`) gives both agents the same name, so it cannot tell the two cards apart by name.
+- **Row identity in the board, the animation and the TUI (Task 3):**
+  - **T3-M1.** `Render` in `internal/board/log.go` builds the key of the log filter inline. A `LogLine.Key()` method would match `Row.Key()`.
+  - **T3-M2.** Some migrated test messages print an `AgentKey` with `%q` (for example `Selected = %q` in `internal/tui/model_test.go`). Use `%v`.
+  - **T3-M3.** The test helpers `k` (anim), `hk` (board) and `dk` (tui) have different names. Accepted.
+- **Coverage panel (Task 4):**
+  - **T4-M1.** The README says that the panel "always keeps the newest four" diagnostic lines. It does not when the box is smaller than the reserve. The doc comment of `CoveragePanel` is not exact for a body of 0 or 1 line. Drop "always" and add a sentence.
+  - **T4-M2.** When the box is smaller than the reserve, `CoveragePanel` takes the last `inner` lines of `section(diagKept)`. The tests stop at an inside height of 4. Add a box of height 7 with 6 diagnostics (it must show `diagnostics` and `diag 3` to `diag 6`), and a comment that the section has exactly `reserve` lines there.
+  - **T4-M3.** `CoveragePanel` is about 70 lines. Extract the choice of the blocks (`fitBlocks`) and make `section` a function of the package.
+  - **T4-M4.** `diag[max(0, len(diag)-room):]` in `section` panics when `room` is below 0. The invariant (`room` is at least 1 when `inner >= reserve`) has no comment, and no clamp protects it.
+  - **T4-M5.** `trimEnd` in `internal/tui/panels_test.go` repeats a loop of `contentLines`. The comment "(20 × 18 inside)" of `TestCoveragePanelKeepsNewestFourDiagnostics` is muddled. No test covers zero hosts with a cut coverage and 9 diagnostics (height 12 gives `… 3 more lines`, then `diag 6` to `diag 9`).
+  - **T4-M6.** The commit messages of `efb1923` and `2aac2cf` write `...` for `…`. The two-host paragraph of `efb1923` is superseded by `2aac2cf`.
+  - **Mutation proof.** The proof of Task 4 sets the reserve to 0. In a copy outside the repo, a constant reserve of 1, 2, 5 or 7 also fails the `TestCoveragePanel*` tests, so the value of the reserve is pinned. The Task 4 review noted that its mutants 1 and 2 are not proven killed. The record does not say what they change.
+- **Status count (Task 5):**
+  - **T5-M3.** `Model.status` builds the slice of `OpenCalls` before it looks at the set of parents. Test `parents[a.Key()]` first, so the clone is skipped for an agent with no sub-agent (the result is the same).
+  - **T5-M4.** The doc comment of `Model.status` says "a parent with an open agent call". `cards.Waiting` looks at the newest open call only (`open[0]`).
+  - **T5-M5.** In `TestStatusWorkingMatchesTheRows` the check of `len(agents)` sits after the loop over the agents. It belongs before it. No test runs the status path with equal agent IDs on two hosts. No test pins that the bar and the rows agree when `store.Options.StaleMs` is not the default.
 
 ## 120 working while the rows say STALE
 
-**Cause.** The status bar and the rows use two different rules for "working".
+**Cause.** Before Task 5, the status bar and the rows used two different rules for "working".
 
-- The status bar counts each present agent whose `Status` is `working` (`Model.status`, `internal/tui/model.go`). It does not look at the time of the last event.
+- The status bar counted each present agent whose `Status` was `working` (`Model.status`, `internal/tui/model.go`). It did not look at the time of the last event.
 - A row says STALE when the status is `working` and the agent has had no event for more than 2 min (`cards.State`, `internal/cards/state.go`). A WAITING row is never STALE.
 - Time never clears the status `working`. In a Claude log, a tool call sets it, and only a turn-end record sets `idle` (`ClaudeAdapter.Ingest`, `internal/logs/claude.go`). A log that ends with no turn-end record keeps the status `working`.
 - The board keeps an agent for 10 min after its last event, and for any time while a present agent descends from it (`lifecycle.PresentIDs`, `internal/lifecycle/lifecycle.go`).
 
-So an agent can be present, have the status `working`, and have a STALE row. The bar counts it. The row does not.
+So an agent could be present, have the status `working`, and have a STALE row. The bar counted it. The row did not.
 
 **Measurement.** The test fixture generates Claude logs in a temporary directory. A real collector reads them, and the messages go the same way as in `runTUI`: collector, hub, bridge, model. No real log is read. `Status.Working` comes from the first line of the model's screen. The state word of each agent comes from `cards.State`.
 
@@ -42,7 +98,7 @@ The causes overlap: groups b and c are in two rows. Cause 3 is why the status is
 
 **Controls.** Each condition above is needed. A throwaway run of the same fixture (not kept as a test) showed:
 
-- A log with a turn-end record and a last record 5 min old: present, status `idle`, row IDLE. The bar counts 0 of the 3 agents.
+- A log with a turn-end record and a last record 5 min old: present, status `idle`, row IDLE. The bar counted 0 of the 3 agents.
 - A log with no turn-end record and a last record 11 min old, with no child: not present.
 - A parent log with a last record 1 h old, with no child: not present.
 
@@ -55,9 +111,9 @@ The causes overlap: groups b and c are in two rows. Cause 3 is why the status is
 **Fixture for Task 5.** `measureWorking(t, workingSizes{...})` in `cmd/agent-view/working_stale_test.go` generates the logs, runs the pipeline, and returns the bar numbers and the counts of each group. Two facts matter when you reuse it:
 
 - A collector reads at most 120 logs, and the table fixture has 140. The fixture therefore puts at most 100 logs on one host and uses two hosts, so the status bar shows two host segments. A parent log and its child log always share a host.
-- `countWorking` calls `Store.OpenCalls(a.ID)`. Task 2 changes that call to take a key.
+- `countWorking` looks up the open calls with the key of the agent (`Store.OpenCalls(a.Key())`). Task 1 wrote it with `Store.OpenCalls(a.ID)`, and Task 2 changed it when the store took a key.
 
-**Decision for Task 5.** The status bar counts an agent as working only when its status is `working` and its row does not say STALE. That is: `Working` equals the agents whose `cards.State` word is WORKING, THINKING or WAITING. The measurements support this. 100 of the 140 agents that the bar counts have a STALE row, and no measured case needs another rule. Count a WAITING parent as working even when its last event is older than 2 min: use `cards.Waiting`, and do not use `ViewAgent.Stale` alone. `Agents` keeps counting every present agent (140). The ancestors of group c are not counted (they are STALE), and their fresh children are counted.
+**Decision for Task 5.** The status bar counts an agent as working only when its status is `working` and its row does not say STALE. That is: `Working` equals the agents whose `cards.State` word is WORKING, THINKING or WAITING. The measurements support this. 100 of the 140 agents that the bar counted had a STALE row, and no measured case needs another rule. Count a WAITING parent as working even when its last event is older than 2 min: use `cards.Waiting`, and do not use `ViewAgent.Stale` alone. `Agents` keeps counting every present agent (140). The ancestors of group c are not counted (they are STALE), and their fresh children are counted.
 
 **Fix (Task 5).** `Model.status` (`internal/tui/model.go`) now counts in `Working` each present agent whose status is `working` and whose row does not say STALE. That is `!a.Stale`, or `cards.Waiting(a, OpenCalls(key), hasPresentChild)` for a stale agent. `hasPresentChild` is true when another agent of the same host on the board has the agent as its parent. `OpenCalls` is queried only for a stale agent. `Agents` still counts every present agent. On the fixture above the bar now reads `140 agents` and `40 working`, the same as the rows. The README states the rule in its status bar paragraph.
 
