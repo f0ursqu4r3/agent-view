@@ -165,7 +165,11 @@ func (p *tuiPane) waitExit() int {
 	if alt := p.format("#{alternate_on}"); alt != "0" {
 		p.t.Fatalf("alternate screen still on after exit")
 	}
-	n, err := strconv.Atoi(p.format("#{pane_dead_status}"))
+	status := p.format("#{pane_dead_status}")
+	if sig := p.format("#{pane_dead_signal}"); status == "" && sig != "" {
+		p.t.Fatalf("the program was killed by signal %s:\n%s", sig, p.history())
+	}
+	n, err := strconv.Atoi(status)
 	if err != nil {
 		p.t.Fatalf("pane_dead_status: %v", err)
 	}
@@ -226,9 +230,17 @@ func hostUp(s, label string) bool { return strings.Contains(statusLine(s), label
 // first. It returns when the one remote process runs.
 func startDemoRemote(t *testing.T, prefix string, pids *stubPIDs) *tuiPane {
 	t.Helper()
+	return startDemoRemoteWith(t, tuiOpts{}, prefix, pids)
+}
+
+// startDemoRemoteWith is startDemoRemote with the home and the binary of o.
+func startDemoRemoteWith(t *testing.T, o tuiOpts, prefix string, pids *stubPIDs) *tuiPane {
+	t.Helper()
 	stream := remoteStream(t)
 	script := prefix + pids.record("$$") + "cat '" + stream + "'; exec sleep 600"
-	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
+	o.env = append(o.env, remoteEnv(t, script))
+	o.args = append(o.args, "--demo", "--remote", "fakehost")
+	p := startTUI(t, o)
 	p.waitScreen("both hosts up", func(s string) bool {
 		return hostUp(s, localLabel()) && hostUp(s, "fakehost")
 	})
@@ -533,6 +545,116 @@ func TestTUIProcessOwnWrites(t *testing.T) {
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
 	}
+	out := p.historyJoined()
+	for _, m := range marks {
+		if n := strings.Count(out, m); n != 1 {
+			t.Fatalf("%s shows %d times after exit, want 1:\n%s", m, n, out)
+		}
+	}
+}
+
+// signalNames maps the subtest names of the signal tests to the signals that
+// kill(1) and the avtest hook take.
+var signalNames = []string{"TERM", "INT", "HUP"}
+
+// startWithSignalHook starts the avtest binary with --demo and one remote
+// stub that records its PID. The hook file <HOME>/avtest-hook/<file> holds
+// sig: the program sends sig to itself at that point (avtest_hook.go).
+func startWithSignalHook(t *testing.T, bin, file, sig string, pids *stubPIDs) *tuiPane {
+	t.Helper()
+	home := t.TempDir()
+	hook := filepath.Join(home, "avtest-hook")
+	if err := os.MkdirAll(hook, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hook, file), []byte(sig+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := pids.record("$$") + "exec sleep 600"
+	return startTUI(t, tuiOpts{home: home, bin: bin, env: []string{remoteEnv(t, script)},
+		args: []string{"--demo", "--remote", "fakehost"}})
+}
+
+// A signal that arrives before the sources start ends the program with exit
+// status 0 and the terminal restored; the remote stub never starts.
+func TestTUISignalBeforeStartExitsCleanly(t *testing.T) {
+	bin := buildAvtest(t)
+	for _, sig := range signalNames {
+		t.Run(sig, func(t *testing.T) {
+			pids := newStubPIDs(t)
+			p := startWithSignalHook(t, bin, "signal-before-start", sig, pids)
+			if code := p.waitExit(); code != 0 {
+				t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
+			}
+			if got := pids.recorded(); len(got) != 0 {
+				t.Fatalf("the remote stub started (PIDs %v), want none", got)
+			}
+		})
+	}
+}
+
+// A signal that arrives after the sources start and before the program runs
+// ends the program with exit status 0; the remote stub is gone.
+func TestTUISignalBeforeRunExitsCleanly(t *testing.T) {
+	bin := buildAvtest(t)
+	for _, sig := range signalNames {
+		t.Run(sig, func(t *testing.T) {
+			pids := newStubPIDs(t)
+			p := startWithSignalHook(t, bin, "signal-before-run", sig, pids)
+			if code := p.waitExit(); code != 0 {
+				t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
+			}
+			t.Logf("%d stub PIDs recorded", len(pids.recorded()))
+			pids.waitGone(time.Second, "remain")
+		})
+	}
+}
+
+// A second and a third SIGTERM while the program shuts down (a remote that
+// ignores SIGTERM holds the shutdown for about 1.5 s) do not kill it: it
+// exits 0, prints the held diagnostics once and leaves no stub.
+func TestTUIRepeatedSignalsDuringShutdownKeepDiagnostics(t *testing.T) {
+	home := t.TempDir()
+	hook := filepath.Join(home, "avtest-hook")
+	if err := os.MkdirAll(hook, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pids := newStubPIDs(t)
+	p := startDemoRemoteWith(t, tuiOpts{home: home, bin: buildAvtest(t)}, "trap '' TERM; ", pids)
+
+	nonce := fmt.Sprintf("%d-%06d", os.Getpid(), rand.IntN(1_000_000))
+	marks := []string{"AVTEST-STDERR-" + nonce, "AVTEST-LOGHEAD-" + nonce, "AVTEST-LOGTAIL-" + nonce}
+	ask := filepath.Join(hook, "go")
+	if err := os.WriteFile(ask+".tmp", []byte(strings.Join(marks, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(ask+".tmp", ask); err != nil {
+		t.Fatal(err)
+	}
+	waitFile(t, filepath.Join(hook, "done"))
+
+	p.keys("q")
+	// The alternate screen goes off when the program has stopped and the
+	// shutdown has begun.
+	for deadline := time.Now().Add(exitWait); p.format("#{alternate_on}") != "0"; time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the program did not leave the alternate screen within %v", exitWait)
+		}
+	}
+	pid := strconv.Itoa(p.pid())
+	for i := range 2 {
+		if i > 0 {
+			time.Sleep(200 * time.Millisecond)
+		}
+		// A kill that finds no process leaves the cause to waitExit.
+		if out, err := exec.Command("kill", "-TERM", pid).CombinedOutput(); err != nil {
+			t.Logf("SIGTERM %d: %v: %s", i+1, err, out)
+		}
+	}
+	if code := p.waitExit(); code != 0 {
+		t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
+	}
+	pids.waitGone(time.Second, "remain")
 	out := p.historyJoined()
 	for _, m := range marks {
 		if n := strings.Count(out, m); n != 1 {

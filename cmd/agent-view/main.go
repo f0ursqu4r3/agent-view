@@ -12,11 +12,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
@@ -147,6 +145,10 @@ func (w *diagWriter) rest() []string {
 	}
 }
 
+// beforeStart runs just before the sources start (a test hook). requested
+// is closed when a shutdown signal has arrived.
+var beforeStart = func(requested <-chan struct{}) {}
+
 // beforeRun runs just before the program starts (a test hook).
 var beforeRun = func() {}
 
@@ -190,6 +192,11 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 2
 	}
+	// From here to the return, INT, TERM and HUP only ask the run to end: a
+	// signal during the shutdown neither kills the process nor loses the held
+	// diagnostics. Stop runs last, after they print.
+	sigs := watchShutdownSignals()
+	defer sigs.Stop()
 	diag := newDiagWriter()
 	st, err := newStack(args, override, diag.line)
 	if err != nil {
@@ -216,7 +223,8 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 	// before the program runs must not leave the bridge blocked in Send.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	p := tea.NewProgram(model, tea.WithFPS(20), tea.WithFilter(diag.filter), tea.WithContext(ctx))
+	p := tea.NewProgram(model, tea.WithFPS(20), tea.WithFilter(diag.filter), tea.WithContext(ctx),
+		tea.WithoutSignalHandler())
 	diag.start(ctx, p.Send)
 
 	// The bridge subscribes before any source starts, so the first scan is
@@ -230,17 +238,22 @@ func runTUI(args cli.Args, stderr io.Writer) int {
 		st.stop(stopWait)
 	})
 	defer shutdown()
-	st.start(diag.line)
+	beforeStart(sigs.Requested())
+	// After a signal no source starts; the program still runs and quits at
+	// once, so the exit takes the usual path.
+	select {
+	case <-sigs.Requested():
+	default:
+		st.start(diag.line)
+	}
 
-	// Bubble Tea ends the program on SIGINT and SIGTERM; SIGHUP is ours.
-	hup := make(chan os.Signal, 1)
-	signal.Notify(hup, syscall.SIGHUP)
-	defer signal.Stop(hup)
+	// A signal quits the program. p.Quit does nothing before p.Run starts;
+	// p.Send waits until Run reads its messages, or until ctx ends.
 	go func() {
 		select {
 		case <-ctx.Done():
-		case <-hup:
-			p.Quit()
+		case <-sigs.Requested():
+			p.Send(tea.QuitMsg{})
 		}
 	}()
 
