@@ -266,11 +266,10 @@ func countWorking(t *testing.T, run *workingRun) workingResult {
 
 	now := time.Now().UnixMilli()
 	agents := run.store.Agents(now)
-	type hostID struct{ host, id string }
-	hasChild := map[hostID]bool{}
+	hasChild := map[store.AgentKey]bool{}
 	for _, a := range agents {
 		if a.ParentID != nil {
-			hasChild[hostID{a.Host, *a.ParentID}] = true
+			hasChild[store.AgentKey{Host: a.Host, ID: *a.ParentID}] = true
 		}
 	}
 	for _, a := range agents {
@@ -282,7 +281,7 @@ func countWorking(t *testing.T, run *workingRun) workingResult {
 		if a.Status == "working" {
 			c.Working++
 		}
-		word := cards.State(a, run.store.OpenCalls(a.ID), hasChild[hostID{a.Host, a.ID}], now, store.DefaultStaleMs).Text
+		word := cards.State(a, run.store.OpenCalls(a.Key()), hasChild[a.Key()], now, store.DefaultStaleMs).Text
 		c.Words[word[strings.LastIndex(word, " ")+1:]]++
 		res.Groups[groupOf(a.ID)] = c
 	}

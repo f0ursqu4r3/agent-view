@@ -128,7 +128,7 @@ func TestSnapshotChanges(t *testing.T) {
 	agents := []schema.Agent{agent("old"), agent("b"), agent("c")}
 	got = s.Apply(evSnapshot("local", agents, []schema.Call{call("b", "c1"), call("b", "c0"), call("c", "c2")}))
 	eqChanges(t, "second snapshot", got, []Change{added("local", "c", nowMs, false), started("local", "c", "c2", nowMs, false)})
-	if n := s.Counters("b").Calls; n != 2 {
+	if n := s.Counters(k("b")).Calls; n != 2 {
 		t.Fatalf("Counters(b).Calls = %d, want 2", n)
 	}
 
@@ -136,15 +136,15 @@ func TestSnapshotChanges(t *testing.T) {
 	s.Apply(evEnd("local", "c", "c2", ptr(true), nil, nil))
 	got = s.Apply(evSnapshot("local", agents, []schema.Call{call("b", "c1"), call("b", "c0"), call("c", "c2")}))
 	eqChanges(t, "snapshot listing an ended call", got, nil)
-	eq(t, "open calls of c", callIDs(s.OpenCalls("c")), []string{})
+	eq(t, "open calls of c", callIDs(s.OpenCalls(k("c"))), []string{})
 
 	// An open call a snapshot dropped comes back, silently and not counted again, when a later snapshot lists it.
 	eqChanges(t, "snapshot dropping open calls", s.Apply(evSnapshot("local", agents, nil)), nil)
-	eq(t, "open calls of b", callIDs(s.OpenCalls("b")), []string{})
+	eq(t, "open calls of b", callIDs(s.OpenCalls(k("b"))), []string{})
 	got = s.Apply(evSnapshot("local", agents, []schema.Call{call("b", "c1", withStart(nowMs-1000))}))
 	eqChanges(t, "snapshot listing a dropped call", got, nil)
-	eq(t, "open calls of b", callIDs(s.OpenCalls("b")), []string{"c1"})
-	if n := s.Counters("b").Calls; n != 2 {
+	eq(t, "open calls of b", callIDs(s.OpenCalls(k("b"))), []string{"c1"})
+	if n := s.Counters(k("b")).Calls; n != 2 {
 		t.Fatalf("Counters(b).Calls = %d, want 2", n)
 	}
 }
@@ -165,7 +165,7 @@ func TestRevivesAreNotAdded(t *testing.T) {
 	eqChanges(t, "snapshot re-lists P and x", s.Apply(evSnapshot("local", []schema.Agent{agent("P"), agent("x")}, nil)), nil)
 	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"P", "x"})
 	eqChanges(t, "status revives K", s.Apply(evStatus("local", "K", "idle")), []Change{status("local", "K", "idle", nowMs, false)})
-	if c := s.Counters("K"); c.Calls != 1 || s.UnknownEvents != 0 {
+	if c := s.Counters(k("K")); c.Calls != 1 || s.UnknownEvents != 0 {
 		t.Fatalf("Counters(K) = %+v, UnknownEvents = %d; want 1 call, 0 unknown", c, s.UnknownEvents)
 	}
 }
@@ -181,20 +181,20 @@ func TestReplayIsIgnored(t *testing.T) {
 	eqChanges(t, "tool.end", s.Apply(end), []Change{ended("local", "a", "c1", nowMs-2000, false)})
 	eqChanges(t, "replayed tool.end", s.Apply(end), nil)
 	s.Apply(evStatus("local", "a", "idle", nowMs-1500))
-	before, _ := s.Agent("a")
+	before, _ := s.Agent(k("a"))
 
 	// Replays with other times and results change nothing either.
 	eqChanges(t, "late tool.start", s.Apply(evStart("local", call("a", "c1", withStart(nowMs+5000)), nowMs+5000)), nil)
 	eqChanges(t, "late tool.end", s.Apply(evEnd("local", "a", "c1", ptr(false), ptr(1), []schema.Write{{Path: "/p/x.ts", Op: "edit"}}, nowMs+5000)), nil)
-	if after, _ := s.Agent("a"); after.Status != "idle" || after.LastEventMs != before.LastEventMs {
+	if after, _ := s.Agent(k("a")); after.Status != "idle" || after.LastEventMs != before.LastEventMs {
 		t.Fatalf("agent = status %q last %d, want idle %d", after.Status, after.LastEventMs, before.LastEventMs)
 	}
-	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
-	recent := s.RecentEnded("a", 5)
+	eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{})
+	recent := s.RecentEnded(k("a"), 5)
 	if len(recent) != 1 || recent[0].EndMs != nowMs-2000 || recent[0].Ok == nil || !*recent[0].Ok || recent[0].ExitCode != nil {
 		t.Fatalf("RecentEnded = %+v, want c1 ended ok at %d", recent, nowMs-2000)
 	}
-	if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
+	if c := s.Counters(k("a")); c.Calls != 1 || c.Faults != 0 {
 		t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
 	}
 	if n := s.hosts["local"].recent.Len(); n != 0 {
@@ -204,7 +204,7 @@ func TestReplayIsIgnored(t *testing.T) {
 	// A replay for a dormant agent does not revive it.
 	s.Agents(nowMs + 2*DefaultLingerMs + 6000)
 	eqChanges(t, "replay for a dormant agent", s.Apply(start), nil)
-	if _, ok := s.Agent("a"); ok || s.UnknownEvents != 0 {
+	if _, ok := s.Agent(k("a")); ok || s.UnknownEvents != 0 {
 		t.Fatalf("replay revived the agent or counted unknown (%d)", s.UnknownEvents)
 	}
 }
@@ -228,34 +228,34 @@ func TestRestartedCollectorReplay(t *testing.T) {
 		s.Apply(e)
 	}
 	want := Counters{Calls: 2, Faults: 1, FirstSeenMs: nowMs - 60_000}
-	if c := s.Counters("a"); c != want {
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
 	}
-	recent := describe(s.RecentEnded("a", 5))
-	before, _ := s.Agent("a")
+	recent := describe(s.RecentEnded(k("a"), 5))
+	before, _ := s.Agent(k("a"))
 
 	s.Apply(evHello("local", nowMs, false))
 	eqChanges(t, "empty snapshot", s.Apply(evSnapshot("local", nil, nil)), nil)
 	eq(t, "agents after the empty snapshot", ids(s.Agents(nowMs)), []string{"a"})
-	eq(t, "open calls after the empty snapshot", callIDs(s.OpenCalls("a")), []string{"c2"})
-	eq(t, "ended calls after the empty snapshot", describe(s.RecentEnded("a", 5)), recent)
+	eq(t, "open calls after the empty snapshot", callIDs(s.OpenCalls(k("a"))), []string{"c2"})
+	eq(t, "ended calls after the empty snapshot", describe(s.RecentEnded(k("a"), 5)), recent)
 	for i, e := range scan {
 		eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
 	}
-	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c2"})
+	eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{"c2"})
 	// The replayed output of an ended call is not added again.
-	eq(t, "ended calls", describe(s.RecentEnded("a", 5)), recent)
-	if c := s.Counters("a"); c != want {
+	eq(t, "ended calls", describe(s.RecentEnded(k("a"), 5)), recent)
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
 	}
-	if after, _ := s.Agent("a"); after.Status != before.Status || after.LastEventMs != before.LastEventMs {
+	if after, _ := s.Agent(k("a")); after.Status != before.Status || after.LastEventMs != before.LastEventMs {
 		t.Fatalf("agent = %q %d, want %q %d", after.Status, after.LastEventMs, before.Status, before.LastEventMs)
 	}
 	eqChanges(t, "live end", s.Apply(evEnd("local", "a", "c2", ptr(false), nil, nil, nowMs-1000)), []Change{ended("local", "a", "c2", nowMs-1000, false)})
-	if c := s.Counters("a"); c != (Counters{Calls: 2, Faults: 2, FirstSeenMs: nowMs - 60_000}) {
+	if c := s.Counters(k("a")); c != (Counters{Calls: 2, Faults: 2, FirstSeenMs: nowMs - 60_000}) {
 		t.Fatalf("Counters = %+v, want 2 calls, 2 faults", c)
 	}
-	eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{"c2", "c1"})
+	eq(t, "recent", callIDs(s.RecentEnded(k("a"), 5)), []string{"c2", "c1"})
 }
 
 // An empty snapshot changes no agent state, on any host: agents, dormant
@@ -273,13 +273,13 @@ func TestEmptySnapshotKeepsAgents(t *testing.T) {
 	if h.dormant.Len() != 1 || len(h.held) != 1 || h.recent.Len() != 1 {
 		t.Fatalf("before: dormant %d held %d recent %d, want 1 1 1", h.dormant.Len(), len(h.held), h.recent.Len())
 	}
-	counters := s.Counters("a")
+	counters := s.Counters(k("a"))
 
 	eqChanges(t, "empty snapshot", s.Apply(evSnapshot("local", nil, nil,
 		schema.FileTouch{Path: "/p/seed.ts", LastTouchAt: iso(nowMs), Attribution: "unattributed"})), nil)
 	eq(t, "agents", ids(s.Agents(nowMs)), []string{"a"})
-	eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c1"})
-	if c := s.Counters("a"); c != counters {
+	eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{"c1"})
+	if c := s.Counters(k("a")); c != counters {
 		t.Fatalf("Counters = %+v, want %+v", c, counters)
 	}
 	if h.dormant.Len() != 1 {
@@ -325,8 +325,8 @@ func TestReplayRestoresCalls(t *testing.T) {
 	for _, e := range scan {
 		s.Apply(e)
 	}
-	counters := s.Counters("a")
-	before := describe(s.RecentEnded("a", 5))
+	counters := s.Counters(k("a"))
+	before := describe(s.RecentEnded(k("a"), 5))
 	if len(before) != 2 {
 		t.Fatalf("RecentEnded before the restart = %q, want c2 and c1", before)
 	}
@@ -339,12 +339,12 @@ func TestReplayRestoresCalls(t *testing.T) {
 		eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
 		if i == 1 {
 			// A replayed start of an ended call waits for its end: it is neither open nor ended yet.
-			eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
-			eq(t, "recent", callIDs(s.RecentEnded("a", 5)), []string{})
+			eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{})
+			eq(t, "recent", callIDs(s.RecentEnded(k("a"), 5)), []string{})
 		}
 	}
-	eq(t, "restored calls", describe(s.RecentEnded("a", 5)), before)
-	if c := s.Counters("a"); c != counters {
+	eq(t, "restored calls", describe(s.RecentEnded(k("a"), 5)), before)
+	if c := s.Counters(k("a")); c != counters {
 		t.Fatalf("Counters = %+v, want %+v", c, counters)
 	}
 
@@ -379,10 +379,10 @@ func TestReplayedStatusKeepsNewerStatus(t *testing.T) {
 			for i, e := range scan {
 				eqChanges(t, fmt.Sprintf("replay %d (%s)", i, e.Kind), s.Apply(e), nil)
 			}
-			if a, _ := s.Agent("a"); a.Status != "working" {
+			if a, _ := s.Agent(k("a")); a.Status != "working" {
 				t.Fatalf("status = %q, want working", a.Status)
 			}
-			eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c1"})
+			eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{"c1"})
 		})
 	}
 }
@@ -405,17 +405,17 @@ func TestTimeoutEndOfOldCall(t *testing.T) {
 
 		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)),
 			[]Change{ended("local", "a", "c1", old, true)})
-		a, ok := s.Agent("a")
+		a, ok := s.Agent(k("a"))
 		if !ok || a.LastEventMs != old {
 			t.Fatalf("Agent(a) = stored %v, LastEventMs %d; want stored, %d", ok, a.LastEventMs, old)
 		}
 		eq(t, "agents after the end", ids(s.Agents(nowMs)), []string{})
-		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
-		recent := s.RecentEnded("a", 5)
+		eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{})
+		recent := s.RecentEnded(k("a"), 5)
 		if len(recent) != 1 || recent[0].Ok != nil || recent[0].EndMs != old {
 			t.Fatalf("RecentEnded = %q, want c1 ended ok:null at %d", describe(recent), old)
 		}
-		if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
+		if c := s.Counters(k("a")); c.Calls != 1 || c.Faults != 0 {
 			t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
 		}
 	})
@@ -431,7 +431,7 @@ func TestTimeoutEndOfOldCall(t *testing.T) {
 		eq(t, "agents before the end", ids(s.Agents(nowMs)), []string{}) // the sweep makes a dormant
 
 		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)), nil)
-		if _, ok := s.Agent("a"); ok || s.UnknownEvents != 0 {
+		if _, ok := s.Agent(k("a")); ok || s.UnknownEvents != 0 {
 			t.Fatalf("the end revived the agent, or counted it unknown (%d)", s.UnknownEvents)
 		}
 		eq(t, "agents after the end", ids(s.Agents(nowMs)), []string{})
@@ -439,8 +439,8 @@ func TestTimeoutEndOfOldCall(t *testing.T) {
 		// The call ended: when the agent comes back, a replayed start does not open it again.
 		s.Apply(evStatus("local", "a", "working", nowMs))
 		eqChanges(t, "replayed start", s.Apply(start), nil)
-		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{})
-		if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
+		eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{})
+		if c := s.Counters(k("a")); c.Calls != 1 || c.Faults != 0 {
 			t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
 		}
 	})
@@ -455,10 +455,10 @@ func TestTimeoutEndOfOldCall(t *testing.T) {
 		// The agent is active: the end is live, at its last event, and the call shows ??.
 		eqChanges(t, "timeout end", s.Apply(evEnd("local", "a", "c1", nil, nil, nil, nowMs)),
 			[]Change{ended("local", "a", "c1", nowMs-3000, false)})
-		if a, _ := s.Agent("a"); a.LastEventMs != nowMs-3000 {
+		if a, _ := s.Agent(k("a")); a.LastEventMs != nowMs-3000 {
 			t.Fatalf("LastEventMs = %d, want %d", a.LastEventMs, nowMs-3000)
 		}
-		eq(t, "open calls", callIDs(s.OpenCalls("a")), []string{"c2"})
+		eq(t, "open calls", callIDs(s.OpenCalls(k("a"))), []string{"c2"})
 	})
 }
 
@@ -470,7 +470,7 @@ func TestStatusOrderedByEventTime(t *testing.T) {
 	// A call that started before the status time opens, but does not make the agent working.
 	eqChanges(t, "older tool.start", s.Apply(evStart("local", call("a", "c1", withStart(nowMs-15_000)), nowMs-15_000)),
 		[]Change{started("local", "a", "c1", nowMs-15_000, true)})
-	if a, _ := s.Agent("a"); a.Status != "finished" {
+	if a, _ := s.Agent(k("a")); a.Status != "finished" {
 		t.Fatalf("status = %q, want finished", a.Status)
 	}
 	// One log record sends working, its tool events, then idle, all at one time: equal times apply in order.
@@ -481,7 +481,7 @@ func TestStatusOrderedByEventTime(t *testing.T) {
 	// The status time travels through the dormant map.
 	s.Agents(nowMs + 2*DefaultLingerMs + 1000)
 	eqChanges(t, "older status for a dormant agent", s.Apply(evStatus("local", "a", "working", at-1)), nil)
-	if a, ok := s.Agent("a"); !ok || a.Status != "idle" {
+	if a, ok := s.Agent(k("a")); !ok || a.Status != "idle" {
 		t.Fatalf("Agent(a) = status %q, stored %v; want idle, revived", a.Status, ok)
 	}
 	// A snapshot that re-lists the agent keeps the status time.
@@ -505,10 +505,10 @@ func TestCountersSurviveTrim(t *testing.T) {
 		s.Apply(evStart("local", call("a", id)))
 		s.Apply(evEnd("local", "a", id, ptr(true), nil, nil))
 	}
-	if c := s.Counters("a"); c.Calls != 2100 || c.Faults != 0 {
+	if c := s.Counters(k("a")); c.Calls != 2100 || c.Faults != 0 {
 		t.Fatalf("Counters = %+v, want 2100 calls, 0 faults", c)
 	}
-	recent := s.RecentEnded("a", 5000)
+	recent := s.RecentEnded(k("a"), 5000)
 	if len(recent) != 2000 || recent[0].CallID != "c2099" {
 		t.Fatalf("RecentEnded = %d calls, first %q; want 2000, c2099", len(recent), recent[0].CallID)
 	}
@@ -521,35 +521,35 @@ func TestCountersTravelThroughDormancy(t *testing.T) {
 	open := evStart("local", call("a", "c2", withStart(nowMs-3000)), nowMs-3000)
 	s.Apply(open)
 	want := Counters{Calls: 2, Faults: 1, FirstSeenMs: nowMs - 5000}
-	if c := s.Counters("a"); c != want {
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters = %+v, want %+v", c, want)
 	}
 
 	later := nowMs + 2*DefaultLingerMs + 1000
 	s.Agents(later)
-	if c := s.Counters("a"); c != (Counters{}) {
+	if c := s.Counters(k("a")); c != (Counters{}) {
 		t.Fatalf("Counters of a dormant agent = %+v, want zero", c)
 	}
 	s.Apply(evStatus("local", "a", "working", later))
-	if c := s.Counters("a"); c != want {
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters after the sweep = %+v, want %+v", c, want)
 	}
 	// The sweep dropped the open call c2: its tool.start restores it silently and does not count it again.
-	eq(t, "open calls after the sweep", callIDs(s.OpenCalls("a")), []string{})
+	eq(t, "open calls after the sweep", callIDs(s.OpenCalls(k("a"))), []string{})
 	eqChanges(t, "replayed start of a dropped call", s.Apply(open), nil)
-	eq(t, "open calls after the replay", callIDs(s.OpenCalls("a")), []string{"c2"})
-	if c := s.Counters("a"); c != want {
+	eq(t, "open calls after the replay", callIDs(s.OpenCalls(k("a"))), []string{"c2"})
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters after the replay = %+v, want %+v", c, want)
 	}
 	// A snapshot that leaves the agent out keeps its record too.
 	s.Apply(evSnapshot("local", []schema.Agent{agent("other")}, nil))
 	s.Apply(evUpsert("local", agent("a"), later))
-	if c := s.Counters("a"); c != want {
+	if c := s.Counters(k("a")); c != want {
 		t.Fatalf("Counters after the snapshot = %+v, want %+v", c, want)
 	}
 	// Scan events arrive out of order: an older record lowers FirstSeenMs.
 	s.Apply(evStatus("local", "a", "idle", nowMs-9000))
-	if got := s.Counters("a").FirstSeenMs; got != nowMs-9000 {
+	if got := s.Counters(k("a")).FirstSeenMs; got != nowMs-9000 {
 		t.Fatalf("FirstSeenMs = %d, want %d", got, nowMs-9000)
 	}
 }
@@ -561,7 +561,7 @@ func TestFaultsCountOnlyFalse(t *testing.T) {
 		s.Apply(evStart("local", call("a", id)))
 		s.Apply(evEnd("local", "a", id, ok, nil, nil))
 	}
-	if c := s.Counters("a"); c.Calls != 3 || c.Faults != 1 {
+	if c := s.Counters(k("a")); c.Calls != 3 || c.Faults != 1 {
 		t.Fatalf("Counters = %+v, want 3 calls, 1 fault", c)
 	}
 }
@@ -576,20 +576,20 @@ func TestRecentEndedOrdersByEndTime(t *testing.T) {
 	// Ends arrive c2 (end 5 s) then c1 (end 9 s).
 	s.Apply(evEnd("local", "a", "c2", ptr(true), nil, nil, base+5000))
 	s.Apply(evEnd("local", "a", "c1", ptr(true), nil, nil, base+9000))
-	eq(t, "recent", callIDs(s.RecentEnded("a", 10)), []string{"c1", "c2"})
+	eq(t, "recent", callIDs(s.RecentEnded(k("a"), 10)), []string{"c1", "c2"})
 	// c3 ends earliest but arrives last: neither arrival nor insertion order puts it last.
 	s.Apply(evEnd("local", "a", "c3", ptr(true), nil, nil, base+3000))
-	eq(t, "recent", callIDs(s.RecentEnded("a", 10)), []string{"c1", "c2", "c3"})
-	eq(t, "recent 2", callIDs(s.RecentEnded("a", 2)), []string{"c1", "c2"})
+	eq(t, "recent", callIDs(s.RecentEnded(k("a"), 10)), []string{"c1", "c2", "c3"})
+	eq(t, "recent 2", callIDs(s.RecentEnded(k("a"), 2)), []string{"c1", "c2"})
 	// Equal end times: the last inserted first. Open calls are not listed.
 	s.Apply(evStart("local", call("a", "c4", withStart(base+4000)), base+4000))
 	s.Apply(evStart("local", call("a", "c5", withStart(base+4500)), base+4500))
 	s.Apply(evStart("local", call("a", "open", withStart(base+4600)), base+4600))
 	s.Apply(evEnd("local", "a", "c5", ptr(true), nil, nil, base+9000))
 	s.Apply(evEnd("local", "a", "c4", ptr(true), nil, nil, base+9000))
-	eq(t, "recent ties", callIDs(s.RecentEnded("a", 4)), []string{"c5", "c4", "c1", "c2"})
-	eq(t, "recent 0", callIDs(s.RecentEnded("a", 0)), []string{})
-	eq(t, "recent of an unknown agent", callIDs(s.RecentEnded("zz", 5)), []string{})
+	eq(t, "recent ties", callIDs(s.RecentEnded(k("a"), 4)), []string{"c5", "c4", "c1", "c2"})
+	eq(t, "recent 0", callIDs(s.RecentEnded(k("a"), 0)), []string{})
+	eq(t, "recent of an unknown agent", callIDs(s.RecentEnded(k("zz"), 5)), []string{})
 }
 
 func TestOpenCallsNewestFirst(t *testing.T) {
@@ -600,12 +600,12 @@ func TestOpenCallsNewestFirst(t *testing.T) {
 	}{{"c1", nowMs - 3000}, {"c2", nowMs - 1000}, {"c3", nowMs - 2000}} {
 		s.Apply(evStart("local", call("a", c.id, withStart(c.at)), c.at))
 	}
-	eq(t, "open", callIDs(s.OpenCalls("a")), []string{"c2", "c3", "c1"})
+	eq(t, "open", callIDs(s.OpenCalls(k("a"))), []string{"c2", "c3", "c1"})
 	// Equal start times: the last inserted first. An ended call is not open.
 	s.Apply(evStart("local", call("a", "c4", withStart(nowMs-1000)), nowMs-1000))
 	s.Apply(evEnd("local", "a", "c3", ptr(true), nil, nil))
-	eq(t, "open", callIDs(s.OpenCalls("a")), []string{"c4", "c2", "c1"})
-	eq(t, "open calls of an unknown agent", callIDs(s.OpenCalls("zz")), []string{})
+	eq(t, "open", callIDs(s.OpenCalls(k("a"))), []string{"c4", "c2", "c1"})
+	eq(t, "open calls of an unknown agent", callIDs(s.OpenCalls(k("zz"))), []string{})
 }
 
 func TestHostStats(t *testing.T) {
@@ -718,7 +718,7 @@ func TestApplyRecoversFromPanic(t *testing.T) {
 	if got != nil || s.Panics != 1 {
 		t.Fatalf("Apply = %v, Panics = %d; want nil, 1", got, s.Panics)
 	}
-	if a, _ := s.Agent("a"); a.Status != "idle" {
+	if a, _ := s.Agent(k("a")); a.Status != "idle" {
 		t.Fatalf("status = %q, want idle: the envelope is dropped", a.Status)
 	}
 	eqChanges(t, "next envelope", s.Apply(evStatus("local", "a", "working")), []Change{status("local", "a", "working", nowMs, false)})

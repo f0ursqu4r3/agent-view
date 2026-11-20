@@ -36,6 +36,9 @@ type Change struct {
 	History                       bool
 }
 
+// Key returns the key of the agent that the change belongs to.
+func (c Change) Key() AgentKey { return AgentKey{c.Host, c.AgentID} }
+
 // Counters are an agent's totals. They are kept apart from the call list, so
 // trimming calls does not lower them.
 type Counters struct {
@@ -171,21 +174,10 @@ func earliest(h *hostState, iso string, at int64) int64 {
 	return at
 }
 
-// holder returns the first host that stores an agent, and the agent.
-func (s *Store) holder(id string) (*hostState, *agentEntry) {
-	for _, label := range s.hostOrder {
-		h := s.hosts[label]
-		if a, ok := h.agents.Get(id); ok {
-			return h, a
-		}
-	}
-	return nil, nil
-}
-
-// Counters returns the counters of a stored agent, from the first host that has
-// it. A dormant or unknown agent has zero counters.
-func (s *Store) Counters(agentID string) Counters {
-	_, a := s.holder(agentID)
+// Counters returns the counters of a stored agent. A dormant or unknown agent
+// has zero counters.
+func (s *Store) Counters(k AgentKey) Counters {
+	_, a := s.stored(k)
 	if a == nil {
 		return Counters{}
 	}
@@ -194,22 +186,22 @@ func (s *Store) Counters(agentID string) Counters {
 
 // OpenCalls returns the open calls of a stored agent, newest StartMs first; on
 // equal starts, the last stored first. Do not change the calls.
-func (s *Store) OpenCalls(agentID string) []*ViewCall {
-	h, _ := s.holder(agentID)
+func (s *Store) OpenCalls(k AgentKey) []*ViewCall {
+	h, _ := s.stored(k)
 	if h == nil {
 		return nil
 	}
-	return slices.Clone(h.calls.open[agentID])
+	return slices.Clone(h.calls.open[k.ID])
 }
 
 // RecentEnded returns at most n ended calls of a stored agent, newest EndMs
 // first; on equal ends, the last stored first. Do not change the calls.
-func (s *Store) RecentEnded(agentID string, n int) []*ViewCall {
-	h, _ := s.holder(agentID)
+func (s *Store) RecentEnded(k AgentKey, n int) []*ViewCall {
+	h, _ := s.stored(k)
 	if h == nil || n <= 0 {
 		return nil
 	}
-	ended := h.calls.ended[agentID]
+	ended := h.calls.ended[k.ID]
 	return slices.Clone(ended[:min(n, len(ended))])
 }
 

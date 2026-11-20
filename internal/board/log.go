@@ -87,12 +87,12 @@ func (l *Log) FromChange(s *store.Store, c store.Change) {
 	case store.CallEnded:
 		l.toolLine(s, c)
 	case store.AgentAdded:
-		a, ok := s.Agent(c.AgentID)
+		a, ok := s.Agent(c.Key())
 		if !ok || a.ParentID == nil {
 			return
 		}
 		parent := *a.ParentID
-		if p, ok := s.Agent(parent); ok {
+		if p, ok := s.Agent(store.AgentKey{Host: a.Host, ID: parent}); ok { // a parent is on the host of its child
 			parent = p.Name
 		}
 		ln := agentLine(a, c.AtMs, "BOOT", cells.RAgent)
@@ -101,11 +101,11 @@ func (l *Log) FromChange(s *store.Store, c store.Change) {
 	case store.AgentStatus:
 		switch c.Status {
 		case "interrupted":
-			if a, ok := s.Agent(c.AgentID); ok {
+			if a, ok := s.Agent(c.Key()); ok {
 				l.Add(agentLine(a, c.AtMs, "STOP", cells.RFail))
 			}
 		case "finished":
-			if a, ok := s.Agent(c.AgentID); ok {
+			if a, ok := s.Agent(c.Key()); ok {
 				l.Add(agentLine(a, c.AtMs, "DONE", cells.RDim))
 			}
 		}
@@ -134,11 +134,11 @@ func agentLine(a store.ViewAgent, atMs int64, label string, role cells.Role) Log
 // toolLine adds the line of an ended call. A call the store no longer holds
 // writes no line.
 func (l *Log) toolLine(s *store.Store, c store.Change) {
-	a, ok := s.Agent(c.AgentID)
+	a, ok := s.Agent(c.Key())
 	if !ok {
 		return
 	}
-	call := findEnded(s, c.AgentID, c.CallID)
+	call := findEnded(s, c.Key(), c.CallID)
 	if call == nil {
 		return
 	}
@@ -170,9 +170,9 @@ func (l *Log) toolLine(s *store.Store, c store.Change) {
 
 // findEnded returns the ended call of an agent by ID. The call that just
 // ended is usually among the newest, so a short list comes first.
-func findEnded(s *store.Store, agentID, callID string) *store.ViewCall {
+func findEnded(s *store.Store, k store.AgentKey, callID string) *store.ViewCall {
 	for _, n := range []int{16, 2_000} {
-		for _, c := range s.RecentEnded(agentID, n) {
+		for _, c := range s.RecentEnded(k, n) {
 			if c.CallID == callID {
 				return c
 			}

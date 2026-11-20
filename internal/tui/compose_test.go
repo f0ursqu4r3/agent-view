@@ -287,7 +287,7 @@ func TestComposeDemoSnapshot(t *testing.T) {
 		if a.Status == "working" {
 			st.Working++
 		}
-		st.Faults += s.Counters(a.ID).Faults
+		st.Faults += s.Counters(a.Key()).Faults
 	}
 	for _, at := range starts {
 		if now-at <= 60_000 {

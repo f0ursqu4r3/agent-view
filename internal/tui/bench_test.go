@@ -205,7 +205,7 @@ func frames(b *testing.B, st *stress) {
 	// The store must not drift with b.N: about 10 open calls, a full history on every host.
 	open := 0
 	for _, id := range st.agents {
-		open += len(st.s.OpenCalls(id))
+		open += len(st.s.OpenCalls(store.AgentKey{Host: st.hostOf[id], ID: id}))
 	}
 	if open != 10 || !st.full() {
 		b.Fatalf("store drifted: %d open calls, hosts full = %v", open, st.full())

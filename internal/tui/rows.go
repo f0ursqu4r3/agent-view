@@ -43,23 +43,24 @@ type rowPlan struct {
 func planRows(in Input, rows []board.Row, w int, eng *anim.Engine) []*rowPlan {
 	s := in.Store
 	plans := make([]*rowPlan, 0, len(rows))
-	parents := map[string]bool{}
+	parents := map[store.AgentKey]bool{}
 	for i, r := range rows {
-		a, _ := s.Agent(r.AgentID) // board.Rows keeps only stored agents
+		a, _ := s.Agent(store.AgentKey{Host: r.Host, ID: r.AgentID}) // board.Rows keeps only stored agents
 		if a.ParentID != nil {
-			parents[*a.ParentID] = true
+			parents[store.AgentKey{Host: a.Host, ID: *a.ParentID}] = true // a parent is on the host of its child
 		}
 		plans = append(plans, &rowPlan{row: r, rows: rows, index: i, w: w, agent: a, target: r.H})
 	}
 	for _, p := range plans {
 		id := p.row.AgentID
-		p.hasKids = parents[id]
-		p.open = s.OpenCalls(id)
+		k := store.AgentKey{Host: p.row.Host, ID: id}
+		p.hasKids = parents[k]
+		p.open = s.OpenCalls(k)
 		histN := 0
 		if p.row.Full {
 			histN = board.HistoryCount(w-2*marginX, p.row.Sub)
 		}
-		ended := s.RecentEnded(id, histN+2)
+		ended := s.RecentEnded(k, histN+2)
 		// The shown call is the newest open call, else the last ended one;
 		// the call before it is the next in that same order.
 		cands := append(append([]*store.ViewCall(nil), p.open...), ended...)
@@ -223,7 +224,7 @@ func drawFull(in Input, p *rowPlan, g *cells.Grid, head int) {
 	a := p.agent
 	x := p.cardX()
 	g.Blit(cards.AgentCard(cards.AgentIn{
-		Agent: a, State: p.state(in), Counters: in.Store.Counters(a.ID), Now: in.Now,
+		Agent: a, State: p.state(in), Counters: in.Store.Counters(a.Key()), Now: in.Now,
 		HasSubs: p.hasSubRow(), Selected: in.UI.Selected == a.ID, Focused: in.UI.Focus == a.ID,
 	}), x, head)
 

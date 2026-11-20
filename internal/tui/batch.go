@@ -32,11 +32,11 @@ type liveChange struct {
 // height settled, so the row does not grow or shrink on screen.
 func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 	now := m.nowMs()
-	var ids []string
-	var before map[string]string
+	var keys []store.AgentKey
+	var before map[store.AgentKey]string
 	if !m.ui.Paused {
-		ids = callAgents(envs)
-		before = m.shownCalls(ids)
+		keys = callAgents(envs)
+		before = m.shownCalls(keys)
 	}
 	var live []liveChange
 	histOnly := map[string]bool{} // agent → no live change in this batch
@@ -71,11 +71,11 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		}
 	}
 	if len(live) > 0 {
-		after := m.shownCalls(ids)
+		after := m.shownCalls(keys)
 		for _, lc := range live {
 			c := lc.c
 			m.known[c.AgentID] = true
-			m.animate(c, lc.failed, after[c.AgentID] != before[c.AgentID], after[c.AgentID] == c.CallID)
+			m.animate(c, lc.failed, after[c.Key()] != before[c.Key()], after[c.Key()] == c.CallID)
 		}
 	}
 	for id, only := range histOnly {
@@ -107,7 +107,7 @@ func (m *Model) animate(c store.Change, failed, shownChanged, shown bool) {
 			m.anim.OnFail(c.AgentID)
 		}
 	case store.AgentAdded:
-		a, ok := m.store.Agent(c.AgentID)
+		a, ok := m.store.Agent(c.Key())
 		m.anim.OnAgentAdded(c.AgentID, ok && a.ParentID != nil)
 	case store.AgentStatus:
 		if c.Status == "interrupted" {
@@ -116,40 +116,42 @@ func (m *Model) animate(c store.Change, failed, shownChanged, shown bool) {
 	}
 }
 
-// callAgents returns the agents whose calls a batch may start or end.
-func callAgents(envs []schema.Envelope) []string {
-	var ids []string
-	add := func(id string) {
-		if id != "" && !slices.Contains(ids, id) {
-			ids = append(ids, id)
+// callAgents returns the agents whose calls a batch may start or end. An agent
+// is on the host of the envelope.
+func callAgents(envs []schema.Envelope) []store.AgentKey {
+	var keys []store.AgentKey
+	add := func(host, id string) {
+		k := store.AgentKey{Host: host, ID: id}
+		if id != "" && !slices.Contains(keys, k) {
+			keys = append(keys, k)
 		}
 	}
 	for _, e := range envs {
 		switch e.Kind {
 		case "tool.start":
 			if e.Call != nil {
-				add(e.Call.AgentID)
+				add(e.Host, e.Call.AgentID)
 			}
 		case "tool.end":
-			add(e.AgentID)
+			add(e.Host, e.AgentID)
 		case "snapshot":
 			for _, c := range e.OpenCalls {
-				add(c.AgentID)
+				add(e.Host, c.AgentID)
 			}
 		}
 	}
-	return ids
+	return keys
 }
 
 // shownCalls returns the call on the call card of each agent: the newest
 // open call, else the newest ended one, else "".
-func (m *Model) shownCalls(ids []string) map[string]string {
-	out := make(map[string]string, len(ids))
-	for _, id := range ids {
-		if open := m.store.OpenCalls(id); len(open) > 0 {
-			out[id] = open[0].CallID
-		} else if ended := m.store.RecentEnded(id, 1); len(ended) > 0 {
-			out[id] = ended[0].CallID
+func (m *Model) shownCalls(keys []store.AgentKey) map[store.AgentKey]string {
+	out := make(map[store.AgentKey]string, len(keys))
+	for _, k := range keys {
+		if open := m.store.OpenCalls(k); len(open) > 0 {
+			out[k] = open[0].CallID
+		} else if ended := m.store.RecentEnded(k, 1); len(ended) > 0 {
+			out[k] = ended[0].CallID
 		}
 	}
 	return out

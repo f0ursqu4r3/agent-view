@@ -199,8 +199,8 @@ func (m *Model) nowMs() int64 { return m.now().UnixMilli() }
 
 // anyOpen reports whether an agent on the board has an open call.
 func (m *Model) anyOpen(now int64) bool {
-	for _, id := range m.store.LaneOrder(now) {
-		if len(m.store.OpenCalls(id)) > 0 {
+	for _, k := range m.store.LaneOrder(now) {
+		if len(m.store.OpenCalls(k)) > 0 {
 			return true
 		}
 	}
@@ -294,8 +294,8 @@ func (m *Model) fixTop(now int64) {
 func (m *Model) prune(now int64) {
 	order := m.store.LaneOrder(now)
 	present := make(map[string]bool, len(order))
-	for _, id := range order {
-		present[id] = true
+	for _, k := range order {
+		present[k.ID] = true
 	}
 	for id := range m.known {
 		if !present[id] {
@@ -303,8 +303,8 @@ func (m *Model) prune(now int64) {
 			delete(m.known, id)
 		}
 	}
-	for _, id := range order {
-		m.known[id] = true
+	for _, k := range order {
+		m.known[k.ID] = true
 	}
 	if !present[m.ui.Focus] {
 		m.ui.Focus = ""

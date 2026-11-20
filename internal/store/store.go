@@ -49,6 +49,11 @@ type Options struct {
 	FileTTLMs      int64
 }
 
+// AgentKey identifies an agent: the label of its host and its ID. Two hosts may
+// use the same ID. Do not join the two strings into one: the labels and the IDs
+// may hold any character, so two keys can join to the same string.
+type AgentKey struct{ Host, ID string }
+
 // ViewAgent is a stored agent. LastEventMs is skew-corrected, and LastEventAt holds the same time.
 type ViewAgent struct {
 	schema.Agent
@@ -56,6 +61,9 @@ type ViewAgent struct {
 	LastEventMs int64
 	Stale       bool
 }
+
+// Key returns the key of the agent.
+func (a ViewAgent) Key() AgentKey { return AgentKey{a.Host, a.ID} }
 
 // ViewCall is a stored call. EndMs is valid only when Ended.
 type ViewCall struct {
@@ -69,6 +77,9 @@ type ViewCall struct {
 	OutputTruncated bool
 	seq             uint64 // order of storing within the host, for ties
 }
+
+// Key returns the key of the agent that made the call.
+func (c *ViewCall) Key() AgentKey { return AgentKey{c.Host, c.AgentID} }
 
 // Store applies envelopes and answers the board's queries. It is not safe for concurrent use.
 type Store struct {
@@ -200,25 +211,39 @@ func (s *Store) Agents(now int64) []ViewAgent {
 	return out
 }
 
-// Agent returns a stored agent, present or not, from the first host that has it.
-// Stale is computed at Options.Now. A dormant agent is not returned.
-func (s *Store) Agent(id string) (ViewAgent, bool) {
-	for _, label := range s.hostOrder {
-		if a, ok := s.hosts[label].agents.Get(id); ok {
-			v := ViewAgent{Agent: a.agent, Host: label, LastEventMs: a.lastEventMs}
-			v.LastEventAt = wire.FormatISO(a.lastEventMs)
-			v.Stale = lifecycle.IsStale(a.agent.Status, a.lastEventMs, s.now(), s.lc)
-			return v, true
-		}
+// Agent returns a stored agent of the host, present or not. Stale is computed at
+// Options.Now. A dormant agent is not returned, and neither is an agent of an
+// unknown host.
+func (s *Store) Agent(k AgentKey) (ViewAgent, bool) {
+	_, a := s.stored(k)
+	if a == nil {
+		return ViewAgent{}, false
 	}
-	return ViewAgent{}, false
+	v := ViewAgent{Agent: a.agent, Host: k.Host, LastEventMs: a.lastEventMs}
+	v.LastEventAt = wire.FormatISO(a.lastEventMs)
+	v.Stale = lifecycle.IsStale(a.agent.Status, a.lastEventMs, s.now(), s.lc)
+	return v, true
 }
 
-// LaneOrder returns the present agent IDs: hosts by first appearance; main
-// agents, each followed by its sub-agents depth first.
-func (s *Store) LaneOrder(now int64) []string {
+// stored returns the host state and the stored agent of a key, or nil and nil.
+// A dormant agent is not stored.
+func (s *Store) stored(k AgentKey) (*hostState, *agentEntry) {
+	h := s.hosts[k.Host]
+	if h == nil {
+		return nil, nil
+	}
+	a, ok := h.agents.Get(k.ID)
+	if !ok {
+		return nil, nil
+	}
+	return h, a
+}
+
+// LaneOrder returns the keys of the present agents: hosts by first appearance;
+// main agents, each followed by its sub-agents depth first.
+func (s *Store) LaneOrder(now int64) []AgentKey {
 	s.sweep(now)
-	var out []string
+	var out []AgentKey
 	for _, label := range s.hostOrder {
 		h := s.hosts[label]
 		present := slices.Clone(s.presentAgents(h, now))
@@ -241,7 +266,7 @@ func (s *Store) LaneOrder(now int64) []string {
 				return
 			}
 			seen[id] = true
-			out = append(out, id)
+			out = append(out, AgentKey{label, id})
 			for _, k := range children[id] {
 				walk(k)
 			}

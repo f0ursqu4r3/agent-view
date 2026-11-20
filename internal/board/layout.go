@@ -55,27 +55,27 @@ const (
 // its call card with MaxOutputLines, plus the "where" line and a blank line.
 func Rows(s *store.Store, ui UI, now int64) []Row {
 	order := s.LaneOrder(now)
-	present := make(map[string]bool, len(order))
-	for _, id := range order {
-		present[id] = true
+	present := make(map[store.AgentKey]bool, len(order))
+	for _, k := range order {
+		present[k] = true
 	}
 
 	rows := make([]Row, 0, len(order))
-	parents := make([]string, 0, len(order)) // parent ID of each row, "" for none
+	parents := make([]store.AgentKey, 0, len(order)) // key of the parent of each row, the zero key for none
 	hosts := map[string]bool{}
-	for _, id := range order {
-		a, ok := s.Agent(id)
+	for _, k := range order {
+		a, ok := s.Agent(k)
 		if !ok {
 			continue
 		}
-		r := Row{AgentID: id, Host: a.Host}
-		parent := ""
-		if a.ParentID != nil && present[*a.ParentID] {
-			parent = *a.ParentID
+		r := Row{AgentID: a.ID, Host: a.Host}
+		var parent store.AgentKey
+		if a.ParentID != nil && present[store.AgentKey{Host: a.Host, ID: *a.ParentID}] { // a parent is on the host of its child
+			parent = store.AgentKey{Host: a.Host, ID: *a.ParentID}
 			r.Sub = true
 			r.SessionLink = a.Link == "session"
 		}
-		r.Full = id == ui.Selected || id == ui.Focus || isActive(s, id, now)
+		r.Full = a.ID == ui.Selected || a.ID == ui.Focus || isActive(s, k, now)
 		rows = append(rows, r)
 		parents = append(parents, parent)
 		hosts[a.Host] = true
@@ -102,7 +102,7 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 		r.H = collapsedHeight
 		switch {
 		case r.Full && r.AgentID == ui.Focus:
-			r.H = focusedHeight(s, r.AgentID)
+			r.H = focusedHeight(s, store.AgentKey{Host: r.Host, ID: r.AgentID})
 		case r.Full:
 			r.H = fullHeight
 		}
@@ -118,11 +118,11 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 // focusedHeight returns the height of the focused agent's full row: its
 // call card (the newest open call, else the newest ended call) as the
 // focused card draws it, then the "where" line and a blank line.
-func focusedHeight(s *store.Store, id string) int {
+func focusedHeight(s *store.Store, k store.AgentKey) int {
 	var shown *store.ViewCall
-	if open := s.OpenCalls(id); len(open) > 0 {
+	if open := s.OpenCalls(k); len(open) > 0 {
 		shown = open[0]
-	} else if ended := s.RecentEnded(id, 1); len(ended) > 0 {
+	} else if ended := s.RecentEnded(k, 1); len(ended) > 0 {
 		shown = ended[0]
 	}
 	return cards.CallCardHeight(shown, cards.MaxOutputLines) + fullHeight - cards.CallH
@@ -130,11 +130,11 @@ func focusedHeight(s *store.Store, id string) int {
 
 // isActive reports whether the agent has an open call or a call that ended
 // within the last 60 s. A call that ended exactly 60 s ago still counts.
-func isActive(s *store.Store, id string, now int64) bool {
-	if len(s.OpenCalls(id)) > 0 {
+func isActive(s *store.Store, k store.AgentKey, now int64) bool {
+	if len(s.OpenCalls(k)) > 0 {
 		return true
 	}
-	if ended := s.RecentEnded(id, 1); len(ended) > 0 {
+	if ended := s.RecentEnded(k, 1); len(ended) > 0 {
 		return now-ended[0].EndMs <= recentEndedMs
 	}
 	return false

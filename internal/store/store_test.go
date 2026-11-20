@@ -182,11 +182,30 @@ func storedCall(s *Store, agentID, callID string) *ViewCall {
 }
 
 // openCall is the newest open call of an agent, like ViewerStore.openCall.
-func openCall(s *Store, agentID string) *ViewCall {
-	if open := s.OpenCalls(agentID); len(open) > 0 {
+func openCall(s *Store, key AgentKey) *ViewCall {
+	if open := s.OpenCalls(key); len(open) > 0 {
 		return open[0]
 	}
 	return nil
+}
+
+// k is the key of an agent on the host "local", which most tests use.
+func k(id string) AgentKey { return AgentKey{"local", id} }
+
+// ks returns the keys of agents on one host.
+func ks(host string, ids ...string) []AgentKey {
+	out := make([]AgentKey, len(ids))
+	for i, id := range ids {
+		out[i] = AgentKey{host, id}
+	}
+	return out
+}
+
+func eqKeys(t *testing.T, what string, got, want []AgentKey) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Fatalf("%s = %v, want %v", what, got, want)
+	}
 }
 
 func ids(agents []ViewAgent) []string {
@@ -241,10 +260,10 @@ func TestSnapshotReplacesHostState(t *testing.T) {
 	s.Apply(evSnapshot("h1", []schema.Agent{agent("n")}, nil))
 	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"n", "z"})
 	eq(t, "calls", storedCallIDs(s), []string{"c9"})
-	if c := openCall(s, "z"); c == nil || c.CallID != "c9" {
+	if c := openCall(s, AgentKey{"h2", "z"}); c == nil || c.CallID != "c9" {
 		t.Fatalf("openCall(z) = %+v, want c9", c)
 	}
-	if c := openCall(s, "a"); c != nil {
+	if c := openCall(s, AgentKey{"h1", "a"}); c != nil {
 		t.Fatalf("openCall(a) = %+v, want nil", c)
 	}
 }
@@ -253,18 +272,18 @@ func TestSnapshotReplacesHostState(t *testing.T) {
 func TestToolLifecycle(t *testing.T) {
 	s := seeded(t)
 	s.Apply(evStart("local", call("a", "c1", withStart(nowMs-3000), withCategory("edit"), withFiles("/p/a.ts")), nowMs-3000))
-	c := openCall(s, "a")
+	c := openCall(s, k("a"))
 	if c == nil || c.Ended || c.StartMs != nowMs-3000 {
 		t.Fatalf("open call = %+v, want open, start %d", c, nowMs-3000)
 	}
 	s.Apply(evUpdate("local", "a", "c1", []string{"/p/b.ts"}, nowMs-2000))
-	eq(t, "files", openCall(s, "a").Files, []string{"/p/a.ts", "/p/b.ts"})
+	eq(t, "files", openCall(s, k("a")).Files, []string{"/p/a.ts", "/p/b.ts"})
 	s.Apply(evEnd("local", "a", "c1", ptr(true), nil, nil, nowMs-1000))
 	c = storedCall(s, "a", "c1")
 	if !c.Ended || c.EndMs != nowMs-1000 || c.Ok == nil || !*c.Ok {
 		t.Fatalf("ended call = %+v, want ended at %d ok true", c, nowMs-1000)
 	}
-	if c := openCall(s, "a"); c != nil {
+	if c := openCall(s, k("a")); c != nil {
 		t.Fatalf("openCall(a) = %+v, want nil", c)
 	}
 	if a := find(t, s.Agents(nowMs), "a"); a.Status != "working" {
@@ -340,11 +359,11 @@ func TestLaneOrderNestsSubAgents(t *testing.T) {
 		agent("orphan", withParent("missing")),
 	}, nil))
 	s.Apply(evSnapshot("h2", []schema.Agent{agent("x1")}, nil))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"m1", "s2", "g1", "s1", "m2", "orphan", "x1"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), slices.Concat(ks("h1", "m1", "s2", "g1", "s1", "m2", "orphan"), ks("h2", "x1")))
 	// agents seen later go after earlier ones
 	s.Apply(evUpsert("h1", agent("m0")))
 	s.Apply(evUpsert("h1", agent("s3", withParent("m2"))))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"m1", "s2", "g1", "s1", "m2", "s3", "orphan", "m0", "x1"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), slices.Concat(ks("h1", "m1", "s2", "g1", "s1", "m2", "s3", "orphan", "m0"), ks("h2", "x1")))
 }
 
 // Go only: an agent that is its own parent is a main agent; a parent cycle stays visible.
@@ -357,7 +376,7 @@ func TestLaneOrderKeepsParentCycles(t *testing.T) {
 		agent("c1", withParent("c2")),
 		agent("c2", withParent("c1")),
 	}, nil))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"self", "m2", "c1", "c2"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "self", "m2", "c1", "c2"))
 }
 
 // TS: "hosts, coverage, demo flag and focus" (focus is not ported; Hosts is first appearance, not setHosts).
@@ -462,23 +481,23 @@ func TestIdleAgentsDropped(t *testing.T) {
 	if n := storedAgentCount(s); n != 5 {
 		t.Fatalf("stored = %d, want 5", n)
 	}
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"fresh", "parent", "kid"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "fresh", "parent", "kid"))
 	// 'dead' is gone; the old parent stays for its present child; 'mid' (1.5x linger) stays stored but absent
 	if n := storedAgentCount(s); n != 4 {
 		t.Fatalf("stored = %d, want 4", n)
 	}
 	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"fresh", "kid", "parent"})
-	if c := openCall(s, "dead"); c != nil {
+	if c := openCall(s, k("dead")); c != nil {
 		t.Fatalf("openCall(dead) = %+v, want nil", c)
 	}
 	eq(t, "calls", storedCallIDs(s), []string{})
 	// later, the stale ones go too
-	eq(t, "lanes", s.LaneOrder(nowMs+2_000), []string{"fresh", "parent", "kid"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs+2_000), ks("local", "fresh", "parent", "kid"))
 	if n := storedAgentCount(s); n != 4 {
 		t.Fatalf("stored = %d, want 4", n)
 	}
 	s.Apply(evUpsert("local", agent("dead", withLastAt(nowMs))))
-	if !slices.Contains(s.LaneOrder(nowMs+3_000), "dead") {
+	if !slices.Contains(s.LaneOrder(nowMs+3_000), k("dead")) {
 		t.Fatal("dead not back after upsert")
 	}
 	// sweep runs at most once per second of now
@@ -593,18 +612,18 @@ func TestDormantAgentRevives(t *testing.T) {
 	if n := storedAgentCount(s); n != 1 {
 		t.Fatalf("stored = %d, want 1", n)
 	}
-	if _, ok := s.Agent("old"); ok {
+	if _, ok := s.Agent(k("old")); ok {
 		t.Fatal("dormant agent returned by Agent")
 	}
 
 	s.Apply(evStart("local", call("old", "c1")))
 	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"keep", "old"})
 	// 'old' keeps its rank; a new rank would put it after 'keep'.
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"old", "keep"})
-	if a, ok := s.Agent("old"); !ok || a.Status != "working" || a.Host != "local" {
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "old", "keep"))
+	if a, ok := s.Agent(k("old")); !ok || a.Status != "working" || a.Host != "local" {
 		t.Fatalf("Agent(old) = %+v %v, want working on local", a, ok)
 	}
-	if c := openCall(s, "old"); c == nil || c.CallID != "c1" {
+	if c := openCall(s, k("old")); c == nil || c.CallID != "c1" {
 		t.Fatalf("openCall(old) = %+v, want c1", c)
 	}
 	if s.UnknownEvents != 0 || s.hosts["local"].dormant.Len() != 0 {
@@ -616,7 +635,7 @@ func TestDormantAgentRevives(t *testing.T) {
 func TestUnknownAgentEventDropped(t *testing.T) {
 	s := seeded(t)
 	s.Apply(evStart("local", call("zz", "c1", withFiles("/p/z.ts"))))
-	if _, ok := s.Agent("zz"); ok {
+	if _, ok := s.Agent(k("zz")); ok {
 		t.Fatal("unknown agent stored")
 	}
 	eq(t, "agents", ids(s.Agents(nowMs)), []string{"a"})
@@ -656,11 +675,11 @@ func TestDormantAncestorsReviveWithChild(t *testing.T) {
 	eq(t, "agents", ids(s.Agents(nowMs)), []string{"x"})
 
 	s.Apply(evStart("local", call("K", "k1")))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"P", "K", "x"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "P", "K", "x"))
 	eq(t, "agents", sortedIDs(s.Agents(nowMs)), []string{"K", "P", "x"})
 
 	s.Apply(evStatus("local", "c1", "working"))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"P", "K", "x", "c1", "c2"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "P", "K", "x", "c1", "c2"))
 	if n := s.hosts["local"].dormant.Len(); n != 0 || s.UnknownEvents != 0 {
 		t.Fatalf("dormant %d unknown %d, want 0 0", n, s.UnknownEvents)
 	}
@@ -674,8 +693,8 @@ func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 	s.Apply(evSnapshot("local", []schema.Agent{agent("old", withLastAt(idle)), agent("keep")}, nil))
 	s.Agents(nowMs)
 	s.Apply(evUpsert("local", agent("old", withStatus("working"), withLastAt(nowMs))))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"old", "keep"})
-	if a, _ := s.Agent("old"); a.Status != "idle" {
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "old", "keep"))
+	if a, _ := s.Agent(k("old")); a.Status != "idle" {
 		t.Fatalf("status = %q, want the tracked idle", a.Status)
 	}
 
@@ -685,7 +704,7 @@ func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 	s.Agents(nowMs)
 	s.Apply(evUpsert("local", agent("new")))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("keep"), agent("new"), agent("old")}, nil))
-	eq(t, "lanes", s.LaneOrder(nowMs), []string{"old", "keep", "new"})
+	eqKeys(t, "lanes", s.LaneOrder(nowMs), ks("local", "old", "keep", "new"))
 	if n := s.hosts["local"].dormant.Len(); n != 0 {
 		t.Fatalf("dormant = %d, want 0", n)
 	}
@@ -709,7 +728,7 @@ func TestDormantCapDropsOldest(t *testing.T) {
 		t.Fatalf("UnknownEvents = %d, want 1 (d0 was the oldest)", s.UnknownEvents)
 	}
 	s.Apply(evStatus("local", "d1", "working"))
-	if _, ok := s.Agent("d1"); !ok || s.UnknownEvents != 1 {
+	if _, ok := s.Agent(k("d1")); !ok || s.UnknownEvents != 1 {
 		t.Fatalf("d1 not revived; UnknownEvents = %d", s.UnknownEvents)
 	}
 }
@@ -766,5 +785,115 @@ func TestUnattributedTouchBookkeeping(t *testing.T) {
 	s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil))
 	if len(h.held) != 0 || h.recent.Len() != 0 {
 		t.Fatalf("after snapshot: held %d recent %d", len(h.held), h.recent.Len())
+	}
+}
+
+// TestAgentLookupByHostAndID: two hosts that hold an agent with the same ID
+// keep their own agent, calls and counters. A lookup by host and ID answers
+// from that host only; an unknown host or an unknown ID gives the zero value.
+func TestAgentLookupByHostAndID(t *testing.T) {
+	s := newStore(t, Options{Now: fixed(nowMs)})
+	for _, h := range []string{"box", "box#2"} {
+		s.Apply(evHello(h, nowMs, false))
+	}
+	first, second := agent("s1"), agent("s1")
+	first.Name, second.Name = "first", "second"
+	s.Apply(evSnapshot("box", []schema.Agent{first}, nil))
+	s.Apply(evSnapshot("box#2", []schema.Agent{second}, nil))
+	// box: one open call and one ended call. box#2: one open call and two ended calls, one of them a fault.
+	s.Apply(evStart("box", call("s1", "open1", withStart(nowMs-3000)), nowMs-3000))
+	s.Apply(evStart("box", call("s1", "done1", withStart(nowMs-2000)), nowMs-2000))
+	s.Apply(evEnd("box", "s1", "done1", ptr(true), nil, nil, nowMs-1000))
+	s.Apply(evStart("box#2", call("s1", "open2", withStart(nowMs-3000)), nowMs-3000))
+	s.Apply(evStart("box#2", call("s1", "done2", withStart(nowMs-2500)), nowMs-2500))
+	s.Apply(evEnd("box#2", "s1", "done2", ptr(true), nil, nil, nowMs-2000))
+	s.Apply(evStart("box#2", call("s1", "fail2", withStart(nowMs-2000)), nowMs-2000))
+	s.Apply(evEnd("box#2", "s1", "fail2", ptr(false), nil, nil, nowMs-1000))
+
+	for _, tc := range []struct {
+		key           AgentKey
+		name          string
+		open, ended   []string
+		calls, faults int
+	}{
+		{AgentKey{"box", "s1"}, "first", []string{"open1"}, []string{"done1"}, 2, 0},
+		{AgentKey{"box#2", "s1"}, "second", []string{"open2"}, []string{"fail2", "done2"}, 3, 1},
+	} {
+		a, ok := s.Agent(tc.key)
+		if !ok || a.Name != tc.name || a.Host != tc.key.Host || a.ID != tc.key.ID {
+			t.Errorf("Agent(%v) = %q on %q (found %v), want %q on %q", tc.key, a.Name, a.Host, ok, tc.name, tc.key.Host)
+		}
+		if got := a.Key(); got != tc.key {
+			t.Errorf("Agent(%v).Key() = %v", tc.key, got)
+		}
+		eq(t, fmt.Sprintf("open calls of %v", tc.key), callIDs(s.OpenCalls(tc.key)), tc.open)
+		eq(t, fmt.Sprintf("ended calls of %v", tc.key), callIDs(s.RecentEnded(tc.key, 5)), tc.ended)
+		for _, c := range append(s.OpenCalls(tc.key), s.RecentEnded(tc.key, 5)...) {
+			if c.Host != tc.key.Host || c.Key() != tc.key {
+				t.Errorf("call %s of %v has host %q, key %v", c.CallID, tc.key, c.Host, c.Key())
+			}
+		}
+		if c := s.Counters(tc.key); c.Calls != tc.calls || c.Faults != tc.faults {
+			t.Errorf("Counters(%v) = %+v, want %d calls, %d faults", tc.key, c, tc.calls, tc.faults)
+		}
+	}
+
+	for _, key := range []AgentKey{{"nohost", "s1"}, {"box", "nope"}, {"box#2", "nope"}, {"", ""}} {
+		if a, ok := s.Agent(key); ok || a.ID != "" || a.Host != "" {
+			t.Errorf("Agent(%v) = %+v, %v; want the zero value", key, a, ok)
+		}
+		if got := s.OpenCalls(key); len(got) != 0 {
+			t.Errorf("OpenCalls(%v) = %v, want none", key, callIDs(got))
+		}
+		if got := s.RecentEnded(key, 5); len(got) != 0 {
+			t.Errorf("RecentEnded(%v) = %v, want none", key, callIDs(got))
+		}
+		if c := s.Counters(key); c != (Counters{}) {
+			t.Errorf("Counters(%v) = %+v, want zero", key, c)
+		}
+	}
+}
+
+// TestAgentKeysDoNotJoinStrings: host "a" with ID "b/c" and host "a/b" with ID
+// "c" give the same string when joined with a slash. They are two agents.
+func TestAgentKeysDoNotJoinStrings(t *testing.T) {
+	s := newStore(t, Options{Now: fixed(nowMs)})
+	s.Apply(evHello("a", nowMs, false))
+	s.Apply(evHello("a/b", nowMs, false))
+	one, two := agent("b/c"), agent("c")
+	one.Name, two.Name = "one", "two"
+	s.Apply(evSnapshot("a", []schema.Agent{one}, nil))
+	s.Apply(evSnapshot("a/b", []schema.Agent{two}, nil))
+
+	if got := len(s.Agents(nowMs)); got != 2 {
+		t.Fatalf("%d agents, want 2", got)
+	}
+	want := []AgentKey{{"a", "b/c"}, {"a/b", "c"}}
+	if got := s.LaneOrder(nowMs); !slices.Equal(got, want) {
+		t.Fatalf("lane order = %v, want %v", got, want)
+	}
+	for i, key := range want {
+		if a, ok := s.Agent(key); !ok || a.Name != []string{"one", "two"}[i] {
+			t.Errorf("Agent(%v) = %q (found %v), want %q", key, a.Name, ok, []string{"one", "two"}[i])
+		}
+	}
+	for _, key := range []AgentKey{{"a", "c"}, {"a/b", "b/c"}, {"a/b/c", ""}, {"", "a/b/c"}} {
+		if a, ok := s.Agent(key); ok {
+			t.Errorf("Agent(%v) = %q, want none", key, a.Name)
+		}
+	}
+}
+
+// TestLaneOrderHasKeys: two hosts with equal agent IDs give two keys, hosts in
+// order of first appearance.
+func TestLaneOrderHasKeys(t *testing.T) {
+	s := newStore(t, Options{Now: fixed(nowMs)})
+	s.Apply(evHello("box", nowMs, false))
+	s.Apply(evHello("box#2", nowMs, false))
+	s.Apply(evSnapshot("box", []schema.Agent{agent("s1")}, nil))
+	s.Apply(evSnapshot("box#2", []schema.Agent{agent("s1")}, nil))
+	want := []AgentKey{{"box", "s1"}, {"box#2", "s1"}}
+	if got := s.LaneOrder(nowMs); !slices.Equal(got, want) {
+		t.Fatalf("lane order = %v, want %v", got, want)
 	}
 }

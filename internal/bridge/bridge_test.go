@@ -391,7 +391,7 @@ func TestBridgeResyncAfterOverflow(t *testing.T) {
 				return false, "store has agent " + a.ID
 			}
 			var got []string
-			for _, c := range st.OpenCalls(a.ID) {
+			for _, c := range st.OpenCalls(a.Key()) {
 				got = append(got, c.CallID)
 			}
 			want := wantCalls[a.ID]

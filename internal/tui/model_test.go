@@ -401,7 +401,7 @@ func TestModelPauseKeepsStore(t *testing.T) {
 	f.batch(endEnv("a", "c1", false, f.clock))
 	f.send(clockMsg{})
 
-	if got := f.s.RecentEnded("a", 1); len(got) != 1 || got[0].CallID != "c1" {
+	if got := f.s.RecentEnded(store.AgentKey{Host: "devbox", ID: "a"}, 1); len(got) != 1 || got[0].CallID != "c1" {
 		t.Fatalf("store lacks the call: %+v", got)
 	}
 	if f.m.log.Len() != lines {
@@ -670,8 +670,8 @@ func TestEqualAgentIDsOnTwoHosts(t *testing.T) {
 	if len(agents) != 2 || agents[0].Host != "box" || agents[1].Host != "box#2" || agents[0].ID != "session-1" || agents[1].ID != "session-1" {
 		t.Fatalf("agents = %+v, want session-1 on box and on box#2", agents)
 	}
-	if got := f.s.LaneOrder(f.clock); !reflect.DeepEqual(got, []string{"session-1", "session-1"}) {
-		t.Fatalf("lane order = %q, want two rows", got)
+	if got, want := f.s.LaneOrder(f.clock), []store.AgentKey{{Host: "box", ID: "session-1"}, {Host: "box#2", ID: "session-1"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("lane order = %v, want %v", got, want)
 	}
 	cards := 0
 	for _, l := range f.lines() {
@@ -693,11 +693,9 @@ func TestEqualAgentIDsOnTwoHosts(t *testing.T) {
 	}
 	f.press("esc")
 
-	// The rows lay out as the label says only when the store looks up an
-	// agent by host and ID. It looks up by ID alone, so both rows show the
-	// first host's agent, and the board has no header for box#2.
+	// A row shows the agent of its own host: the store looks up an agent by
+	// host and ID, so box#2 has its header and its own call on the board.
 	t.Run("rows show their own host", func(t *testing.T) {
-		t.Skip("known gap: Store.Agent, OpenCalls, RecentEnded and Counters take an agent ID alone and answer from the first host that has it")
 		for _, s := range []string{"box#2 ─", "box2.go"} { // the host header, the call of box#2
 			if _, _, ok := f.find(s); !ok {
 				t.Errorf("board lacks %q:\n%s", s, f.screen())
@@ -1067,7 +1065,7 @@ func TestModelCollectorRestart(t *testing.T) {
 	if f.m.ui.Focus != "a" {
 		t.Fatalf("Focus = %q, want a", f.m.ui.Focus)
 	}
-	counters := map[string]store.Counters{"a": f.s.Counters("a"), "b": f.s.Counters("b")}
+	counters := map[string]store.Counters{"a": f.s.Counters(store.AgentKey{Host: "devbox", ID: "a"}), "b": f.s.Counters(store.AgentKey{Host: "devbox", ID: "b"})}
 	agents, calls := f.s.HostStats("devbox")
 
 	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "exit status 1"})
@@ -1088,14 +1086,14 @@ func TestModelCollectorRestart(t *testing.T) {
 			t.Errorf("%s: %d new log line(s)", when, n-lines)
 		}
 		for id, want := range counters {
-			if c := f.s.Counters(id); c != want {
+			if c := f.s.Counters(store.AgentKey{Host: "devbox", ID: id}); c != want {
 				t.Errorf("%s: Counters(%s) = %+v, want %+v", when, id, c, want)
 			}
 		}
 		if a, n := f.s.HostStats("devbox"); a != agents || n != calls {
 			t.Errorf("%s: HostStats = %d agents, %d calls; want %d, %d", when, a, n, agents, calls)
 		}
-		if got := f.s.RecentEnded("a", 5); len(got) != 1 || got[0].Output != "boom\n" {
+		if got := f.s.RecentEnded(store.AgentKey{Host: "devbox", ID: "a"}, 5); len(got) != 1 || got[0].Output != "boom\n" {
 			t.Errorf("%s: ended calls of a = %q; want c1 with output %q", when, describeCalls(got), "boom\n")
 		}
 	}

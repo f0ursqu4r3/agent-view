@@ -11,14 +11,14 @@ import (
 
 // refOpen is the reference for OpenCalls: the open calls of the agent's host
 // in the full call table, newest StartMs first, then the last stored first.
-func refOpen(s *Store, agentID string) []*ViewCall {
-	h, _ := s.holder(agentID)
+func refOpen(s *Store, key AgentKey) []*ViewCall {
+	h, _ := s.stored(key)
 	if h == nil {
 		return nil
 	}
 	var out []*ViewCall
 	for _, c := range h.calls.all() {
-		if !c.Ended && c.AgentID == agentID {
+		if !c.Ended && c.AgentID == key.ID {
 			out = append(out, c)
 		}
 	}
@@ -28,14 +28,14 @@ func refOpen(s *Store, agentID string) []*ViewCall {
 
 // refEnded is the reference for RecentEnded: the algorithm before the index,
 // which sorts every ended call of the agent's host.
-func refEnded(s *Store, agentID string, n int) []*ViewCall {
-	h, _ := s.holder(agentID)
+func refEnded(s *Store, key AgentKey, n int) []*ViewCall {
+	h, _ := s.stored(key)
 	if h == nil || n <= 0 {
 		return nil
 	}
 	var out []*ViewCall
 	for _, c := range h.calls.all() {
-		if c.Ended && c.AgentID == agentID {
+		if c.Ended && c.AgentID == key.ID {
 			out = append(out, c)
 		}
 	}
@@ -100,15 +100,18 @@ func TestCallIndexMatchesFullScan(t *testing.T) {
 	hosts := []string{"local", "box", "box#2"}
 	// "a0" to "a2" exist on every host; the others on one host only.
 	agentsOf := map[string][]string{}
-	var allIDs []string
+	var keys []AgentKey // every agent of every host, an agent no host has seen, and an unknown host
 	for i, h := range hosts {
 		agentsOf[h] = []string{"a0", "a1", "a2"}
 		for k := range 3 {
 			agentsOf[h] = append(agentsOf[h], fmt.Sprintf("h%d-%d", i, k))
 		}
-		allIDs = append(allIDs, agentsOf[h][3:]...)
+		for _, id := range agentsOf[h] {
+			keys = append(keys, AgentKey{h, id})
+		}
+		keys = append(keys, AgentKey{h, "never"})
 	}
-	allIDs = append(allIDs, "a0", "a1", "a2", "never")
+	keys = append(keys, AgentKey{"nohost", "a0"})
 	type started struct{ host, agent, id string }
 	var calls []started // every tool.start sent, for ends and replays
 	next := 0
@@ -233,14 +236,14 @@ func TestCallIndexMatchesFullScan(t *testing.T) {
 			trimmed = trimmed || h.calls.len() >= maxCallsPerHost
 		}
 		checkIndex(t, s, step)
-		for _, id := range allIDs {
-			if got, want := s.OpenCalls(id), refOpen(s, id); !samePtrs(got, want) {
-				t.Fatalf("step %d: OpenCalls(%s) = %v, want %v", step, id, callIDs(got), callIDs(want))
+		for _, key := range keys {
+			if got, want := s.OpenCalls(key), refOpen(s, key); !samePtrs(got, want) {
+				t.Fatalf("step %d: OpenCalls(%v) = %v, want %v", step, key, callIDs(got), callIDs(want))
 			}
 			for _, n := range []int{0, 1, 3, 1_000_000} {
-				got, want := s.RecentEnded(id, n), refEnded(s, id, n)
+				got, want := s.RecentEnded(key, n), refEnded(s, key, n)
 				if !samePtrs(got, want) {
-					t.Fatalf("step %d: RecentEnded(%s, %d) = %v, want %v", step, id, n, callIDs(got), callIDs(want))
+					t.Fatalf("step %d: RecentEnded(%v, %d) = %v, want %v", step, key, n, callIDs(got), callIDs(want))
 				}
 				endedSeen = endedSeen || len(got) > 0
 			}
@@ -264,10 +267,10 @@ func TestRecentEndedReturnsACopy(t *testing.T) {
 		s.Apply(evStart("local", call("a", id, withStart(at)), at))
 		s.Apply(evEnd("local", "a", id, ptr(true), nil, nil, at))
 	}
-	got := s.RecentEnded("a", 1)
+	got := s.RecentEnded(k("a"), 1)
 	_ = append(got, &ViewCall{})
-	eq(t, "recent", callIDs(s.RecentEnded("a", 3)), []string{"c3", "c2", "c1"})
-	open := s.OpenCalls("a")
+	eq(t, "recent", callIDs(s.RecentEnded(k("a"), 3)), []string{"c3", "c2", "c1"})
+	open := s.OpenCalls(k("a"))
 	_ = append(open, &ViewCall{})
-	eq(t, "open", callIDs(s.OpenCalls("a")), []string{})
+	eq(t, "open", callIDs(s.OpenCalls(k("a"))), []string{})
 }
