@@ -102,23 +102,23 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
 │                    /home/u/.codex/sessions                           │
 │ logs open          7 of 12 discovered                                │
 │ watch roots        /home/u/work                                      │
-│ malformed records  3                                                 │
-│ fs events dropped  1                                                 │
-│ sources            claude: ok                                        │
-│                    codex: degraded (no logs)                         │
-│                    cursor: down (not installed)                      │
+│ … 5 more lines                                                       │
 │                                                                      │
+│ diagnostics                                                          │
+│ exec: bun: not found                                                 │
+│ devbox collector down: exit status 1                                 │
+│ store: dropped 2 envelope(s)                                         │
 └────────────────────────────────────────────────── c or esc to close ─┘
 bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
-btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
-btdddddddttttttttttttkkkkkkkkkkttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttssssssssssssssssssssssssstttttttttttttttttttttttttb
-bttttttttttttttttttttzzzzzzzzzzzzzzzzzzzzzzzzzzzzttttttttttttttttttttttb
+btddddddddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
 === many diagnostics ===

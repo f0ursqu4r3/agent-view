@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,9 +113,10 @@ func hostCovs(labels ...string) []HostCoverage {
 }
 
 // TestCoveragePanelOneHostUnchanged: a single host draws as the first-host
-// panel did. The golden was recorded from that panel before the change; do
-// not regenerate it. No host line, and no "more lines" line when the box is
-// too short.
+// panel did, with no host line. The cases are the golden recorded from that
+// panel, except "short box": the panel now cuts the coverage with a "more
+// lines" line to keep the diagnostics, so that case is recorded from the
+// panel of P3c. Do not regenerate the others.
 func TestCoveragePanelOneHostUnchanged(t *testing.T) {
 	checkGolden(t, "coverage_one_host", panelGolden(oneHostCases()))
 }
@@ -138,56 +140,216 @@ func TestCoveragePanelTwoHosts(t *testing.T) {
 	checkGolden(t, "coverage_two_hosts", panelGolden(twoHostCases()))
 }
 
-// TestCoveragePanelTruncates: content taller than the box ends with a line
-// that counts the lines left out, and a box that fits shows no such line.
-func TestCoveragePanelTruncates(t *testing.T) {
-	covs := hostCovs("h1", "h2", "h3", "h4", "h5")
-	diag := numbered("diag", 3)
-	full := contentLines(covs, diag, 72)
-	total := len(full) // 5 blocks of 10 lines, 4 blank lines, a blank line, "diagnostics", 3 lines
-	if want := 5*10 + 4 + 1 + 1 + 3; total != want {
-		t.Fatalf("content has %d lines, want %d", total, want)
-	}
+// joined joins lines for a failure message and for an exact comparison.
+func joined(lines []string) string { return strings.Join(lines, "\n") }
 
-	// The box of the brief: 5 hosts in 12 lines.
+// trimEnd returns lines without the blank lines at the end.
+func trimEnd(lines []string) []string {
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// TestCoveragePanelKeepsNewestFourDiagnostics: the panel of the 80 × 24 box
+// (20 × 18 inside) with five hosts and nine diagnostics reserves the section
+// of the diagnostics. It cuts hosts, not diagnostics: the first block is whole,
+// the marker counts the four hosts left out, and the newest diagnostics end the
+// box. The second set of hosts has blocks so short that two of them would fit
+// in the box with the marker, but only if the reserve did not exist.
+func TestCoveragePanelKeepsNewestFourDiagnostics(t *testing.T) {
+	var bare []HostCoverage // hosts that sent no coverage: blocks of 7 lines
+	for _, l := range []string{"h1", "h2", "h3", "h4", "h5"} {
+		bare = append(bare, HostCoverage{Label: l})
+	}
+	diag := numbered("diag", 9)
+	for _, c := range []struct {
+		name  string
+		covs  []HostCoverage
+		block int // the lines of the first block
+	}{
+		{"hosts with coverage", hostCovs("h1", "h2", "h3", "h4", "h5"), 10},
+		{"hosts without coverage", bare, 7},
+	} {
+		full := contentLines(c.covs, diag, 72)
+		lines := panelLines(CoveragePanel(c.covs, diag, 72, 20))
+		if len(lines) != 18 {
+			t.Fatalf("%s: %d inner lines, want 18", c.name, len(lines))
+		}
+		if joined(lines[:c.block]) != joined(full[:c.block]) {
+			t.Errorf("%s: the first block is not whole:\n%s", c.name, joined(lines))
+		}
+		if lines[c.block] != "… 4 more hosts" {
+			t.Errorf("%s: line after the first block is %q, want %q:\n%s", c.name, lines[c.block], "… 4 more hosts", joined(lines))
+		}
+		if lines[c.block+1] != "" || lines[c.block+2] != "diagnostics" {
+			t.Errorf("%s: the section does not follow the marker: %q, %q", c.name, lines[c.block+1], lines[c.block+2])
+		}
+		at := -1
+		for _, want := range []string{"diag 6", "diag 7", "diag 8", "diag 9"} {
+			i := slices.Index(lines, want)
+			if i <= at {
+				t.Fatalf("%s: %q at line %d, after the line %d; want the newest four diagnostics in order:\n%s", c.name, want, i, at, joined(lines))
+			}
+			at = i
+		}
+		if lines[17] != "diag 9" {
+			t.Errorf("%s: last line %q, want %q", c.name, lines[17], "diag 9")
+		}
+	}
+}
+
+// TestCoveragePanelOneHostCutsLinesNotDiagnostics: one host with a tall
+// coverage and a short box. The coverage ends with a line that counts the
+// lines left out, and the diagnostics still show below it.
+func TestCoveragePanelOneHostCutsLinesNotDiagnostics(t *testing.T) {
+	cov := sampleCoverage("a")
+	cov.LogRoots = nil
+	for i := 0; i < 30; i++ {
+		cov.LogRoots = append(cov.LogRoots, fmt.Sprintf("/home/a/root%d", i))
+	}
+	covs := oneHost("devbox", cov)
+	diag := numbered("diag", 3)
+	total := len(coverageLines(cov))
+	if total != 30+1+1+1+1+3 {
+		t.Fatalf("the coverage has %d lines, want 37", total)
+	}
+	full := contentLines(covs, diag, 72)
+
+	// h 12: 10 lines inside, 5 for the diagnostics, 5 for the coverage: its
+	// first 4 lines and the marker.
 	lines := panelLines(CoveragePanel(covs, diag, 72, 12))
 	if len(lines) != 10 {
 		t.Fatalf("%d inner lines, want 10", len(lines))
 	}
-	if want := fmt.Sprintf("… %d more lines", total-9); lines[9] != want {
-		t.Errorf("last line %q, want %q", lines[9], want)
+	if joined(lines[:4]) != joined(full[:4]) {
+		t.Errorf("the lines above the marker differ from the content:\n%s", joined(lines))
 	}
-	if strings.Join(lines[:9], "\n") != strings.Join(full[:9], "\n") {
-		t.Errorf("the lines above the last differ from the content:\n%s", strings.Join(lines, "\n"))
+	if want := fmt.Sprintf("… %d more lines", total-4); lines[4] != want {
+		t.Errorf("marker %q, want %q", lines[4], want)
 	}
+	want := append([]string{"", "diagnostics"}, diag...)
+	if joined(lines[5:]) != joined(want) {
+		t.Errorf("the diagnostics are %q, want %q", lines[5:], want)
+	}
+	for _, l := range lines {
+		if strings.HasPrefix(l, "host ") {
+			t.Errorf("a single host has a host line: %q", l)
+		}
+	}
+}
 
-	// The edge: a box as tall as the content, one line short, one tall.
+// TestCoveragePanelOneMoreHostIsSingular: with two hosts of which only one
+// block fits, the marker is "… 1 more host".
+func TestCoveragePanelOneMoreHostIsSingular(t *testing.T) {
+	covs := hostCovs("h1", "h2")
+	diag := numbered("diag", 3)
+	full := contentLines(covs, diag, 72)
+	// 5 lines for the diagnostics, then one block of 10 lines and the marker.
+	for _, inner := range []int{5 + 11, 5 + 20} {
+		lines := panelLines(CoveragePanel(covs, diag, 72, inner+2))
+		if joined(lines[:10]) != joined(full[:10]) {
+			t.Errorf("inner %d: the first block is not whole:\n%s", inner, joined(lines))
+		}
+		if lines[10] != "… 1 more host" {
+			t.Errorf("inner %d: line after the block is %q, want %q", inner, lines[10], "… 1 more host")
+		}
+		if strings.Contains(joined(lines), "hosts") {
+			t.Errorf("inner %d: the marker is plural:\n%s", inner, joined(lines))
+		}
+	}
+}
+
+// TestCoveragePanelDownHostReasonShows: the reason a host is down is the
+// newest diagnostic line, and it shows even when the box has room for one
+// block only.
+func TestCoveragePanelDownHostReasonShows(t *testing.T) {
+	covs := hostCovs("h1", "h2")
+	const reason = "ghost collector down: exit status 255"
+	diag := append(numbered("diag", 5), reason)
+	lines := panelLines(CoveragePanel(covs, diag, 72, 20))
+	if !slices.Contains(lines, reason) {
+		t.Errorf("the reason %q is cut:\n%s", reason, joined(lines))
+	}
+	if lines[len(lines)-1] != reason {
+		t.Errorf("last line %q, want %q", lines[len(lines)-1], reason)
+	}
+}
+
+// TestCoveragePanelTinyBox: a box with less room than the section of the
+// diagnostics draws the last lines of that section and nothing else.
+func TestCoveragePanelTinyBox(t *testing.T) {
+	covs := hostCovs("h1", "h2")
 	for _, c := range []struct {
-		inner int
-		last  string // "" for the last content line
-	}{{total, ""}, {total - 1, "… 2 more lines"}, {total + 1, ""}} {
-		lines := panelLines(CoveragePanel(covs, diag, 72, c.inner+2))
-		if len(lines) != c.inner {
-			t.Fatalf("%d inner lines, want %d", len(lines), c.inner)
-		}
-		if c.last == "" {
-			if strings.Join(lines[:total], "\n") != strings.Join(full, "\n") || strings.Contains(strings.Join(lines, "\n"), "more lines") {
-				t.Errorf("inner %d: the content does not fit as is:\n%s", c.inner, strings.Join(lines, "\n"))
+		h    int
+		diag []string
+		want []string
+	}{
+		{6, numbered("diag", 6), []string{"diag 3", "diag 4", "diag 5", "diag 6"}},
+		{5, numbered("diag", 6), []string{"diag 4", "diag 5", "diag 6"}},
+		{4, nil, []string{"diagnostics", "none"}},
+		{3, nil, []string{"none"}},
+	} {
+		for _, cv := range [][]HostCoverage{covs, oneHost("h1", sampleCoverage("h1")), nil} {
+			lines := panelLines(CoveragePanel(cv, c.diag, 72, c.h))
+			if joined(lines) != joined(c.want) {
+				t.Errorf("h %d, %d hosts, %d diagnostics: lines %q, want %q", c.h, len(cv), len(c.diag), lines, c.want)
 			}
-			continue
-		}
-		if lines[len(lines)-1] != c.last || lines[len(lines)-2] != full[total-3] {
-			t.Errorf("inner %d: ends %q, %q; want %q after %q", c.inner, lines[len(lines)-2], lines[len(lines)-1], c.last, full[total-3])
 		}
 	}
+}
 
-	// Diagnostics are part of the content: they are cut after the blocks.
-	covs = hostCovs("h1", "h2")
-	diag = numbered("diag", 9)
-	full = contentLines(covs, diag, 72)
-	lines = panelLines(CoveragePanel(covs, diag, 72, 28))
-	if want := fmt.Sprintf("… %d more lines", len(full)-25); lines[len(lines)-1] != want {
-		t.Errorf("last line %q, want %q", lines[len(lines)-1], want)
+// TestCoveragePanelNoRoomForHosts: when the box has the room of the
+// diagnostics section and no more, the panel shows the section and no host
+// marker, because the marker would take a line of the section.
+func TestCoveragePanelNoRoomForHosts(t *testing.T) {
+	diag := numbered("diag", 3)
+	lines := panelLines(CoveragePanel(hostCovs("h1", "h2", "h3"), diag, 72, 5+2))
+	want := append([]string{"", "diagnostics"}, diag...)
+	if joined(lines) != joined(want) {
+		t.Errorf("lines %q, want %q", lines, want)
+	}
+}
+
+// TestCoveragePanelFitsUnchanged: a box as tall as the content, or taller,
+// shows the content as is, with no marker. A box one line short cuts what the
+// rule says: whole hosts, lines of a single coverage, or the oldest
+// diagnostic, and the newest diagnostics stay.
+func TestCoveragePanelFitsUnchanged(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		covs  []HostCoverage
+		diag  []string
+		total int
+		short func(full []string) []string // the content in a box one line short
+	}{
+		{"five hosts", hostCovs("h1", "h2", "h3", "h4", "h5"), numbered("diag", 3), 5*10 + 4 + 1 + 1 + 3,
+			// four blocks and their blank lines, the marker, then the section
+			func(f []string) []string { return append(append(slices.Clone(f[:43]), "… 1 more host"), f[54:]...) }},
+		{"one host", hostCovs("h1"), numbered("diag", 3), 9 + 1 + 1 + 3,
+			// 7 lines of the coverage and the marker, then the section
+			func(f []string) []string { return append(append(slices.Clone(f[:7]), "… 2 more lines"), f[9:]...) }},
+		{"two hosts, nine diagnostics", hostCovs("h1", "h2"), numbered("diag", 9), 2*10 + 1 + 1 + 1 + 9,
+			// the oldest diagnostic goes, with no marker
+			func(f []string) []string { return append(slices.Clone(f[:23]), f[24:]...) }},
+	} {
+		full := contentLines(c.covs, c.diag, 72)
+		if len(full) != c.total {
+			t.Fatalf("%s: content has %d lines, want %d", c.name, len(full), c.total)
+		}
+		for _, inner := range []int{c.total, c.total + 1} {
+			lines := panelLines(CoveragePanel(c.covs, c.diag, 72, inner+2))
+			if len(lines) != inner {
+				t.Fatalf("%s: %d inner lines, want %d", c.name, len(lines), inner)
+			}
+			if joined(trimEnd(lines)) != joined(full) || strings.Contains(joined(lines), "more") {
+				t.Errorf("%s: inner %d: the content does not fit as is:\n%s", c.name, inner, joined(lines))
+			}
+		}
+		lines := panelLines(CoveragePanel(c.covs, c.diag, 72, c.total-1+2))
+		if want := c.short(full); joined(trimEnd(lines)) != joined(want) {
+			t.Errorf("%s: one line short:\n%s\nwant:\n%s", c.name, joined(lines), joined(want))
+		}
 	}
 }
 
