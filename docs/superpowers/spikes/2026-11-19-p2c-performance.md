@@ -2,7 +2,7 @@
 
 Spec: `docs/superpowers/specs/2026-11-18-agent-view-tui-design.md`. This file measures the five performance targets on the whole process: the collector, the hub and the TUI in one program. Tooling: `tools/perf/measure.sh`, `TestLatencyAppendToModel` in `cmd/agent-view/latency_test.go`, `tools/dist` and `BenchmarkFrame50Agents3Hosts200Envelopes`.
 
-Result: all five targets are met, with two conditions. The idle CPU target is met after the first scan, not over the first 60 s from launch. The latency target is met for writers that close the log file after each append, as Claude Code and Codex do. See "Open caveats".
+Result: four targets are met outright (size, frame time, latency and memory). The idle CPU target is met in steady state (0.2–0.3%). Averaged over the first 60 s from launch, it is 2.0% (83 logs) and 2.8% (120 logs). The latency row has one condition: the writer closes the log file after each append. See "Open caveats".
 
 ## Environment
 
@@ -18,7 +18,7 @@ Result: all five targets are met, with two conditions. The idle CPU target is me
 | 1 | Binary under 20 MB for each target | darwin-arm64 8.7 MB, darwin-x64 9.4 MB, linux-x64 9.3 MB, linux-arm64 8.6 MB (9,144,802 / 9,836,552 / 9,789,600 / 9,044,128 bytes) | met |
 | 2 | 50 agents and 200 events per second: board and grid under 4 ms per frame | median of 5 runs: 1.52 ms for one batch of 200 envelopes plus one frame; 0.89 ms for the frame alone | met |
 | 3 | Agents idle: whole process under 2% of one core | after the first scan: 0.2% average, 1.0% busiest second (83 logs); 0.3% average, 1.0% busiest second (120 logs). First 60 s from launch: 2.0% (83 logs, two runs) and 2.8% (120 logs) | met after the first scan; at the limit (83 logs) or over it (120 logs) when the first scan counts |
-| 4 | Event-to-screen latency under 1 second | append to the TUI model: p50 64 ms, p95 65 to 66 ms, slowest 66 to 74 ms (6 runs of 20 appends). The screen adds at most one frame, 50 ms at 20 FPS | met |
+| 4 | Event-to-screen latency under 1 second | append to the TUI model: p50 64 ms, p95 65 to 66 ms, slowest 66 to 74 ms (6 runs of 20 appends). The screen adds at most one frame, 50 ms at 20 FPS. Condition: the writer closes the log file after each append. A writer that holds the file open is seen only by the 2 s poll, up to 2 s | met for a writer that closes the file after each append; over the target (up to 2 s) for a writer that holds it open |
 | 5 | Memory under 150 MB with the 24-hour scan of 120 logs | peak RSS 71.6 MB and 71.1 MB with 120 logs; 64.3 to 70.2 MB with the 83 logs that the 24-hour rule gives on this machine | met |
 
 MB in row 1 is 1,048,576 bytes, as in `tools/dist`. The limit is 20 MB.
@@ -82,7 +82,7 @@ About 50 ms of the 64 ms is the bridge batch (50 ms). The rest is FSEvents (abou
 ## Open caveats
 
 - **Idle CPU and the first scan.** The first scan reads every selected log once. It uses more than one core for one to two seconds (busiest second 101.8% to 146.7%). After that the process uses 0.2% to 0.3% of one core. Averaged over the first 60 s from launch, the cost is 2.0% (83 logs) and 2.8% (120 logs). The spec says "with agents idle"; this file reads that as the steady state, and reports the first 60 s too.
-- **Latency depends on the writer closing the file.** FSEvents posts the modified event of a file when its writer closes it. A watcher-only probe showed 5 to 14 ms when the writer closes after each append, and no event within 3 s when the writer keeps the file open. A writer that keeps the log open is seen only by the 2 s poll: up to 2 s, which is over the 1 s target. An early version of the test that kept the file open measured 0.50 s p50 and 2.03 s for the slowest append (the 1.5 s gap and the 2 s poll aligned). At the time of the runs, none of 17 Claude Code processes and none of 9 Codex processes held a session log open (`lsof` count), so both close after each write.
+- **Latency depends on the writer closing the file.** FSEvents posts the modified event of a file when its writer closes it. A watcher-only probe showed 5 to 14 ms when the writer closes after each append, and no event within 3 s when the writer keeps the file open. A writer that keeps the log open is seen only by the 2 s poll: up to 2 s, which is over the 1 s target. An early version of the test that kept the file open measured 0.50 s p50 and 2.03 s for the slowest append (the 1.5 s gap and the 2 s poll aligned). At the time of the runs, `lsof` listed 17 Claude Code processes and 9 Codex processes: none held a log open when sampled.
 - **Latency is measured to the TUI model**, at the `Send` of the bridge. The screen adds the next frame: at most 50 ms at 20 FPS, and 0.9 ms to compose it.
 - **Linux was not measured.** The Linux binaries are built and sized here. CPU, memory and latency on Linux (inotify) are not measured. `measure.sh` runs on Linux, where `ps -o time=` has a resolution of one second, so the busiest-second value is coarse there.
 - **One machine, single runs.** The numbers come from one Mac. Repeated runs agree within 0.1% for CPU and 6 MB for memory. Memory depends on the content of the logs, not only on their count.

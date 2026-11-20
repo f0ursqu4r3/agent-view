@@ -1,6 +1,6 @@
 # Agent View
 
-Agent View is a terminal program. It shows what the coding agents on your machines do now. It reads the session logs of Claude Code and Codex. It is one Go program in one binary. It is read-only: it does not start agents and does not change agent files.
+Agent View is a terminal program. It shows what the coding agents on this machine and on your remote hosts do now. It reads the session logs of Claude Code and Codex. It is one Go program in one binary. It is read-only: it does not start agents and does not change agent files.
 
 ## What it shows
 
@@ -11,7 +11,17 @@ Each agent is one row of text cards:
 - **History cards:** the latest ended calls, newest on the left.
 - **Where line:** the repository and folder of the agent.
 
-Sub-agents sit under their parent, joined by tree lines. An idle agent shrinks to one line. A status bar shows each host with its state, the number of agents, the working agents, the calls per minute and the faults. An event log at the bottom shows one line for each ended call, new sub-agent, stopped agent, state change of a host, and group of file changes that no agent made. The terminal must be at least 80 columns by 24 lines.
+Sub-agents sit under their parent, joined by tree lines. An idle agent shrinks to one line. The terminal must be at least 80 columns by 24 lines.
+
+A status bar shows each host and its state. It also shows the number of agents, the working agents, the calls per minute and the faults.
+
+An event log at the bottom shows one line for each of these events:
+
+- an ended call
+- a new sub-agent
+- a stopped or finished agent
+- a state change of a host
+- a group of file changes that no agent made
 
 When the program starts, it reads the logs that changed in the last 24 hours (the last 4 MiB of each log, at most 120 logs). You see the recent past at once.
 
@@ -49,7 +59,7 @@ agent-view --demo     # show a simulated event stream
 | `--demo` | Show a simulated event stream. |
 | `--demo-scale normal\|stress` | Size of the simulated stream. Default `normal`. |
 | `--watch <dir>` | Add a file-system root. Repeatable. |
-| `--remote <ssh-host>` | Add a remote machine. Repeatable. See "Hosts". |
+| `--remote <ssh-host>` | Add a remote host. Repeatable. See "Hosts". |
 | `--linger <minutes>` | How long an agent stays after its last event. Default 10. Decimals such as `1.5` are allowed. |
 | `--reduced-motion` | Draw without animation. Spinners still turn. |
 
@@ -57,7 +67,7 @@ Set `NO_COLOR` to any non-empty value to turn color off. Bold, dim and inverse t
 
 The program needs a terminal on stdin and stdout. Without one, it prints `agent-view needs a terminal; use agent-view serve for a headless hub` and exits with code 2. A usage error prints the usage and exits with code 2. Other failures exit with code 1.
 
-While the program runs, nothing else writes to the terminal. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal.
+While the TUI runs, agent-view itself writes nothing to the terminal. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal. A remote command that opens `/dev/tty` can still write to the terminal.
 
 ### Keys
 
@@ -78,28 +88,28 @@ While the program runs, nothing else writes to the terminal. Diagnostics go to a
 
 ## Hosts
 
-`--remote <ssh-host>` adds a machine. Use a host name or `user@host`, with no spaces or shell characters. For other names, add an alias to `~/.ssh/config`.
+`--remote <ssh-host>` adds a host. Use a host name or `user@host`, with no spaces or shell characters. For other names, add an alias to `~/.ssh/config`.
 
 ```sh
 agent-view --remote devbox --remote build@lab
 ```
 
-For each remote, the program runs this command:
+For each remote host, the program runs this command:
 
 ```sh
 ssh -T -o BatchMode=yes -o ServerAliveInterval=15 <ssh-host> agent-view collect --stdio --label '<label>'
 ```
 
-Set up each remote as follows:
+Set up each remote host as follows:
 
-1. Build the binary for the remote (for example `agent-view-linux-x64`).
-2. Copy it to the remote as `agent-view`. Use a directory that is on the `PATH` of a non-login shell, for example `/usr/local/bin`. `ssh` runs the command in a non-login shell, so a `PATH` that only a login file sets does not apply.
+1. Build the binary for the remote host (for example `agent-view-linux-x64`).
+2. Copy it to the remote host as `agent-view`. Use a directory that is on the `PATH` of a non-login shell, for example `/usr/local/bin`. `ssh` runs the command in a non-login shell, so a `PATH` that only a login file sets does not apply.
 3. Make SSH work without a prompt. `BatchMode=yes` forbids a password or passphrase prompt, so use a key and load it in your SSH agent.
 4. Check the setup: `ssh -o BatchMode=yes <ssh-host> command -v agent-view`.
 
-A remote that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. The program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
+A remote host that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. The program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
 
-Two hosts with the same label get a suffix: `--remote box --remote box` shows `box` and `box#2`. The remote sends nothing to a third party. Its output and file paths travel over your SSH connection.
+Two hosts with the same label get a suffix: `--remote box --remote box` shows `box` and `box#2`. A remote host sends nothing to a third party. Its output and file paths travel over your SSH connection.
 
 ## Headless
 
@@ -107,7 +117,7 @@ These commands need no terminal.
 
 - `agent-view serve [--port <n>] [--remote <ssh-host>]... [--demo] [--demo-scale normal|stress] [--watch <dir>]... [--linger <minutes>]` runs the hub with the local collector and the remotes. It prints `Agent View: http://127.0.0.1:<port>` and serves one route, `GET /api/snapshot`. The reply is `{"hosts":[...],"envelopes":[...]}`. The default port is 4317. `--port 0` picks a free port. `--port` is valid only with `serve` and `audit`. `SIGINT`, `SIGTERM` and `SIGHUP` stop it with exit code 0.
 - `agent-view audit [--port <n>]` reads `/api/snapshot` of a running hub, checks it, and prints a JSON report that has counts only. It exits with code 1 and a message when the check fails.
-- `agent-view collect --stdio [--label <name>] [--demo] [--demo-scale normal|stress] [--watch <dir>]... [--linger <minutes>]` writes one NDJSON envelope on each line to stdout. A remote machine runs it over SSH. `--label` sets the host name in the envelopes. The default is the host name of the machine.
+- `agent-view collect --stdio [--label <name>] [--demo] [--demo-scale normal|stress] [--watch <dir>]... [--linger <minutes>]` writes one NDJSON envelope on each line to stdout. A remote host runs it over SSH. `--label` sets the host label in the envelopes. The default is the host name that the system reports.
 
 `serve`, `audit` and `collect` must be the first argument.
 
@@ -122,7 +132,7 @@ agent-view audit
 `go run ./tools/dist [-out dist] [-targets <list>] [-max-bytes <n>]` builds `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64`. Each build uses `-trimpath` and `-ldflags "-s -w"`. The tool prints the size of each binary, fails when one is at or above 20 MB (20,971,520 bytes), and runs a smoke test on the binary that matches the build machine.
 
 - **macOS:** the FSEvents file watcher uses cgo. Install the Xcode Command Line Tools. The two darwin targets need a Mac.
-- **Linux:** the build uses `CGO_ENABLED=0` and `fsnotify` (inotify). Any host can build the two Linux targets. On a host that is not a Mac, run `go run ./tools/dist -targets linux-x64,linux-arm64`.
+- **Linux:** the build uses `CGO_ENABLED=0` and `fsnotify` (inotify). Any machine can build the two Linux targets. On a machine that is not a Mac, run `go run ./tools/dist -targets linux-x64,linux-arm64`.
 
 Sizes: 8.6 to 9.4 MB for each target (see "Performance").
 
@@ -142,7 +152,7 @@ GOOS=linux CGO_ENABLED=0 go vet ./...
 
 ## Performance
 
-The numbers come from one Apple M4 Max, on macOS, with the `darwin-arm64` binary. The full method, every run and the caveats are in [docs/superpowers/spikes/2026-11-19-p2c-performance.md](docs/superpowers/spikes/2026-11-19-p2c-performance.md).
+The numbers come from one Apple M4 Max, on macOS. The CPU and memory numbers come from the `darwin-arm64` binary. The frame and latency numbers come from Go tests and benchmarks on the same machine. The sizes row covers all four targets. The full method, every run and the caveats are in [docs/superpowers/spikes/2026-11-19-p2c-performance.md](docs/superpowers/spikes/2026-11-19-p2c-performance.md).
 
 | Target | Measured |
 |---|---|
@@ -152,16 +162,16 @@ The numbers come from one Apple M4 Max, on macOS, with the `darwin-arm64` binary
 | Event-to-screen latency under 1 second | From the log append to the TUI model: p50 64 ms, p95 65 to 66 ms. The screen adds at most one frame (50 ms at 20 FPS). |
 | Memory under 150 MB with the 24-hour scan of 120 logs | Peak RSS 71.6 MB with 120 logs, 64.3 to 70.2 MB with 83 logs |
 
-Idle CPU is under 2% of one core in steady state (0.2–0.3% measured); the first scan after launch costs about 1.1–1.5 CPU seconds, so the 60 s average from launch is 2.0% (83 logs) and 2.8% (120 logs).
+Idle CPU is under 2% of one core in steady state (0.2–0.3% measured). The first scan after launch costs about 1.1–1.5 CPU seconds. The 60 s average from launch is 2.0% with 83 logs, which is at the 2% target, and 2.8% with 120 logs, which is over it.
 
-- A writer that keeps its log file open is seen by the 2 s poll, not by the file watcher. The latency for such a writer is up to 2 s. In the runs, Claude Code and Codex closed the file after each write, so the file watcher saw them.
+- A writer that keeps its log file open is seen by the 2 s poll, not by the file watcher. The latency for such a writer is up to 2 s. In the runs, no Claude Code or Codex process held a log open when sampled, so the file watcher saw their writes.
 - Linux CPU, memory and latency are not measured. Only the binary sizes are.
 
 ## Known limitations
 
 - A crash on a goroutine outside `main` and Bubble Tea prints the crash text on the terminal. It cannot restore the terminal state.
-- Two hosts can show the same agent ID on one row. A row is identified by the agent ID today.
-- With two or more hosts, the coverage panel can be taller than the terminal. It then cuts the newest diagnostic lines first, so the failure reason of a host can be hidden.
+- Two hosts that send the same agent ID share one row, because a row is identified by the agent ID today. Agent IDs carry the unique host label, so this needs a source that sends an ID without the label.
+- With two or more hosts, the content of the coverage panel can be taller than the panel. The panel then cuts the newest diagnostic lines first and shows a `… N more lines` marker, so the failure reason of a host can be hidden.
 
 ## Package layout
 
@@ -184,7 +194,7 @@ Idle CPU is under 2% of one core in steady state (0.2–0.3% measured); the firs
 ## Security and privacy
 
 - Agent View reads logs and never writes to agent settings, logs or threads. Command output is shown as recorded and is not redacted. It can hold file contents if a command printed them.
-- The TUI opens no port. `serve` binds `127.0.0.1` only and serves only `GET /api/snapshot`. It checks `Host` and `Origin` of every request: a foreign value gets `403`, another path gets `404`, and another method gets `405`. This stops DNS rebinding and reads from other web sites. The hub serves no file paths.
+- The TUI opens no port. `serve` binds `127.0.0.1` only and serves only `GET /api/snapshot`. Any other path gets `404`. For `/api/snapshot`, `serve` checks `Host` and `Origin` of every request: a foreign value gets `403`, and another method gets `405`. This stops DNS rebinding and reads from other web sites. The hub serves no file paths.
 - Remote collectors run through your own `ssh`. They need no listening port and no stored credentials.
 - Every string from agent data goes through one sanitizer before it reaches the screen. It removes ANSI escape sequences, control characters, and bidirectional override and isolate characters. It replaces a newline in a one-line field with `⏎` and invalid UTF-8 with `U+FFFD`. A crafted file name cannot move the cursor, set the window title or write to the clipboard.
 - `audit` prints counts only: no path, name, command or output.

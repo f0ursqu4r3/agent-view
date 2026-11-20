@@ -1,9 +1,9 @@
-# Local leftovers of the former TypeScript build; safe to delete these lines once the directories are gone.
-node_modules/
-work/
 .serena/
 .DS_Store
 .superpowers/
 /dist/
-test/.tmp/
 /agent-view
+# Local leftovers of the former TypeScript build; safe to delete these lines once the directories are gone.
+node_modules/
+work/
+test/.tmp/
