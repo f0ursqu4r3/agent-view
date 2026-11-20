@@ -61,8 +61,8 @@ func hostState(h HostStatus) (string, cells.Role) {
 		return "up", cells.ROK
 	case h.State == "down":
 		return "down", cells.RFail
-	case h.State == "connecting":
-		return "connecting", cells.RSearch
+	case h.State == stateConnecting:
+		return stateConnecting, cells.RSearch
 	}
 	return text.Clean(h.State), cells.RDim
 }
