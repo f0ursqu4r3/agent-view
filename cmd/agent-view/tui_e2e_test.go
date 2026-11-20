@@ -74,9 +74,11 @@ func startTUI(t *testing.T, o tuiOpts) *tuiPane {
 			out, _ := exec.Command("tmux", "-L", p.sock, "list-panes", "-t", "main", "-F", "#{pane_dead}").Output()
 			return strings.TrimSpace(string(out))
 		}
-		if paneDead() == "0" {
-			out, _ := exec.Command("tmux", "-L", p.sock, "list-panes", "-t", "main", "-F", "#{pane_pid}").Output()
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && pid > 1 {
+		// One call reads both fields, so that the PID is as new as the check
+		// that the program still runs.
+		out, _ := exec.Command("tmux", "-L", p.sock, "list-panes", "-t", "main", "-F", "#{pane_dead} #{pane_pid}").Output()
+		if dead, pidText, ok := strings.Cut(strings.TrimSpace(string(out)), " "); ok && dead == "0" {
+			if pid, err := strconv.Atoi(pidText); err == nil && pid > 1 {
 				_ = syscall.Kill(pid, syscall.SIGKILL)
 				for deadline := time.Now().Add(exitWait); paneDead() == "0" && time.Now().Before(deadline); {
 					time.Sleep(20 * time.Millisecond)
@@ -171,7 +173,8 @@ func (p *tuiPane) waitScreen(what string, ok func(string) bool) string {
 func (p *tuiPane) dead() bool { return p.format("#{pane_dead}") == "1" }
 
 // waitExit waits up to exitWait for the program to exit and returns its exit
-// status. The alternate screen must be off: the terminal is restored.
+// status. A death by signal fails the test and names the signal. The
+// alternate screen must be off: the terminal is restored.
 func (p *tuiPane) waitExit() int {
 	p.t.Helper()
 	began := time.Now()
@@ -181,12 +184,12 @@ func (p *tuiPane) waitExit() int {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if alt := p.format("#{alternate_on}"); alt != "0" {
-		p.t.Fatalf("alternate screen still on after exit")
-	}
 	status := p.format("#{pane_dead_status}")
 	if sig := p.format("#{pane_dead_signal}"); status == "" && sig != "" {
 		p.t.Fatalf("the program was killed by signal %s:\n%s", sig, p.history())
+	}
+	if alt := p.format("#{alternate_on}"); alt != "0" {
+		p.t.Fatalf("alternate screen still on after exit")
 	}
 	n, err := strconv.Atoi(status)
 	if err != nil {
@@ -665,8 +668,13 @@ func TestTUIRepeatedSignalsDuringShutdownKeepDiagnostics(t *testing.T) {
 		if i > 0 {
 			time.Sleep(200 * time.Millisecond)
 		}
-		// A kill that finds no process leaves the cause to waitExit.
+		// The stubborn remote holds the shutdown for about 1.5 s, so the first
+		// kill must find the process. The second may find it gone; waitExit
+		// then reports the cause of a bad exit.
 		if out, err := exec.Command("kill", "-TERM", pid).CombinedOutput(); err != nil {
+			if i == 0 {
+				t.Fatalf("SIGTERM 1: %v: %s", err, out)
+			}
 			t.Logf("SIGTERM %d: %v: %s", i+1, err, out)
 		}
 	}
