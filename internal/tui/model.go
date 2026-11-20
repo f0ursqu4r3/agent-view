@@ -8,6 +8,7 @@ import (
 
 	"agent-view/internal/anim"
 	"agent-view/internal/board"
+	"agent-view/internal/cards"
 	"agent-view/internal/cells"
 	"agent-view/internal/feed"
 	"agent-view/internal/store"
@@ -248,12 +249,28 @@ func (m *Model) render() {
 	m.content = m.encode(g)
 }
 
-// status returns the values of the status bar.
+// status returns the values of the status bar. Agents counts every present
+// agent. Working counts the agents whose status is working and whose row does
+// not say STALE, so the bar and the rows agree. A stale agent whose row says
+// WAITING (a parent with an open agent call and a present sub-agent) counts
+// as well, because the store marks it stale and the row does not.
 func (m *Model) status(now int64) Status {
 	st := Status{Hosts: m.segments(), Paused: m.ui.Paused, Clock: time.UnixMilli(now).Format("15:04:05")}
-	for _, a := range m.store.Agents(now) {
+	agents := m.store.Agents(now)
+	var parents map[store.AgentKey]bool // built at the first stale agent
+	for _, a := range agents {
 		st.Agents++
-		if a.Status == "working" {
+		if a.Status != "working" {
+			continue
+		}
+		if !a.Stale {
+			st.Working++
+			continue
+		}
+		if parents == nil {
+			parents = parentKeys(agents)
+		}
+		if cards.Waiting(a, m.store.OpenCalls(a.Key()), parents[a.Key()]) {
 			st.Working++
 		}
 	}
@@ -261,6 +278,18 @@ func (m *Model) status(now int64) Status {
 	m.fails = dropBefore(m.fails, now-m.linger)
 	st.CallsPerMin, st.Faults = len(m.starts), len(m.fails)
 	return st
+}
+
+// parentKeys returns the keys of the agents that have a sub-agent in agents.
+// A parent is on the host of its sub-agent.
+func parentKeys(agents []store.ViewAgent) map[store.AgentKey]bool {
+	parents := map[store.AgentKey]bool{}
+	for _, a := range agents {
+		if a.ParentID != nil {
+			parents[store.AgentKey{Host: a.Host, ID: *a.ParentID}] = true
+		}
+	}
+	return parents
 }
 
 // dropBefore drops the leading times before cutoff from times in arrival

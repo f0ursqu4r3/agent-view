@@ -17,7 +17,7 @@ So an agent can be present, have the status `working`, and have a STALE row. The
 
 **Measurement.** The test fixture generates Claude logs in a temporary directory. A real collector reads them, and the messages go the same way as in `runTUI`: collector, hub, bridge, model. No real log is read. `Status.Working` comes from the first line of the model's screen. The state word of each agent comes from `cards.State`.
 
-| Group | The log | Logs | Present | Status `working` (the bar counts these) | WORKING | THINKING | WAITING | STALE |
+| Group | The log | Logs | Present | Status `working` (the bar counted these before Task 5) | WORKING | THINKING | WAITING | STALE |
 |---|---|---|---|---|---|---|---|---|
 | a | last record 5 min old, a call open | 40 | 40 | 40 | 0 | 0 | 0 | 40 |
 | b | last record 5 min old, no open call, no turn end | 40 | 40 | 40 | 0 | 0 | 0 | 40 |
@@ -26,9 +26,9 @@ So an agent can be present, have the status `working`, and have a STALE row. The
 | d | last record fresh, a call open | 20 | 20 | 20 | 20 | 0 | 0 | 0 |
 | Total | | 140 | 140 | 140 | 40 | 0 | 0 | 100 |
 
-The status bar reads `140 agents` and `140 working`. The rows say WORKING for 40 agents and STALE for 100. The bar counts 100 agents that the rows call STALE (71% of its count).
+Before Task 5, the status bar read `140 agents` and `140 working`. The rows say WORKING for 40 agents and STALE for 100. The bar counted 100 agents that the rows call STALE (71% of its count).
 
-Which cause keeps the 100 STALE agents in the count:
+Which cause keeps the 100 STALE agents in the count. The shares come from the sizes of the fixture, not from field data. Cause 3 is a mechanism that overlaps causes 1 and 2, not a disjoint share:
 
 | Cause | Groups | Agents | Share of the 100 |
 |---|---|---|---|
@@ -38,7 +38,7 @@ Which cause keeps the 100 STALE agents in the count:
 
 The causes overlap: groups b and c are in two rows. Cause 3 is why the status is `working` in b and c. In group a, the open call sets the status (and the collector ends an open call only after 10 min without an event). Cause 1 and cause 2 are why the agent is still present.
 
-`TestWorkingCountIncludesStaleRows` (`cmd/agent-view/working_stale_test.go`) pins these numbers at 2 agents for each group, and again at the sizes of the table.
+`TestWorkingCountMatchesTheRows` (`cmd/agent-view/working_stale_test.go`) builds this fixture at 2 agents for each group, and again at the sizes of the table. Task 1 wrote it as `TestWorkingCountIncludesStaleRows`, which pinned `140 working`.
 
 **Controls.** Each condition above is needed. A throwaway run of the same fixture (not kept as a test) showed:
 
@@ -46,7 +46,7 @@ The causes overlap: groups b and c are in two rows. Cause 3 is why the status is
 - A log with no turn-end record and a last record 11 min old, with no child: not present.
 - A parent log with a last record 1 h old, with no child: not present.
 
-**The number 120.** A collector reads at most 120 logs, the newest by file time (`defaultMaxLogs`, `internal/logs/source.go`). `collect.Options` has no field that changes it. In a throwaway run with 10,000 generated logs (200 logs of group b with a last record 3 to 6.3 min old, and 9,800 older logs), the log scan found 10,000 logs and kept 120 (`logs.SelectLogs`). The bar read `120 agents` and `120 working`, and all 120 rows said STALE. That is the number the owner saw: the cap, not a count of working agents. P3c does not change the cap.
+**The number 120.** A collector reads at most 120 logs, the newest by file time (`defaultMaxLogs`, `internal/logs/source.go`). `collect.Options` has no field that changes it. In a throwaway run with 10,000 generated logs (200 logs of group b with a last record 3 to 6.3 min old, and 9,800 older logs), the log scan found 10,000 logs and kept 120 (`logs.SelectLogs`). The bar read `120 agents` and `120 working`, and all 120 rows said STALE. That matches the number the owner saw, so the cap is the likely source, not a count of working agents. P3c does not change the cap.
 
 **A parent that waits.** A throwaway run with 5 parents (an open `Task` call, last record 5 min old) and 5 fresh children gave 5 WAITING rows and 5 WORKING rows. `ViewAgent.Stale` is true for the 5 WAITING parents, because it only tests the status and the age. The rule `!a.Stale || cards.Waiting(...)` counted 10, the same as the rows. The plain `!a.Stale` would count 5. In the table fixture the rule counted 40 (the 40 WORKING rows), and in the 10,000-log run it counted 0, again the same as the rows.
 
@@ -58,3 +58,7 @@ The causes overlap: groups b and c are in two rows. Cause 3 is why the status is
 - `countWorking` calls `Store.OpenCalls(a.ID)`. Task 2 changes that call to take a key.
 
 **Decision for Task 5.** The status bar counts an agent as working only when its status is `working` and its row does not say STALE. That is: `Working` equals the agents whose `cards.State` word is WORKING, THINKING or WAITING. The measurements support this. 100 of the 140 agents that the bar counts have a STALE row, and no measured case needs another rule. Count a WAITING parent as working even when its last event is older than 2 min: use `cards.Waiting`, and do not use `ViewAgent.Stale` alone. `Agents` keeps counting every present agent (140). The ancestors of group c are not counted (they are STALE), and their fresh children are counted.
+
+**Fix (Task 5).** `Model.status` (`internal/tui/model.go`) now counts in `Working` each present agent whose status is `working` and whose row does not say STALE. That is `!a.Stale`, or `cards.Waiting(a, OpenCalls(key), hasPresentChild)` for a stale agent. `hasPresentChild` is true when another agent of the same host on the board has the agent as its parent. `OpenCalls` is queried only for a stale agent. `Agents` still counts every present agent. On the fixture above the bar now reads `140 agents` and `40 working`, the same as the rows. The README states the rule in its status bar paragraph.
+
+Tests: `TestStatusWorkingMatchesTheRows` (`internal/tui/model_test.go`) has seven agents (WORKING, THINKING, WAITING with a fresh WORKING child, two STALE, one IDLE). The bar reads `7 agents` and `4 working`, and `Working` equals the number of WORKING, THINKING and WAITING words. `TestWorkingCountMatchesTheRows` checks the bar against the rows on the generated logs, at both fixture sizes. A plain `!a.Stale` fails the first test (the WAITING parent is not counted). The old count of every `working` agent fails both.

@@ -13,7 +13,7 @@ Each agent is one row of text cards:
 
 Sub-agents sit under their parent, joined by tree lines. An idle agent shrinks to one line. The terminal must be at least 80 columns by 24 lines.
 
-A status bar shows each host and its state. It also shows the number of agents, the working agents, the calls per minute and the faults.
+A status bar shows each host and its state. It also shows the number of agents, the working agents, the calls per minute and the faults. `agents` counts every agent on the board. `working` counts the agents that are working and not STALE.
 
 An event log at the bottom shows one line for each of these events:
 

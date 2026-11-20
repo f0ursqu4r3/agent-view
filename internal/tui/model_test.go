@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"agent-view/internal/board"
+	"agent-view/internal/cards"
 	"agent-view/internal/feed"
 	"agent-view/internal/schema"
 	"agent-view/internal/store"
@@ -828,6 +829,62 @@ func TestModelStatusCounts(t *testing.T) {
 	f.send(clockMsg{})
 	if first := f.lines()[0]; !strings.Contains(first, "0 faults") {
 		t.Errorf("after the linger: %q", first)
+	}
+}
+
+// TestStatusWorkingMatchesTheRows: the bar counts as working the agents whose
+// row says WORKING, THINKING or WAITING, and not the STALE ones. A parent that
+// waits for a present child counts even when its last event is older than the
+// stale time. The bar still counts every present agent in "agents".
+func TestStatusWorkingMatchesTheRows(t *testing.T) {
+	f := newModelFix(t, true, 120, 100)
+	t0 := f.clock
+	spawn := schema.Call{AgentID: "p", CallID: "spawn", StartedAt: iso(t0), Category: "agent", RawName: "Task"}
+	f.batch(agentEnv("p", "", t0), agentEnv("s1", "", t0), agentEnv("s2", "", t0), agentEnv("i", "", t0))
+	f.batch(schema.Envelope{Kind: "tool.start", Call: &spawn}, startEnv("s1", "c1", "command", "", t0))
+	f.batch(schema.Envelope{Kind: "agent.status", AgentID: "i", Status: "idle"})
+	f.clock += 3 * 60_000 // p, s1 and s2 have had no event for 3 min
+	f.batch(agentEnv("w1", "", f.clock), agentEnv("w2", "", f.clock), agentEnv("c", "p", f.clock))
+	f.batch(startEnv("w1", "c1", "read", "/work/repo/x.go", f.clock), startEnv("c", "c1", "read", "/work/repo/y.go", f.clock))
+
+	// The fixture says what it must: the word of each agent.
+	now := f.clock
+	agents := f.s.Agents(now)
+	hasChild := map[store.AgentKey]bool{}
+	for _, a := range agents {
+		if a.ParentID != nil {
+			hasChild[store.AgentKey{Host: a.Host, ID: *a.ParentID}] = true
+		}
+	}
+	wantWord := map[string]string{
+		"w1": "WORKING", "w2": "THINKING", "p": "WAITING", "c": "WORKING", "s1": "STALE", "s2": "STALE", "i": "IDLE",
+	}
+	rows := 0 // agents whose word is WORKING, THINKING or WAITING
+	for _, a := range agents {
+		word := cards.State(a, f.s.OpenCalls(a.Key()), hasChild[a.Key()], now, store.DefaultStaleMs).Text
+		word = word[strings.LastIndex(word, " ")+1:]
+		if word != wantWord[a.ID] {
+			t.Errorf("agent %s: word %s, want %s", a.ID, word, wantWord[a.ID])
+		}
+		if word == "WORKING" || word == "THINKING" || word == "WAITING" {
+			rows++
+		}
+	}
+	if len(agents) != len(wantWord) {
+		t.Fatalf("%d agents on the board, want %d", len(agents), len(wantWord))
+	}
+
+	if got := f.m.status(now).Working; got != rows {
+		t.Errorf("Working %d, but %d rows say WORKING, THINKING or WAITING", got, rows)
+	}
+	first := f.lines()[0]
+	for _, want := range []string{"7 agents", "4 working"} {
+		if !strings.Contains(first, want) {
+			t.Errorf("status lacks %q: %q", want, first)
+		}
+	}
+	if n := strings.Count(f.screen(), "STALE"); n != 2 {
+		t.Errorf("the screen shows STALE %d times, want 2:\n%s", n, f.screen())
 	}
 }
 

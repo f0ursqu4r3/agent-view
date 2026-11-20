@@ -82,12 +82,12 @@ func logRecord(t *testing.T, session, kid string, ms int64, typ string, block ma
 }
 
 // callLog is the text of a log that holds one Bash call and no turn end. The
-// call is open when the log ends with it; otherwise the last record, at
+// call is open when the log ends with it; when closed, the last record, at
 // lastMs, is its result.
-func callLog(t *testing.T, session, kid string, lastMs int64, ended bool) string {
+func callLog(t *testing.T, session, kid string, lastMs int64, closed bool) string {
 	t.Helper()
 	use := map[string]any{"type": "tool_use", "id": "call1", "name": "Bash", "input": map[string]any{"command": "make check"}}
-	if !ended {
+	if !closed {
 		return logRecord(t, session, kid, lastMs, "assistant", use)
 	}
 	result := map[string]any{"type": "tool_result", "tool_use_id": "call1", "content": "ok"}
@@ -99,9 +99,9 @@ func callLog(t *testing.T, session, kid string, lastMs int64, ended bool) string
 // child log.
 func workingUnits(t *testing.T, n workingSizes, now int64) [][]logFile {
 	t.Helper()
-	main := func(group string, i int, lastMs int64, ended bool) logFile {
+	main := func(group string, i int, lastMs int64, closed bool) logFile {
 		session := fmt.Sprintf("%s-%03d", group, i)
-		return logFile{rel: filepath.Join("proj", session+".jsonl"), text: callLog(t, session, "", lastMs, ended), last: lastMs}
+		return logFile{rel: filepath.Join("proj", session+".jsonl"), text: callLog(t, session, "", lastMs, closed), last: lastMs}
 	}
 	var units [][]logFile
 	for i := range n.OpenCall {
@@ -215,7 +215,8 @@ func feedModel(t *testing.T, roots []logs.Root) *workingRun {
 // workingCount is what one group of agents counts.
 type workingCount struct {
 	Present int            // agents on the board
-	Working int            // agents whose status is working: what the status bar counts
+	Working int            // agents whose status is working
+	Counted int            // agents whose status is working and whose row does not say STALE: what the status bar counts
 	Words   map[string]int // the state word of each agent (cards.State), by word
 }
 
@@ -231,7 +232,7 @@ func (r workingResult) String() string {
 	fmt.Fprintf(&sb, "status bar: %d agents, %d working\n", r.BarAgents, r.BarWorking)
 	for _, g := range slices.Sorted(maps.Keys(r.Groups)) {
 		c := r.Groups[g]
-		fmt.Fprintf(&sb, "group %-7s present %3d, status working %3d, words %v\n", g, c.Present, c.Working, c.Words)
+		fmt.Fprintf(&sb, "group %-7s present %3d, status working %3d, counted %3d, words %v\n", g, c.Present, c.Working, c.Counted, c.Words)
 	}
 	return sb.String()
 }
@@ -278,11 +279,15 @@ func countWorking(t *testing.T, run *workingRun) workingResult {
 			c.Words = map[string]int{}
 		}
 		c.Present++
+		word := cards.State(a, run.store.OpenCalls(a.Key()), hasChild[a.Key()], now, store.DefaultStaleMs).Text
+		word = word[strings.LastIndex(word, " ")+1:]
+		c.Words[word]++
 		if a.Status == "working" {
 			c.Working++
+			if word != "STALE" {
+				c.Counted++
+			}
 		}
-		word := cards.State(a, run.store.OpenCalls(a.Key()), hasChild[a.Key()], now, store.DefaultStaleMs).Text
-		c.Words[word[strings.LastIndex(word, " ")+1:]]++
 		res.Groups[groupOf(a.ID)] = c
 	}
 	return res
@@ -296,43 +301,51 @@ func measureWorking(t *testing.T, n workingSizes) workingResult {
 	return countWorking(t, feedModel(t, roots))
 }
 
-// Today the status bar counts every present agent whose status is working,
-// and the row of an agent says STALE when it has had no event for 2 min. An
-// agent can have a working status and a STALE row at once, for three reasons
-// that this fixture builds (see the follow-ups file of P3c):
+// An agent can have a working status and a STALE row at once, for three
+// reasons that this fixture builds (see the follow-ups file of P3c):
 //
 //	a  a call is open and the last record is 5 min old: present, working, STALE
 //	b  the log has no turn end, the last record is 5 min old: the same
 //	c  the last record is 1 h old and no turn end: present only because its
 //	   child is, and the status stays working
 //
-// The second case has the sizes of the table in the follow-ups file. Task 5
-// of P3c changes the count and replaces this test.
-func TestWorkingCountIncludesStaleRows(t *testing.T) {
+// The status bar counts as working the agents whose status is working and
+// whose row does not say STALE. The ancestors of group c are not counted; their
+// children, and the fresh agents of group d, are. "agents" still counts every
+// present agent. The second case has the sizes of the table in the follow-ups
+// file.
+func TestWorkingCountMatchesTheRows(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		sizes workingSizes
 		want  workingResult
 	}{
 		{"small fixture", workingSizes{OpenCall: 2, NoCall: 2, Parents: 2, Fresh: 2},
-			workingResult{BarAgents: 10, BarWorking: 10, Groups: map[string]workingCount{
-				groupOpenCall: {Present: 2, Working: 2, Words: map[string]int{"STALE": 2}},
-				groupNoCall:   {Present: 2, Working: 2, Words: map[string]int{"STALE": 2}},
-				groupParent:   {Present: 2, Working: 2, Words: map[string]int{"STALE": 2}},
-				groupChild:    {Present: 2, Working: 2, Words: map[string]int{"WORKING": 2}},
-				groupFresh:    {Present: 2, Working: 2, Words: map[string]int{"WORKING": 2}},
+			workingResult{BarAgents: 10, BarWorking: 4, Groups: map[string]workingCount{
+				groupOpenCall: {Present: 2, Working: 2, Counted: 0, Words: map[string]int{"STALE": 2}},
+				groupNoCall:   {Present: 2, Working: 2, Counted: 0, Words: map[string]int{"STALE": 2}},
+				groupParent:   {Present: 2, Working: 2, Counted: 0, Words: map[string]int{"STALE": 2}},
+				groupChild:    {Present: 2, Working: 2, Counted: 2, Words: map[string]int{"WORKING": 2}},
+				groupFresh:    {Present: 2, Working: 2, Counted: 2, Words: map[string]int{"WORKING": 2}},
 			}}},
 		{"sizes of the follow-ups table", workingSizes{OpenCall: 40, NoCall: 40, Parents: 20, Fresh: 20},
-			workingResult{BarAgents: 140, BarWorking: 140, Groups: map[string]workingCount{
-				groupOpenCall: {Present: 40, Working: 40, Words: map[string]int{"STALE": 40}},
-				groupNoCall:   {Present: 40, Working: 40, Words: map[string]int{"STALE": 40}},
-				groupParent:   {Present: 20, Working: 20, Words: map[string]int{"STALE": 20}},
-				groupChild:    {Present: 20, Working: 20, Words: map[string]int{"WORKING": 20}},
-				groupFresh:    {Present: 20, Working: 20, Words: map[string]int{"WORKING": 20}},
+			workingResult{BarAgents: 140, BarWorking: 40, Groups: map[string]workingCount{
+				groupOpenCall: {Present: 40, Working: 40, Counted: 0, Words: map[string]int{"STALE": 40}},
+				groupNoCall:   {Present: 40, Working: 40, Counted: 0, Words: map[string]int{"STALE": 40}},
+				groupParent:   {Present: 20, Working: 20, Counted: 0, Words: map[string]int{"STALE": 20}},
+				groupChild:    {Present: 20, Working: 20, Counted: 20, Words: map[string]int{"WORKING": 20}},
+				groupFresh:    {Present: 20, Working: 20, Counted: 20, Words: map[string]int{"WORKING": 20}},
 			}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := measureWorking(t, tc.sizes)
+			counted := 0
+			for _, c := range got.Groups {
+				counted += c.Counted
+			}
+			if got.BarWorking != counted {
+				t.Errorf("the status bar counts %d working agents, the rows count %d", got.BarWorking, counted)
+			}
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("counts differ.\ngot:\n%swant:\n%s", got, tc.want)
 			}
