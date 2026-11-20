@@ -36,7 +36,7 @@ At the end of P3c, the full test suite and the race tests of `internal/store`, `
 
 ## Deferred during the P3c task reviews
 
-Task 5 fixed T1-M1, T1-M2 and T1-M5. Task 2 fixed T1-M4. Task 6 fixed T5-M1 and T5-M2. This list leaves them out. The items below stay open.
+Task 5 fixed T1-M1, T1-M2 and T1-M5. Task 2 fixed T1-M4. Task 6 fixed T5-M1 and T5-M2. The final fix wave fixed T5-M4. This list leaves them out. The items below stay open.
 
 - **Diagnosis (Task 1):**
   - **T1-M3.** `TestWorkingCountMatchesTheRows` (`cmd/agent-view/working_stale_test.go`) reads the wall clock (`countWorking`). Group d has about 115 s of margin before its rows read STALE. `tui.Config.Now` could pin the clock.
@@ -60,7 +60,6 @@ Task 5 fixed T1-M1, T1-M2 and T1-M5. Task 2 fixed T1-M4. Task 6 fixed T5-M1 and 
   - **Mutation proof.** The proof of Task 4 sets the reserve to 0. In a copy outside the repo, a constant reserve of 1, 2, 5 or 7 also made the `TestCoveragePanel*` tests fail. The constants 3, 4 and 6 were not tried.
 - **Status count (Task 5):**
   - **T5-M3.** `Model.status` builds the slice of `OpenCalls` before it looks at the set of parents. Test `parents[a.Key()]` first, so the clone is skipped for an agent with no sub-agent (the result is the same).
-  - **T5-M4.** The doc comment of `Model.status` says "a parent with an open agent call". `cards.Waiting` looks at the newest open call only (`open[0]`).
   - **T5-M5.** In `TestStatusWorkingMatchesTheRows` the check of `len(agents)` sits after the loop over the agents. It belongs before it. No test runs the status path with equal agent IDs on two hosts. No test pins that the bar and the rows agree when `store.Options.StaleMs` is not the default.
 
 ## 120 working while the rows say STALE
