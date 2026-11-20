@@ -188,16 +188,16 @@ func run(argv []string, stdin, stdout *os.File, stderr io.Writer) (code int) {
 // TUI on them. Nothing writes to the terminal while the TUI runs: stderr and
 // the log package go to the diagnostics, which print after the exit.
 func runTUI(args cli.Args, stderr io.Writer) int {
+	// In the whole of runTUI, INT, TERM and HUP only ask the run to end: a
+	// signal during the shutdown neither kills the process nor loses the held
+	// diagnostics. Stop runs last, after they print.
+	sigs := watchShutdownSignals()
+	defer sigs.Stop()
 	override, err := cli.RemoteCommandOverride(os.Getenv("AGENT_VIEW_REMOTE_COMMAND"))
 	if err != nil {
 		fmt.Fprintf(stderr, "agent-view: %v\n", err)
 		return 2
 	}
-	// From here to the return, INT, TERM and HUP only ask the run to end: a
-	// signal during the shutdown neither kills the process nor loses the held
-	// diagnostics. Stop runs last, after they print.
-	sigs := watchShutdownSignals()
-	defer sigs.Stop()
 	diag := newDiagWriter()
 	st, err := newStack(args, override, diag.line)
 	if err != nil {
