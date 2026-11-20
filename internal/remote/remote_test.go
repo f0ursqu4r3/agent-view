@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"agent-view/internal/hub"
 	"agent-view/internal/wire"
 )
@@ -25,7 +27,24 @@ var _ hub.Source = (*Remote)(nil)
 // holds the stdout and stderr it inherited.
 const escapeEnv = "AGENT_VIEW_REMOTE_TEST_ESCAPE"
 
+// sessionEnv makes the test binary a helper process that writes its pid and
+// its session id, as two numbers, to the file the variable names, then sleeps.
+const sessionEnv = "AGENT_VIEW_REMOTE_TEST_SESSION"
+
 func TestMain(m *testing.M) {
+	if out := os.Getenv(sessionEnv); out != "" {
+		sid, err := unix.Getsid(0)
+		if err != nil {
+			os.Exit(2)
+		}
+		// Rename, so the reader never sees a partial file.
+		if os.WriteFile(out+".tmp", []byte(strconv.Itoa(os.Getpid())+" "+strconv.Itoa(sid)), 0o600) != nil ||
+			os.Rename(out+".tmp", out) != nil {
+			os.Exit(2)
+		}
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
+	}
 	if pidFile := os.Getenv(escapeEnv); pidFile != "" {
 		_ = syscall.Setpgid(0, 0)
 		_ = os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0o600)
@@ -471,11 +490,14 @@ func TestNewRejectsBadHosts(t *testing.T) {
 // default command passes the label single-quoted for the remote shell
 func TestDefaultCommand(t *testing.T) {
 	cmd := DefaultCommand("user@host.example", "user@host.example")
-	if want := []string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "user@host.example"}; !slices.Equal(cmd[:7], want) {
-		t.Errorf("cmd[:7] = %q, want %q", cmd[:7], want)
+	if len(cmd) != 14 {
+		t.Fatalf("len(cmd) = %d, want 14: %q", len(cmd), cmd)
 	}
-	if want := []string{"agent-view", "collect", "--stdio", "--label", "'user@host.example'"}; !slices.Equal(cmd[7:12], want) {
-		t.Errorf("cmd[7:12] = %q, want %q", cmd[7:12], want)
+	if want := []string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "user@host.example"}; !slices.Equal(cmd[:9], want) {
+		t.Errorf("cmd[:9] = %q, want %q", cmd[:9], want)
+	}
+	if want := []string{"agent-view", "collect", "--stdio", "--label", "'user@host.example'"}; !slices.Equal(cmd[9:14], want) {
+		t.Errorf("cmd[9:14] = %q, want %q", cmd[9:14], want)
 	}
 	if last := cmd[len(cmd)-1]; last != "'user@host.example'" {
 		t.Errorf("last = %q", last)
@@ -484,6 +506,56 @@ func TestDefaultCommand(t *testing.T) {
 	if last := cmd[len(cmd)-1]; last != `'a'\''b;id'` {
 		t.Errorf("last = %q, want %q", last, `'a'\''b;id'`)
 	}
+}
+
+// The child leads its own session, so it has no controlling terminal: a
+// ProxyCommand or wrapper that opens /dev/tty cannot reach the TUI's.
+func TestChildLeadsItsOwnSession(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "session")
+	script := sessionEnv + "=" + shellQuote(out) + " exec " + shellQuote(exe)
+	r := newRemote(t, Options{Command: func(string, string) []string { return []string{"sh", "-c", script} }})
+	start(t, r)
+	until(t, wait, "the helper's pid and session", func() bool {
+		data, err := os.ReadFile(out)
+		return err == nil && len(data) > 0
+	})
+	ids := pids(t, out)
+	if len(ids) != 2 {
+		t.Fatalf("helper wrote %v, want its pid and its session id", ids)
+	}
+	pid, sid := ids[0], ids[1]
+	mine, err := unix.Getsid(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sid != pid {
+		t.Errorf("the child's session id = %d, want its own pid %d", sid, pid)
+	}
+	if sid == mine {
+		t.Errorf("the child's session id = %d is the test process's session", sid)
+	}
+}
+
+// A session leader leads its own process group, so Stop still ends the whole
+// group: a grandchild of the child is gone after Stop.
+func TestStopKillsTheGroupOfASessionLeader(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "grandchild")
+	script := "sleep 600 & echo $! > " + shellQuote(pidFile) + "; " + printLines(helloLine("devbox")) + "wait"
+	r := newRemote(t, Options{Command: func(string, string) []string { return []string{"sh", "-c", script} }})
+	start(t, r)
+	until(t, wait, "up", func() bool { return r.Status().State == "up" })
+	ps := pids(t, pidFile)
+	if len(ps) != 1 {
+		t.Fatalf("pids = %v, want the grandchild", ps)
+	}
+	grandchild := ps[0]
+	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
+	r.Stop()
+	waitGone(t, grandchild, 5*time.Second)
 }
 
 // Review Focus 2: a child that ignores SIGTERM, with a grandchild in its

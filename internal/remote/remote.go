@@ -55,7 +55,7 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 // DefaultCommand is the child command: agent-view collect --stdio over ssh.
 // The remote shell reads the label, so it is quoted.
 func DefaultCommand(sshHost, label string) []string {
-	return []string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", sshHost,
+	return []string{"ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", sshHost,
 		"agent-view", "collect", "--stdio", "--label", shellQuote(label)}
 }
 
@@ -277,10 +277,10 @@ func (r *Remote) loop() {
 // run runs one child to its end and returns the down detail. It sets *delay
 // to firstDelay when the child stays up for stableUp after its hello.
 //
-// The child leads its own process group, and its stdin is /dev/null. Once the
-// child has exited, what is left of its group gets SIGKILL, then the child is
-// reaped. A process outside the group can still hold the pipes: killAfter
-// after the reap, the read ends are closed.
+// The child leads its own session and process group, and its stdin is
+// /dev/null. Once the child has exited, what is left of its group gets
+// SIGKILL, then the child is reaped. A process outside the group can still
+// hold the pipes: killAfter after the reap, the read ends are closed.
 func (r *Remote) run(delay *time.Duration) string {
 	c, err := spawn(r.command(r.sshHost, r.label))
 	if err != nil {
@@ -403,15 +403,18 @@ type child struct {
 	stdout, stderr *os.File
 }
 
-// spawn starts argv as the leader of a new process group. The pipes are plain
-// files, not exec's StdoutPipe, so the child can be reaped while its output is
-// still being read.
+// spawn starts argv as the leader of a new session. The session leader also
+// leads a new process group of the same id, so killGroup reaches the whole
+// group; it has no controlling terminal, so nothing it runs can read from or
+// write to the terminal of the TUI. Never set Setpgid with Setsid: setpgid in
+// a session leader fails. The pipes are plain files, not exec's StdoutPipe, so
+// the child can be reaped while its output is still being read.
 func spawn(argv []string) (*child, error) {
 	if len(argv) == 0 {
 		return nil, errors.New("empty command")
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	stdout, outW, err := os.Pipe()
 	if err != nil {
 		return nil, err
