@@ -94,7 +94,7 @@ While the TUI runs, agent-view writes nothing to the terminal except its own scr
 agent-view --remote devbox --remote build@lab
 ```
 
-For each remote host, the program runs this command:
+For each remote host, the program starts one `ssh` child. The child runs this command:
 
 ```sh
 ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 <ssh-host> agent-view collect --stdio --label '<label>'
@@ -107,7 +107,7 @@ Set up each remote host as follows:
 3. Make SSH work without a prompt. `BatchMode=yes` forbids a password or passphrase prompt, so use a key and load it in your SSH agent.
 4. Check the setup: `ssh -o BatchMode=yes <ssh-host> command -v agent-view`.
 
-A remote host that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. `ConnectTimeout=10` limits the connect time of `ssh` to 10 s. A host that sends no hello in 15 s shows `down` with `no hello after 15 s`: the program ends the child. After each of these, the program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
+A remote host that cannot connect shows as `down` with a reason, for example `agent-view not found on <ssh-host>` or `ssh failed: <message>`. `ConnectTimeout=10` limits the connect time of `ssh` to 10 s. A host must send its first message, the hello, within 15 s from the start of `ssh`, the connect time included. A host that sends no hello in time shows `down` with `no hello after 15 s`. The program ends the `ssh` child. After each failure, the program tries again with a delay that starts at 1 s and doubles up to 30 s. The other hosts are not affected. Each reconnect sends a new scan, and the program does not count a known call twice.
 
 The `ssh` child runs in its own session and has no controlling terminal. A prompt on `/dev/tty` fails at once, so it cannot corrupt the screen.
 
@@ -149,7 +149,7 @@ GOOS=linux CGO_ENABLED=0 go vet ./...
 - Tests write only inside their own temporary directories. They make no model calls. They replace `ssh` with a local program, so no test opens an SSH connection.
 - The golden files of the cards and of the screen are in `testdata/cards` and `testdata/compose`. To write them again, run `go test ./internal/cards/ ./internal/tui/ -update`. Check the diff before you commit it.
 - `testdata/golden/parity` holds what the former TypeScript program produced for the same inputs. `go test ./internal/parity/` compares the Go program with these files. Nobody edits them by hand.
-- The end-to-end tests in `cmd/agent-view` build the binary and run it in a `tmux` pane, on a private `tmux` socket for each test. They skip when `tmux` is not installed. One of them also builds a second binary with the `avtest` tag, which adds `cmd/agent-view/avtest_hook.go`. No release build contains that file.
+- The end-to-end tests in `cmd/agent-view` build the binary and run it in a `tmux` pane, on a private `tmux` socket for each test. They skip when `tmux` is not installed. Some of them also build a second binary with the `avtest` tag, which adds `cmd/agent-view/avtest_hook.go`. No release build contains that file.
 - `tools/perf/measure.sh [--skip <s>] <binary> <seconds> [args...]` runs a program in a `tmux` pane and prints `cpu_avg_pct`, `cpu_max_pct` and `rss_peak_mb`. It needs `bash`, `tmux`, `perl` and `awk`.
 
 ## Performance
@@ -172,7 +172,7 @@ Idle CPU is under 2% of one core in steady state (0.2–0.3% measured). The firs
 ## Known limitations
 
 - A crash on a goroutine outside `main` and Bubble Tea prints the crash text on the terminal. It cannot restore the terminal state.
-- A remote host that needs more than 15 s to send its hello never connects: the program ends the child at 15 s and tries again with backoff. You cannot change this limit.
+- A remote host that needs more than 15 s to send its hello never connects. The 15 s start with `ssh`, so the connect time counts. The program ends the `ssh` child and tries again with backoff. You cannot change this limit.
 - Two hosts that send the same agent ID share one row, because a row is identified by the agent ID today. Agent IDs carry the unique host label, so this needs a source that sends an ID without the label.
 - With two or more hosts, the content of the coverage panel can be taller than the panel. The panel then cuts the newest diagnostic lines first and shows a `… N more lines` marker, so the failure reason of a host can be hidden.
 
