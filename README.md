@@ -161,7 +161,7 @@ Idle CPU is under 2% of one core in steady state (0.2–0.3% measured); the firs
 
 - A crash on a goroutine outside `main` and Bubble Tea prints the crash text on the terminal. It cannot restore the terminal state.
 - Two hosts can show the same agent ID on one row. A row is identified by the agent ID today.
-- In a coverage panel with several hosts, the newest diagnostic lines of a third host can be cut off.
+- With two or more hosts, the coverage panel can be taller than the terminal. It then cuts the newest diagnostic lines first, so the failure reason of a host can be hidden.
 
 ## Package layout
 
