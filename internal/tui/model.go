@@ -66,9 +66,9 @@ type Model struct {
 
 	frameOn, spinOn, clockOn bool // a tick of that kind is on its way
 
-	// Collector state: feedState applies to every host without its own state.
-	// hostState is keyed by the raw host label, as the store keys its hosts.
-	feedState string
+	// hostState is the collector state of each host, keyed by the raw host
+	// label, as the store keys its hosts. A host without an entry is
+	// connecting.
 	hostState map[string]string
 	hosts     map[string]*hostInfo
 	known     map[string]bool // agents that may have animation state
@@ -117,8 +117,7 @@ func NewModel(c Config) *Model {
 	return &Model{
 		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger, encode: encode,
 		ui:        board.UI{Reduced: c.Reduced},
-		feedState: "connecting", hostState: map[string]string{},
-		hosts: map[string]*hostInfo{}, known: map[string]bool{},
+		hostState: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[string]bool{},
 	}
 }
 

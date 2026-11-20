@@ -428,11 +428,11 @@ func TestModelFeedDown(t *testing.T) {
 	if first := f.lines()[0]; !strings.Contains(first, "connecting") {
 		t.Errorf("status before a state: %q", first)
 	}
-	f.send(feed.StateMsg{State: "down", Detail: "exec: bun: not found"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "exec: bun: not found"})
 	if first := f.lines()[0]; !strings.Contains(first, "down") {
 		t.Errorf("status: %q", first)
 	}
-	if !strings.Contains(f.screen(), "HOST  local down") {
+	if !strings.Contains(f.screen(), "HOST  devbox down") {
 		t.Errorf("log lacks the down line:\n%s", f.screen())
 	}
 	f.press("c")
@@ -487,6 +487,26 @@ func TestHostStateKeyedByRawLabel(t *testing.T) {
 	want := map[string]string{raw: "up", "box": "connecting", "\x1b[31m": "down"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("states = %q, want %q", got, want)
+	}
+}
+
+// TestEmptyHostStateIsTheLocalLabel: the bridge always sets Host. A state
+// without one is shown as "local" and does not touch the state of another
+// host.
+func TestEmptyHostStateIsTheLocalLabel(t *testing.T) {
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "box", State: "up"})
+	f.send(feed.StateMsg{State: "down", Detail: "x"})
+
+	got := map[string]string{}
+	for _, s := range f.m.segments() {
+		got[s.Label] = s.State
+	}
+	if want := map[string]string{"box": "up", "local": "down"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("states = %q, want %q", got, want)
+	}
+	if d := f.m.Diagnostics(); len(d) != 1 || !strings.HasPrefix(d[0], "local collector down") {
+		t.Errorf("diagnostics: %q, want one line that starts with %q", d, "local collector down")
 	}
 }
 
@@ -678,7 +698,7 @@ func TestModelHostSummary(t *testing.T) {
 
 func TestModelStatusCounts(t *testing.T) {
 	f := newModelFix(t, true, 120, 40)
-	f.send(feed.StateMsg{State: "up"})
+	f.send(feed.StateMsg{Host: "devbox", State: "up"})
 	f.batch(agentEnv("a", "", f.clock), agentEnv("b", "", f.clock))
 	f.batch(startEnv("a", "c1", "command", "", f.clock), startEnv("b", "c2", "read", "/work/repo/x.go", f.clock))
 	f.clock += 1000
@@ -843,7 +863,7 @@ func TestModelTimeoutEndOfOldCall(t *testing.T) {
 	for name, age := range map[string]int64{"stored": 15 * 60_000, "dormant": 20 * 3_600_000} {
 		t.Run(name, func(t *testing.T) {
 			f := newModelFix(t, true, 120, 40)
-			f.send(feed.StateMsg{State: "up"})
+			f.send(feed.StateMsg{Host: "devbox", State: "up"})
 			old := f.clock - age
 			f.batch(schema.Envelope{Kind: "hello", Now: iso(f.clock)},
 				agentEnv("a", "", old), startEnv("a", "c1", "command", "", old))
@@ -936,7 +956,7 @@ func TestModelCollectorRestart(t *testing.T) {
 			startEnv("b", "c3", "read", "/work/repo/b.go", old+3000), endEnv("b", "c3", true, old+4000),
 		}
 	}
-	f.send(feed.StateMsg{State: "up"})
+	f.send(feed.StateMsg{Host: "devbox", State: "up"})
 	f.batch(append([]schema.Envelope{{Kind: "hello", Now: iso(f.clock)}, emptySnapshot()}, scan()...)...)
 	f.clock += 3000
 	f.send(clockMsg{}) // the summary goes out
@@ -948,7 +968,7 @@ func TestModelCollectorRestart(t *testing.T) {
 	counters := map[string]store.Counters{"a": f.s.Counters("a"), "b": f.s.Counters("b")}
 	agents, calls := f.s.HostStats("devbox")
 
-	f.send(feed.StateMsg{State: "down", Detail: "exit status 1"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "exit status 1"})
 	f.clock += 1000
 	f.send(feed.StateMsg{Host: "devbox", State: "up"})
 	lines := f.m.log.Len()

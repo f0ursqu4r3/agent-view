@@ -10,8 +10,13 @@ import (
 	"agent-view/internal/text"
 )
 
-// localHost labels the local collector until a host label is known.
-const localHost = "local"
+const (
+	// localHost labels the local collector: a StateMsg without a host, and
+	// the status bar while no host is known.
+	localHost = "local"
+	// stateConnecting is the state of a host that has no state of its own.
+	stateConnecting = "connecting"
+)
 
 // liveChange is a live store change and whether its call failed.
 type liveChange struct {
@@ -249,34 +254,25 @@ func (m *Model) takeTouches(now int64) {
 
 // setState applies the collector state of a host. The state is keyed by the
 // host label as the message carries it, the same string the store uses for
-// that host; labels are cleaned only where they are drawn. A state without a
-// host is the local collector's and replaces every per-host state. A change
-// writes a HOST line; a detail goes to the diagnostics, so the coverage panel
-// shows it.
+// that host; labels are cleaned only where they are drawn. The bridge always
+// sets the label. An empty one is shown as "local" and, like any label,
+// touches no other host's state. A change writes a HOST line; a detail goes
+// to the diagnostics, so the coverage panel shows it.
 func (m *Model) setState(msg feed.StateMsg) {
 	host, state, detail := msg.Host, text.Clean(msg.State), text.Clean(msg.Detail)
-	prev := m.feedState
 	if host == "" {
-		m.feedState = state
-		clear(m.hostState)
-	} else {
-		if s, ok := m.hostState[host]; ok {
-			prev = s
-		}
-		m.hostState[host] = state
+		host = localHost
 	}
-	label := host
-	if label == "" {
-		label = localHost
-		if hosts := m.store.Hosts(); len(hosts) > 0 {
-			label = hosts[0]
-		}
+	prev, ok := m.hostState[host]
+	if !ok {
+		prev = stateConnecting
 	}
+	m.hostState[host] = state
 	if detail != "" {
-		m.addDiag(label + " collector " + state + ": " + detail) // addDiag cleans the line
+		m.addDiag(host + " collector " + state + ": " + detail) // addDiag cleans the line
 	}
 	if state != prev && !m.ui.Paused {
-		m.log.Host(m.nowMs(), label, state) // Host cleans the label
+		m.log.Host(m.nowMs(), host, state) // Host cleans the label
 	}
 }
 
@@ -300,7 +296,7 @@ func (m *Model) segments() []HostStatus {
 	for _, l := range labels {
 		st, ok := m.hostState[l]
 		if !ok {
-			st = m.feedState
+			st = stateConnecting
 		}
 		out = append(out, HostStatus{Label: l, State: st, Degraded: m.degraded(l)})
 	}

@@ -9,8 +9,7 @@ type EnvelopesMsg []schema.Envelope
 
 // StateMsg reports the state of a host: "connecting", "up" or "down", with
 // the reason in Detail. Host is the host label as the hub reports it; the
-// bridge always sets it. The model still reads an empty Host as the local
-// collector (the former child-process feed); no sender uses it now.
+// bridge always sets it. The model shows an empty Host as "local".
 type StateMsg struct {
 	Host, State, Detail string
 }
