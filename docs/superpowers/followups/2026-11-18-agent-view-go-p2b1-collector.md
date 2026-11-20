@@ -6,10 +6,10 @@ These are the findings that the per-task reviews and the final review deferred. 
 
 ## For P2c
 
-P2c did not do these. They are also in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`.
+P2c did not do these. P3a finished both (marked **Done in P3a**, with the commits). The file `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md` records the same result.
 
-- Three ordered or LRU implementations (final review M3): `internal/collect/ordered.go`, `internal/logs/ordered.go`, and `pathCache` in `internal/collect/paths.go`. Extract one generic package.
-- The store and the lifecycle package keep two copies of the presence logic (`schema.Agent` and `wire.Agent`). Unify them.
+- **Done in P3a (baf60dd, 9dfc4f8, 22fc4bf):** Three ordered or LRU implementations (final review M3): `internal/collect/ordered.go`, `internal/logs/ordered.go`, and `pathCache` in `internal/collect/paths.go`. `internal/ordered` now holds one generic `Map` and one generic `LRU`. The store, `internal/collect` and `internal/logs` use them, and the three copies are gone.
+- **Done in P3a (a3abce4):** The store and the lifecycle package kept two copies of the presence logic (`schema.Agent` and `wire.Agent`). The store now calls `lifecycle.PresentIDs` and `lifecycle.IsStale`. Its own copy is gone.
 
 ## Known differences from TypeScript (allowed)
 
@@ -46,7 +46,7 @@ The plan's list still holds (U+2028 and U+2029 escapes, the `hello` fields). Als
 - **Collector state (Task 3):** `Apply` forwards a pointer event unchanged (the collector passes values); a duplicate returns `(e, false)`, not a zero event; no wire-level check that an unattributed touch omits `agentId`; the file merge in `tool.update` is O(n²).
 - **Log discovery and tailing (Task 4):** a relative `CODEX_HOME` or `CLAUDE_CONFIG_DIR` is not made absolute before `EvalSymlinks` (Node `realpath` returns an absolute path); `ErrCode` returns the `PathError` text for an errno it does not list; `TestScanLogsFirstErrorWins` has only one failing directory; `Get` cannot tell absent from `null`; no test for `skipFirst` with an oversized record that warns once.
 - **Claude adapter (Task 5):** the second loop of `TestClaudeWrongFieldTypes` asserts only that there is no `ToolOutput`.
-- **Codex adapter (Task 6):** the last loop of `TestCodexWrongFieldTypes` asserts only that nothing panics; `claude.go` keeps thin flush wrappers; a `newBoundedSet` parameter shadows the `max` builtin.
+- **Codex adapter (Task 6):** the last loop of `TestCodexWrongFieldTypes` asserts only that nothing panics; `claude.go` keeps thin flush wrappers. **Done in P3a (22fc4bf):** the `newBoundedSet` parameter that shadowed the `max` builtin went with `internal/logs/ordered.go`.
 - **Tree watcher (Task 7):** no committed test for subtree tracking and `forget`; `TestTreeCloseStopsCallbacks` closes before events flow; `TestFsnotifyNewDirectories` does not prove that the read of a new directory reports its entries; the path where the root `Add` fails has no test; `fsutil.ErrCode` does not list `EINVAL`.
 - **File-change source (Task 8):** a stale `ok` can follow a `degraded` in the window between `start` and `onChange`; the doc comment on `mu` overstates the lock rule (`Degraded` is called under `mu`, which is safe because it is atomic); the birth time and the mtime come from two `lstat` calls; a regexp compile error silently never matches (add a test that compiles every pattern); `TestDefaultHome` skips where the code falls back to `user.Current()`.
 - **Log source (Task 9):** no test for the `Emit` panic recovery; `TestLogSourceStopDuringStart` stops at a different point than TypeScript (the stop check after `ScanLogs` has no test); the `OnWarning` panic swallow is not documented.

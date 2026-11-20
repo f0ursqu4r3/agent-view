@@ -67,7 +67,7 @@ Set `NO_COLOR` to any non-empty value to turn color off. Bold, dim and inverse t
 
 The program needs a terminal on stdin and stdout. Without one, it prints `agent-view needs a terminal; use agent-view serve for a headless hub` and exits with code 2. A usage error prints the usage and exits with code 2. Other failures exit with code 1.
 
-While the TUI runs, agent-view writes nothing to the terminal except the board. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal. A remote command that opens `/dev/tty` can still write to the terminal.
+While the TUI runs, agent-view writes nothing to the terminal except its own screen. Diagnostics go to a buffer. The program prints them to stderr after it restores the terminal. A remote command that opens `/dev/tty` can still write to the terminal. A crash can also write to it: see "Known limitations".
 
 ### Keys
 

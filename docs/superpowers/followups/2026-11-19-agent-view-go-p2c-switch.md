@@ -37,7 +37,7 @@ Each item changes behavior or design, so each needs an owner decision.
 
 These limits belong to the final fix wave. The earlier text of this file did not state them.
 
-- **`log.SetOutput(diag)` is pinned only through the 4,096-byte cut.** `runTUI` calls `log.SetOutput(diag)` (`cmd/agent-view/main.go`, line 208). The `log` package writes to fd 2 by default, so the stderr capture also takes a short log line. A short log line therefore does not prove the call. `TestTUIProcessOwnWrites` fails without the call only because of its long log line: the capture cuts a line to 4,096 bytes (`maxLine` in `internal/quiet/stderr_unix.go`), and the tail of the long line arrives only through `log.SetOutput`.
+- **`log.SetOutput(diag)` is pinned only through the 4,096-byte cut.** `runTUI` calls `log.SetOutput(diag)` (`cmd/agent-view/main.go`, line 208). The `log` package writes to fd 2 by default, so the stderr capture also takes a short log line. A short log line therefore does not prove the call. `TestTUIProcessOwnWrites` fails without the call only because of its long log line. The capture cuts a line to 4,096 bytes (`maxLine` in `internal/quiet/stderr_unix.go`). The tail of the long line arrives only through `log.SetOutput`.
 - **`go vet ./...` does not compile the `avtest` hook.** `cmd/agent-view/avtest_hook.go` has the build tag `avtest`. Also run `go vet -tags avtest ./cmd/agent-view`.
 - **`TestServePortInUse` cannot detect a changed start order.** The test says that no remote child may start before the server binds. A change that calls `st.start` before `server.Start` in `runServe` (`cmd/agent-view/serve.go`) still passes: the test passed in 25 of 25 runs with that change.
 
@@ -77,7 +77,7 @@ The P2b-1 and P2b-2 lists named these for P2c. P2c did not do them. P3a did thre
 These items of the P2b-1, P2b-2 and P1 lists are finished. The older files mark them.
 
 - P2b-2, delete the child-collector path of `internal/feed`: `internal/feed/child.go`, its tests and its fake collector are gone (92197a6). The package keeps only the message types.
-- P2b-2, consolidate `safely`: the copies in `hub`, `remote` and the bridge are `safe.Call` now (733a231). The three `subscriber` types are not consolidated.
+- P2b-2, consolidate `safely`: the copies in `hub`, `remote` and the bridge are `safe.Call` now (733a231). The three `subscriber` types are not consolidated. (Done in P3a, bd7a2ab.)
 - P2b-2, `jsTrim` is `text.JSTrim` (733a231).
 - P2b-2, one no-escape marshal: `wire.MarshalNoEscape`; `server` uses it (733a231).
 - P2b-2, `cli` no longer imports `remote`: `sshhost.Valid` (733a231).
