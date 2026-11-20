@@ -6,16 +6,20 @@ These are the findings that the per-task reviews and the final review deferred. 
 
 ## For P2c
 
-- Delete `internal/feed` together with the TUI path that runs a child collector. Its process code is duplicated in `internal/remote`.
-- Consolidate `safely` (in `hub` and `remote`) and the three subscriber types.
-- Move `jsTrim` to `internal/text`.
-- Export one no-escape marshal from `wire`. The server copies `wire.marshalValue`.
-- Give the collector an injectable stderr writer. A test swaps `os.Stderr` now.
-- A `Snapshot` panic in `greet` leaves a subscriber that got `hello` but no `snapshot` (Task 1). This matters once the TUI subscribes in-process.
-- Hub subscribers run under the hub lock and can stall the collector loop. The TUI subscriber must not block.
-- `cli` imports `remote` only for `ValidSSHHost`.
+P2c finished most of these (marked **Done**, with the commit). The open items are also in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`.
+
+- **Done (92197a6):** Delete the child-collector path of `internal/feed`. The package keeps only the message types. The process code now lives only in `internal/remote`.
+- **Done (733a231):** Consolidate `safely` in `hub`, `remote` and the bridge: it is `safe.Call` now. **Open:** the three subscriber types (`internal/collect`, `internal/hub`, `internal/remote`).
+- **Done (733a231):** Move `jsTrim` to `internal/text` (`text.JSTrim`).
+- **Done (733a231):** Export one no-escape marshal from `wire` (`wire.MarshalNoEscape`). The server uses it.
+- **Done (0ab0320):** Give the collector an injectable diagnostics writer (`collect.Options.Diag`).
+- **Open:** A `Snapshot` panic in `greet` leaves a subscriber that got `hello` but no `snapshot` (Task 1). This matters now that the TUI subscribes in-process.
+- **Done for the TUI (31cd951):** Hub subscribers run under the hub lock and can stall the collector loop. The bridge subscriber queues the envelope and never blocks. **Open:** any other subscriber can still stall the loop.
+- **Done (733a231):** `cli` imported `remote` only for `ValidSSHHost`. It uses `sshhost.Valid` now.
 
 ## Known differences from TypeScript (allowed)
+
+P2c deleted the TypeScript program (a1c23f5). `testdata/golden/parity` keeps its results, and the Go tests compare against them. The list is a record of the differences.
 
 The P2b-1 list still holds. Also:
 
@@ -37,7 +41,7 @@ The P2b-1 list still holds. Also:
 
 - A remote child stays when `serve` itself gets SIGKILL or crashes. TypeScript is the same.
 - The interplay with ssh `ControlPersist` was reasoned about, not run.
-- Hub CPU and memory were not measured. P2c sets the targets.
+- Hub CPU and memory were not measured. **Done (28e65b2):** P2c measured the whole process. See `docs/superpowers/spikes/2026-11-19-p2c-performance.md`.
 - `LineSplitter` (P2b-1 code) copies quadratically on a very long line.
 - When `waitExit` cannot tell that the child has exited (a `waitid` or `kqueue` error), the remote ends the child's group after the reap, as before the fix wave. A signal can then reach a reused pid in a very small window.
 

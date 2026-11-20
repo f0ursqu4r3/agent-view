@@ -6,6 +6,8 @@ These are the findings that the per-task reviews and the final review deferred. 
 
 ## For P2c
 
+P2c did not do these. They are also in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`.
+
 - Three ordered or LRU implementations (final review M3): `internal/collect/ordered.go`, `internal/logs/ordered.go`, and `pathCache` in `internal/collect/paths.go`. Extract one generic package.
 - The store and the lifecycle package keep two copies of the presence logic (`schema.Agent` and `wire.Agent`). Unify them.
 
