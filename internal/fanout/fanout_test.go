@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"agent-view/internal/wire"
 )
@@ -56,17 +57,22 @@ func TestRemoveSetsRemoved(t *testing.T) {
 	}
 }
 
-// Remove and Removed may run on different goroutines (run with -race).
+// Remove and Removed may run on different goroutines (run with -race). The
+// reader loop has a deadline, so a Remove that does nothing fails the test
+// within removedDeadline and does not hang until the test timeout.
 func TestRemovedIsSafeUnderRace(t *testing.T) {
+	const removedDeadline = 5 * time.Second
 	s := NewSub(func(wire.Envelope) {})
+	deadline := time.Now().Add(removedDeadline)
 	var wg sync.WaitGroup
 	wg.Go(s.Remove)
 	wg.Go(func() {
 		for !s.Removed() {
+			if time.Now().After(deadline) {
+				t.Errorf("Removed is still false %v after the test started", removedDeadline)
+				return
+			}
 		}
 	})
 	wg.Wait()
-	if !s.Removed() {
-		t.Error("Removed is false after Remove returned")
-	}
 }
