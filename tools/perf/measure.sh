@@ -45,12 +45,14 @@ if [ "${1:-}" = "--skip" ]; then
 	skip=$2
 	shift 2
 	case $skip in '' | *[!0-9]*) usage ;; esac
+	skip=$((10#$skip)) # "08" is a decimal number, not a bad octal one
 fi
 [ $# -ge 2 ] || usage
 bin=$1
 secs=$2
 shift 2
 case $secs in '' | *[!0-9]*) usage ;; esac
+secs=$((10#$secs))
 [ "$secs" -ge $((skip + 2)) ] || usage
 if [ ! -f "$bin" ] || [ ! -x "$bin" ]; then
 	echo "measure.sh: the binary is not an executable file" >&2
