@@ -147,7 +147,7 @@ GOOS=linux CGO_ENABLED=0 go vet ./...
 - Tests write only inside their own temporary directories. They make no model calls. They replace `ssh` with a local program, so no test opens an SSH connection.
 - The golden files of the cards and of the screen are in `testdata/cards` and `testdata/compose`. To write them again, run `go test ./internal/cards/ ./internal/tui/ -update`. Check the diff before you commit it.
 - `testdata/golden/parity` holds what the former TypeScript program produced for the same inputs. `go test ./internal/parity/` compares the Go program with these files. Nobody edits them by hand.
-- The end-to-end tests in `cmd/agent-view` build the binary and run it in a `tmux` pane, on a private `tmux` socket for each test. They skip when `tmux` is not installed.
+- The end-to-end tests in `cmd/agent-view` build the binary and run it in a `tmux` pane, on a private `tmux` socket for each test. They skip when `tmux` is not installed. One of them also builds a second binary with the `avtest` tag, which adds `cmd/agent-view/avtest_hook.go`. No release build contains that file.
 - `tools/perf/measure.sh [--skip <s>] <binary> <seconds> [args...]` runs a program in a `tmux` pane and prints `cpu_avg_pct`, `cpu_max_pct` and `rss_peak_mb`. It needs `bash`, `tmux`, `perl` and `awk`.
 
 ## Performance
