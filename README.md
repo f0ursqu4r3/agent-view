@@ -173,7 +173,7 @@ Idle CPU is under 2% of one core in steady state (0.2–0.3% measured). The firs
 
 - A crash on a goroutine outside `main` and Bubble Tea prints the crash text on the terminal. It cannot restore the terminal state.
 - A remote host that needs more than 15 s to send its hello never connects. The 15 s start with `ssh`, so the connect time counts. The program ends the `ssh` child and tries again with backoff. You cannot change this limit.
-- The coverage of the hosts can be taller than the coverage panel. The panel always keeps the newest four diagnostic lines, so the reason a host is down stays visible. It cuts the coverage instead. With two or more hosts, it cuts whole hosts from the end and shows a `… N more hosts` marker, so you cannot see the coverage of the last hosts. When not even the first host fits whole, it shows the first lines of that host and the marker `… M more lines, N more hosts`. With one host, it cuts the lines of the coverage and shows a `… M more lines` marker. A taller terminal shows more.
+- The coverage of the hosts can be taller than the coverage panel. The panel always keeps the newest four diagnostic lines, so the reason a host is down stays visible. It cuts the coverage instead. With two or more hosts, it cuts whole hosts from the end and shows a `… N more hosts` marker, so you cannot see the coverage of the last hosts. When the first host does not fit whole together with the `… N more hosts` line, it shows the first lines of that host and the marker `… M more lines, N more hosts`. With one host, it cuts the lines of the coverage and shows a `… M more lines` marker. A taller terminal shows more.
 
 ## Package layout
 

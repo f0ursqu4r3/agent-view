@@ -60,7 +60,8 @@ type fsKey struct {
 	bucket       int64
 }
 
-// Log is the event log: a ring of the last 500 lines.
+// Log is the event log: a list that keeps the last 500 lines. Add copies the
+// list once it is full.
 type Log struct {
 	lines []LogLine
 }

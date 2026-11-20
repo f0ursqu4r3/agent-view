@@ -252,8 +252,9 @@ func (m *Model) render() {
 // status returns the values of the status bar. Agents counts every present
 // agent. Working counts the agents whose status is working and whose row does
 // not say STALE, so the bar and the rows agree. A stale agent whose row says
-// WAITING (a parent with an open agent call and a present sub-agent) counts
-// as well, because the store marks it stale and the row does not.
+// WAITING (a parent whose newest open call is an agent call, with a present
+// sub-agent) counts as well, because the store marks it stale and the row does
+// not.
 func (m *Model) status(now int64) Status {
 	st := Status{Hosts: m.segments(), Paused: m.ui.Paused, Clock: time.UnixMilli(now).Format("15:04:05")}
 	agents := m.store.Agents(now)
