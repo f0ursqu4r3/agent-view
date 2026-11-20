@@ -6,14 +6,14 @@ These are the findings that the per-task reviews and the final review deferred. 
 
 ## For P2c
 
-P2c finished most of these (marked **Done**, with the commit). The open items are also in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`.
+P2c finished most of these (marked **Done**, with the commit). P3a finished the subscriber item. The open items are also in `docs/superpowers/followups/2026-11-19-agent-view-go-p2c-switch.md`.
 
 - **Done (92197a6):** Delete the child-collector path of `internal/feed`. The package keeps only the message types. The process code now lives only in `internal/remote`.
-- **Done (733a231):** Consolidate `safely` in `hub`, `remote` and the bridge: it is `safe.Call` now. **Open:** the three subscriber types (`internal/collect`, `internal/hub`, `internal/remote`).
+- **Done (733a231):** Consolidate `safely` in `hub`, `remote` and the bridge: it is `safe.Call` now. **Done in P3a (bd7a2ab):** the three subscriber types (`internal/collect`, `internal/hub`, `internal/remote`) share one core, `internal/fanout`.
 - **Done (733a231):** Move `jsTrim` to `internal/text` (`text.JSTrim`).
 - **Done (733a231):** Export one no-escape marshal from `wire` (`wire.MarshalNoEscape`). The server uses it.
 - **Done (0ab0320):** Give the collector an injectable diagnostics writer (`collect.Options.Diag`).
-- **Open:** A `Snapshot` panic in `greet` leaves a subscriber that got `hello` but no `snapshot` (Task 1). This matters now that the TUI subscribes in-process.
+- **Open (corrected in P3a):** The collector recovers a `Snapshot` panic in `greet` (0ab0320), so this part of Task 1 is done. The open spot is `snapshotAll` in `internal/hub/hub.go` (line 199): it calls `m.state.Snapshot(now)` under the hub lock with no recover. This matters now that the TUI subscribes in-process.
 - **Done for the TUI (31cd951):** Hub subscribers run under the hub lock and can stall the collector loop. The bridge subscriber queues the envelope and never blocks. **Open:** any other subscriber can still stall the loop.
 - **Done (733a231):** `cli` imported `remote` only for `ValidSSHHost`. It uses `sshhost.Valid` now.
 

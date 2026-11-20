@@ -4,6 +4,8 @@ Date: 2026-11-19. Branch: go-p2c-switch. Plan: removed from the tree; read it wi
 
 These are the findings that the per-task reviews and the final review deferred. The review ledger of the run is not tracked, so this file is the only record after the merge. The final fix wave fixed these, so they are left out: no test pinned the stderr capture and `log.SetOutput` in `runTUI` (now `TestTUIProcessOwnWrites`); tests and a script that stopped processes by name; the `--skip 08` base-8 error in `tools/perf/measure.sh`; the untested environment override and the 500 ms deadlines in the `tools/dist` tests; the `.gitignore` comment position; the stale `feed.StateMsg` comment; the headline of the performance file and the README wording. Items resolved during the tasks are also left out.
 
+P3a (branch `go-p3a-consolidation`) finished four items of this file. They are under "Done in P3a" below. The findings that the P3a task reviews deferred are in `docs/superpowers/followups/2026-11-19-agent-view-go-p3a-consolidation.md`.
+
 ## Accepted gaps
 
 - **Equal agent IDs on two hosts share one row.** The store keeps the agents of two hosts apart, but `Store.Agent`, `OpenCalls`, `RecentEnded` and `Counters` take an agent ID alone and answer from the first host that has it. The subtest `TestEqualAgentIDsOnTwoHosts` in `internal/tui/model_test.go` (about line 578) is skipped for this reason. The collector builds every agent ID as `<host label>/<provider>:…`, and the hub makes the labels unique, so IDs do not collide in practice. A collision needs a source that sends an ID without the label. Fix: identify a row by (host, ID) across store, board, anim and tui. It is a large refactor, so it was not done.
@@ -30,11 +32,18 @@ Each item changes behavior or design, so each needs an owner decision.
 - **`exitWait` is 3 s, the requirement is 2 s.** The end-to-end helper in `cmd/agent-view/tui_e2e_test.go` allows 3 s. Only `TestStackStopBound` pins the 2 s bound. 3 s is also tight under `-race` and with a busy `fseventsd`.
 - **Quit during a log scan.** No test quits while a log scan is mid-read.
 - **An empty snapshot after a resync.** An empty snapshot does not clear the store (the P1 store rule), so "store equals hub" after a resync holds only for non-empty agents and open calls.
-- **The dead P1 path.** `host == ""` in `setState` (`internal/tui/batch.go`, about line 259) means the local collector of the P1 child. The bridge always sends a host label, so no sender uses this branch. Remove it, and its tests, when the code is next changed.
+
+## Caveats of the final fix wave
+
+These limits belong to the final fix wave. The earlier text of this file did not state them.
+
+- **`log.SetOutput(diag)` is pinned only through the 4,096-byte cut.** `runTUI` calls `log.SetOutput(diag)` (`cmd/agent-view/main.go`, line 208). The `log` package writes to fd 2 by default, so the stderr capture also takes a short log line. A short log line therefore does not prove the call. `TestTUIProcessOwnWrites` fails without the call only because of its long log line: the capture cuts a line to 4,096 bytes (`maxLine` in `internal/quiet/stderr_unix.go`), and the tail of the long line arrives only through `log.SetOutput`.
+- **`go vet ./...` does not compile the `avtest` hook.** `cmd/agent-view/avtest_hook.go` has the build tag `avtest`. Also run `go vet -tags avtest ./cmd/agent-view`.
+- **`TestServePortInUse` cannot detect a changed start order.** The test says that no remote child may start before the server binds. A change that calls `st.start` before `server.Start` in `runServe` (`cmd/agent-view/serve.go`) still passes: the test passed in 25 of 25 runs with that change.
 
 ## Deferred during task reviews
 
-- **Diag hook (Task 1):** `TestPanickingDiagIsIgnored` does not assert that the hook ran; the `Diag` doc should say "safe for concurrent use"; the `captureStderr` cleanup order on a failing run; the greeting tests run at seq 0 only; test stubs rely on incidental nil panics. Out of scope: `internal/hub/hub.go` (about line 206) calls `m.state.Snapshot(now)` without a recover.
+- **Diag hook (Task 1):** `TestPanickingDiagIsIgnored` does not assert that the hook ran; the `Diag` doc should say "safe for concurrent use"; the `captureStderr` cleanup order on a failing run; the greeting tests run at seq 0 only; test stubs rely on incidental nil panics. Out of scope: `snapshotAll` in `internal/hub/hub.go` (line 199) calls `m.state.Snapshot(now)` without a recover (see "Carried over").
 - **Bridge (Task 2):** after a recovered panic the queued work waits for the next wake, and a panicking `Send` loses its batch (fix: set `resync` and poke in the recover handler); ended calls in a dropped window are not replayed; a host entry flushes the pending batch early (add a comment); test gaps: `Stop` flushes the pending batch, host states sent again after a resync, a replay that races live envelopes, the undecodable-line diagnostic appears once; `b.work[1:]` keeps the backing array.
 - **Stack (Task 3):** the comment of `TestNewStackInvalidRemote` says that the hub stops, but nothing observes it; `stack_test.go` lacks `t.Cleanup(stop)` on an early failure; `stack.start` panics on a nil `onErr` and has no guard against a second call; `localLabel` should move to `stack.go`.
 - **TUI start (Task 4):** `startTUI` cleanup leaves a hung program running (add a PID check and `kill -KILL` after `kill-server`, guarded by the command name); `restore` ignores the `Dup2` error; `diagWriter` details (the `sent` trim copies 256 entries per line, late lines beyond 256 are lost, an empty captured line becomes an empty diagnostic); `stack.stop` drops a hub-stop panic when `onErr` is nil (no production path); recovered panics report `%v` without a stack; a plain swap of `bridge.Start` and `st.start` is unguarded except by a comment (a race of microseconds); `unix.Dup` then `CloseOnExec` is not atomic (no child exists yet); the `g` branch of the demo-remote wait is unexercised.
@@ -52,12 +61,9 @@ Each item changes behavior or design, so each needs an owner decision.
 
 ## Carried over from the earlier follow-ups
 
-The P2b-1 and P2b-2 lists named these for P2c. P2c did not do them.
+The P2b-1 and P2b-2 lists named these for P2c. P2c did not do them. P3a did three of them: the ordered copies, the presence rules and the subscriber types (see "Done in P3a"). The two items below are open.
 
-- Three ordered or LRU implementations: `internal/collect/ordered.go`, `internal/logs/ordered.go` and `pathCache` in `internal/collect/paths.go`. Extract one generic package.
-- The store and the lifecycle package keep two copies of the presence logic (`schema.Agent` and `wire.Agent`).
-- The three `subscriber` types in `internal/collect/collector.go`, `internal/hub/hub.go` and `internal/remote/remote.go`.
-- A `Snapshot` panic in `greet` leaves a subscriber that got `hello` but no `snapshot` (see Task 1 above).
+- A `Snapshot` panic in `snapshotAll` (`internal/hub/hub.go`, line 199). `Subscribe` and `SnapshotAll` call it under the hub lock, and it has no recover. The collector is safe: `greet` recovers a `Snapshot` panic and sends an empty snapshot (0ab0320). In the hub, `snapshotAll` builds the whole list before `Subscribe` sends the first envelope. A panic there reaches the caller of `Subscribe` or `SnapshotAll`, and no subscriber gets a `hello` without a `snapshot`.
 - Hub subscribers run under the hub lock and can stall the collector loop. The bridge subscriber never blocks, but another subscriber could.
 
 ## Observations
@@ -83,3 +89,12 @@ These items of the P2b-1, P2b-2 and P1 lists are finished. The older files mark 
 - P1, diagnostics that arrive after the program exits: the program prints the held and late lines after it restores the terminal (92197a6). `diagWriter` has a test now.
 - P1, the child-feed items (the `host` field comment, `upFor`, the stderr line bound, the environment override, empty `Argv`, a child that leaves the group) went with `internal/feed/child.go` (92197a6).
 - P1, the README: `ctrl+z` and `--port` are listed, and the Bun flags table is gone (7d20411).
+
+## Done in P3a
+
+P3a is a refactor. It changed no golden file. These items of the P2b-1, P2b-2 and P2c lists are finished. The older files mark them.
+
+- The ordered and LRU copies: four, not three. The lists named `internal/collect/ordered.go` (a map and an LRU set), `internal/logs/ordered.go` (a map and a bounded set) and `pathCache` in `internal/collect/paths.go`. The store had a fourth, `internal/store/omap.go`. All four are gone. `internal/ordered` holds one generic `Map` and one `LRU` (baf60dd). The store uses them (9dfc4f8). `collect` and `logs` use them (22fc4bf).
+- The three `subscriber` types in `internal/collect`, `internal/hub` and `internal/remote`. `internal/fanout` holds the shared core: a callback that recovers a panic, and a removed flag. Each package keeps its own list of `*fanout.Sub`, its own lock and its own `Removed` check (bd7a2ab).
+- The two copies of the presence rules. The store deleted `internal/store/lifecycle.go`. It builds `lifecycle.Row` values from its millisecond times and calls `lifecycle.PresentIDs` and `lifecycle.IsStale`. The default durations live in `internal/lifecycle` (a3abce4). One change in behavior is accepted: see the P3a file.
+- The dead `host == ""` path in `setState` (`internal/tui/batch.go`). The old code replaced every per-host state and took the first store host as the label. Now an empty `Host` is the label `local` and touches no other host. The `feedState` field is gone, and `stateConnecting` replaces it (cc18e44). The bridge always sets `Host`, so the frame does not change for any input the bridge sends.

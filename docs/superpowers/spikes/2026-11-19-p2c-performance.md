@@ -2,7 +2,7 @@
 
 Spec: `docs/superpowers/specs/2026-11-18-agent-view-tui-design.md`. This file measures the five performance targets on the whole process: the collector, the hub and the TUI in one program. Tooling: `tools/perf/measure.sh`, `TestLatencyAppendToModel` in `cmd/agent-view/latency_test.go`, `tools/dist` and `BenchmarkFrame50Agents3Hosts200Envelopes`.
 
-Result: four targets are met outright (size, frame time, latency and memory). The idle CPU target is met in steady state (0.2–0.3%). Averaged over the first 60 s from launch, it is 2.0% (83 logs) and 2.8% (120 logs). The latency row has one condition: the writer closes the log file after each append. See "Open caveats".
+Result: three targets are met outright (size, frame time and memory). The idle CPU target is met in steady state (0.2–0.3%). Averaged over the first 60 s from launch, it is 2.0% (83 logs) and 2.8% (120 logs). The latency target is met for a writer that closes the log file after each write. A writer that holds a log file open is seen only by the 2 s poll, up to 2 s. See "Open caveats".
 
 ## Environment
 
