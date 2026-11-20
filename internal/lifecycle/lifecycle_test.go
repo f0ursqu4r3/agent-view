@@ -96,7 +96,7 @@ func TestIsStaleOnlyWorkingAgentsIdleForTwoMinutes(t *testing.T) {
 		{"working 30000 stale 10000", agent("a", func(a *wire.Agent) { a.Status = "working"; a.LastEventAt = ago(30_000) }), Options{StaleMs: 10_000}, true},
 	}
 	for _, c := range cases {
-		if got := IsStale(c.a, now, c.o); got != c.want {
+		if got := IsStale(c.a.Status, MsOf(c.a.LastEventAt), now, c.o); got != c.want {
 			t.Errorf("%s: IsStale = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -133,6 +133,183 @@ func TestParseISOAndMsOf(t *testing.T) {
 		}
 		if MsOf(bad) != 0 {
 			t.Errorf("MsOf(%q) != 0", bad)
+		}
+	}
+}
+
+func rowAgo(id, status string, parent *string, agoMs int64) Row {
+	return Row{ID: id, ParentID: parent, Status: status, LastEventMs: now - agoMs}
+}
+
+func TestDefaultConstantsMatchDefaults(t *testing.T) {
+	want := Options{
+		LingerMs: DefaultLingerMs, StaleMs: DefaultStaleMs, FinishedFadeMs: DefaultFinishedFadeMs,
+		CallTimeoutMs: DefaultCallTimeoutMs, FileTTLMs: DefaultFileTTLMs,
+	}
+	if got := Defaults(); got != want {
+		t.Fatalf("Defaults() = %+v, want the constants %+v", got, want)
+	}
+}
+
+// A zero or negative field takes its default. A positive field stays.
+func TestWithDefaultsTakesZeroAndNegative(t *testing.T) {
+	if got := (Options{LingerMs: -5}).WithDefaults().LingerMs; got != DefaultLingerMs {
+		t.Fatalf("negative linger = %d, want %d", got, DefaultLingerMs)
+	}
+	fields := []struct {
+		name string
+		set  func(*Options, int64)
+		get  func(Options) int64
+		def  int64
+	}{
+		{"LingerMs", func(o *Options, v int64) { o.LingerMs = v }, func(o Options) int64 { return o.LingerMs }, DefaultLingerMs},
+		{"StaleMs", func(o *Options, v int64) { o.StaleMs = v }, func(o Options) int64 { return o.StaleMs }, DefaultStaleMs},
+		{"FinishedFadeMs", func(o *Options, v int64) { o.FinishedFadeMs = v }, func(o Options) int64 { return o.FinishedFadeMs }, DefaultFinishedFadeMs},
+		{"CallTimeoutMs", func(o *Options, v int64) { o.CallTimeoutMs = v }, func(o Options) int64 { return o.CallTimeoutMs }, DefaultCallTimeoutMs},
+		{"FileTTLMs", func(o *Options, v int64) { o.FileTTLMs = v }, func(o Options) int64 { return o.FileTTLMs }, DefaultFileTTLMs},
+	}
+	for _, f := range fields {
+		for _, v := range []int64{0, -1, -600_000} {
+			var o Options
+			f.set(&o, v)
+			if got := f.get(o.WithDefaults()); got != f.def {
+				t.Errorf("%s = %d: got %d, want default %d", f.name, v, got, f.def)
+			}
+		}
+		var o Options
+		f.set(&o, 7)
+		if got := f.get(o.WithDefaults()); got != 7 {
+			t.Errorf("%s = 7: got %d, want 7", f.name, got)
+		}
+	}
+}
+
+// An agent whose last event is exactly one linger old is absent.
+func TestPresentIDsBoundaryIsExclusive(t *testing.T) {
+	for _, o := range []Options{{}, {LingerMs: 2_000}} {
+		linger := o.WithDefaults().LingerMs
+		rows := []Row{
+			rowAgo("edge", "idle", nil, linger),
+			rowAgo("inside", "idle", nil, linger-1),
+		}
+		if got, want := sortedIDs(PresentIDs(rows, now, o)), []string{"inside"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("linger %d: present = %v, want %v", linger, got, want)
+		}
+	}
+}
+
+// A finished agent leaves after the fade window, not the linger window. The fade
+// window does not apply to other statuses.
+func TestPresentIDsFinishedUsesTheFadeWindow(t *testing.T) {
+	for _, o := range []Options{{}, {FinishedFadeMs: 5_000}} {
+		fade := o.WithDefaults().FinishedFadeMs
+		rows := []Row{
+			rowAgo("fin-edge", "finished", nil, fade),
+			rowAgo("fin-inside", "finished", nil, fade-1),
+			rowAgo("idle-at-fade", "idle", nil, fade),
+			rowAgo("working-at-fade", "working", nil, fade),
+		}
+		want := []string{"fin-inside", "idle-at-fade", "working-at-fade"}
+		if got := sortedIDs(PresentIDs(rows, now, o)); !reflect.DeepEqual(got, want) {
+			t.Errorf("fade %d: present = %v, want %v", fade, got, want)
+		}
+	}
+}
+
+// Every ancestor of a present agent is present, however old. A descendant of a
+// present agent is not made present by it.
+func TestPresentIDsParentOfPresentIsPresent(t *testing.T) {
+	rows := []Row{
+		rowAgo("root", "idle", nil, 3_600_000),
+		rowAgo("mid", "idle", str("root"), 3_000_000),
+		rowAgo("leaf", "working", str("mid"), 1_000),
+		rowAgo("old-child", "idle", str("leaf"), 3_000_000),
+		rowAgo("other-root", "idle", nil, 3_600_000),
+	}
+	want := []string{"leaf", "mid", "root"}
+	if got := sortedIDs(PresentIDs(rows, now, Options{})); !reflect.DeepEqual(got, want) {
+		t.Fatalf("present = %v, want %v", got, want)
+	}
+}
+
+// A parent that is not in the rows ends the walk without a panic.
+func TestPresentIDsMissingParentIsNotAnError(t *testing.T) {
+	rows := []Row{
+		rowAgo("orphan", "idle", str("ghost"), 1_000),
+		rowAgo("old-orphan", "idle", str("ghost"), 3_600_000),
+	}
+	if got, want := sortedIDs(PresentIDs(rows, now, Options{})), []string{"orphan"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("present = %v, want %v", got, want)
+	}
+}
+
+// A parent cycle and a self parent end the walk.
+func TestPresentIDsCycleEnds(t *testing.T) {
+	rows := []Row{
+		rowAgo("a", "idle", str("b"), 1_000),
+		rowAgo("b", "idle", str("a"), 9_000_000),
+		rowAgo("self", "idle", str("self"), 1_000),
+		rowAgo("old-self", "idle", str("old-self"), 9_000_000),
+	}
+	want := []string{"a", "b", "self"}
+	if got := sortedIDs(PresentIDs(rows, now, Options{})); !reflect.DeepEqual(got, want) {
+		t.Fatalf("present = %v, want %v", got, want)
+	}
+}
+
+// An empty input has no present agents.
+func TestPresentIDsEmpty(t *testing.T) {
+	if got := PresentIDs(nil, now, Options{}); len(got) != 0 {
+		t.Fatalf("present = %v, want none", got)
+	}
+}
+
+// IsStale is true only for a working agent idle for more than the stale time.
+func TestIsStaleBoundaryIsStrict(t *testing.T) {
+	for _, o := range []Options{{}, {StaleMs: 10_000}} {
+		stale := o.WithDefaults().StaleMs
+		if IsStale("working", now-stale, now, o) {
+			t.Errorf("stale %d: working at exactly the stale time is stale", stale)
+		}
+		if !IsStale("working", now-stale-1, now, o) {
+			t.Errorf("stale %d: working one past the stale time is not stale", stale)
+		}
+		if IsStale("working", now-stale+1, now, o) {
+			t.Errorf("stale %d: working one inside the stale time is stale", stale)
+		}
+		for _, status := range []string{"idle", "finished", "waiting", ""} {
+			if IsStale(status, now-100*stale, now, o) {
+				t.Errorf("stale %d: status %q is stale", stale, status)
+			}
+		}
+	}
+}
+
+// The wire.Agent adapter gives the same result as PresentIDs over the same agents as rows.
+func TestAdapterMatchesRows(t *testing.T) {
+	agents := []wire.Agent{
+		agent("fresh", func(a *wire.Agent) { a.LastEventAt = ago(599_999) }),
+		agent("old", func(a *wire.Agent) { a.LastEventAt = ago(600_000) }),
+		agent("root-old", func(a *wire.Agent) { a.LastEventAt = ago(3_600_000) }),
+		agent("leaf", func(a *wire.Agent) { a.ParentID = str("root-old"); a.LastEventAt = ago(1_000) }),
+		agent("fin-new", func(a *wire.Agent) { a.Status = "finished"; a.LastEventAt = ago(59_999) }),
+		agent("fin-old", func(a *wire.Agent) { a.Status = "finished"; a.LastEventAt = ago(60_000) }),
+		agent("orphan", func(a *wire.Agent) { a.ParentID = str("missing"); a.LastEventAt = ago(1_000) }),
+		agent("cyc-a", func(a *wire.Agent) { a.ParentID = str("cyc-b"); a.LastEventAt = ago(1_000) }),
+		agent("cyc-b", func(a *wire.Agent) { a.ParentID = str("cyc-a"); a.LastEventAt = ago(9_000_000) }),
+		agent("no-time", func(a *wire.Agent) { a.LastEventAt = "" }),
+	}
+	rows := make([]Row, 0, len(agents))
+	for _, a := range agents {
+		rows = append(rows, Row{ID: a.ID, ParentID: a.ParentID, Status: a.Status, LastEventMs: MsOf(a.LastEventAt)})
+	}
+	for _, o := range []Options{{}, {LingerMs: 2_000, FinishedFadeMs: 500}} {
+		got, want := PresentAgentIDs(agents, now, o), PresentIDs(rows, now, o)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("options %+v: adapter = %v, rows = %v", o, sortedIDs(got), sortedIDs(want))
+		}
+		if len(got) == 0 {
+			t.Errorf("options %+v: no agent is present, the comparison proves nothing", o)
 		}
 	}
 }

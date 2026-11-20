@@ -14,6 +14,7 @@ import (
 	"agent-view/internal/lifecycle"
 	"agent-view/internal/ordered"
 	"agent-view/internal/schema"
+	"agent-view/internal/wire"
 )
 
 // Limits from the former TypeScript viewer/store.ts (removed in P2c; see git
@@ -29,6 +30,14 @@ const (
 	// An agent is dropped after this many lingers without an event, unless a present agent descends from it.
 	dropAfterLingers = 2
 	maxDormant       = 10_000
+)
+
+// Lifecycle defaults, the same values as the lifecycle package holds.
+const (
+	DefaultLingerMs       = lifecycle.DefaultLingerMs
+	DefaultStaleMs        = lifecycle.DefaultStaleMs
+	DefaultFinishedFadeMs = lifecycle.DefaultFinishedFadeMs
+	DefaultFileTTLMs      = lifecycle.DefaultFileTTLMs
 )
 
 // Options configures a Store. A zero or negative duration takes the lifecycle default.
@@ -69,7 +78,7 @@ type Store struct {
 	Panics int
 
 	now          func() int64
-	lc           windows
+	lc           lifecycle.Options
 	hosts        map[string]*hostState
 	hostOrder    []string // first appearance
 	orderCounter int
@@ -133,7 +142,8 @@ func New(o Options) *Store {
 	if now == nil {
 		now = func() int64 { return time.Now().UnixMilli() }
 	}
-	return &Store{now: now, lc: resolve(o), hosts: map[string]*hostState{}}
+	lc := lifecycle.Options{LingerMs: o.LingerMs, StaleMs: o.StaleMs, FinishedFadeMs: o.FinishedFadeMs, FileTTLMs: o.FileTTLMs}.WithDefaults()
+	return &Store{now: now, lc: lc, hosts: map[string]*hostState{}}
 }
 
 // Apply applies one envelope and returns its changes, or nil. Envelopes with
@@ -184,7 +194,7 @@ func (s *Store) Agents(now int64) []ViewAgent {
 	var out []ViewAgent
 	for _, label := range s.hostOrder {
 		for _, a := range s.presentAgents(s.hosts[label], now) {
-			out = append(out, ViewAgent{Agent: a.agent, Host: label, LastEventMs: a.lastEventMs, Stale: isStale(a.agent, now, s.lc)})
+			out = append(out, ViewAgent{Agent: a.agent, Host: label, LastEventMs: a.lastEventMs, Stale: lifecycle.IsStale(a.agent.Status, a.lastEventMs, now, s.lc)})
 		}
 	}
 	return out
@@ -196,8 +206,8 @@ func (s *Store) Agent(id string) (ViewAgent, bool) {
 	for _, label := range s.hostOrder {
 		if a, ok := s.hosts[label].agents.Get(id); ok {
 			v := ViewAgent{Agent: a.agent, Host: label, LastEventMs: a.lastEventMs}
-			v.LastEventAt = isoOf(a.lastEventMs)
-			v.Stale = isStale(v.Agent, s.now(), s.lc)
+			v.LastEventAt = wire.FormatISO(a.lastEventMs)
+			v.Stale = lifecycle.IsStale(a.agent.Status, a.lastEventMs, s.now(), s.lc)
 			return v, true
 		}
 	}
@@ -271,14 +281,14 @@ func (s *Store) presentAgents(h *hostState, now int64) []agentEntry {
 	}
 	s.presenceComputes++
 	adjusted := make([]agentEntry, 0, h.agents.Len())
-	plain := make([]schema.Agent, 0, h.agents.Len())
+	rows := make([]lifecycle.Row, 0, h.agents.Len())
 	for _, a := range h.agents.All() {
 		ag := a.agent
-		ag.LastEventAt = isoOf(a.lastEventMs)
+		ag.LastEventAt = wire.FormatISO(a.lastEventMs)
 		adjusted = append(adjusted, agentEntry{agent: ag, lastEventMs: a.lastEventMs})
-		plain = append(plain, ag)
+		rows = append(rows, lifecycle.Row{ID: ag.ID, ParentID: ag.ParentID, Status: ag.Status, LastEventMs: a.lastEventMs})
 	}
-	present := presentAgentIDs(plain, now, s.lc)
+	present := lifecycle.PresentIDs(rows, now, s.lc)
 	agents := adjusted[:0]
 	for _, a := range adjusted {
 		if present[a.agent.ID] {
@@ -296,7 +306,7 @@ func (s *Store) sweep(now int64) {
 		return
 	}
 	s.swept, s.lastSweepMs = true, now
-	horizon := dropAfterLingers * s.lc.lingerMs
+	horizon := dropAfterLingers * s.lc.LingerMs
 	anyDropped := false
 	for _, label := range s.hostOrder {
 		h := s.hosts[label]

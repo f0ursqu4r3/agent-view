@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-view/internal/lifecycle"
 	"agent-view/internal/schema"
 )
 
@@ -514,6 +515,24 @@ func TestPresenceCachedPerVersionAndNow(t *testing.T) {
 	s.Agents(nowMs + 1)
 	if s.presenceComputes != before+2 {
 		t.Fatalf("computes = %d, want %d", s.presenceComputes, before+2)
+	}
+}
+
+// A zero or negative duration takes the lifecycle default, and a positive one stays.
+func TestNewTakesLifecycleDefaultsForZeroAndNegativeDurations(t *testing.T) {
+	want := lifecycle.Defaults()
+	for _, o := range []Options{{}, {LingerMs: -1, StaleMs: -1, FinishedFadeMs: -1, FileTTLMs: -1}} {
+		if got := New(o).lc; got != want {
+			t.Errorf("New(%+v).lc = %+v, want %+v", o, got, want)
+		}
+	}
+	got := New(Options{LingerMs: 1, StaleMs: 2, FinishedFadeMs: 3, FileTTLMs: 4}).lc
+	if got.LingerMs != 1 || got.StaleMs != 2 || got.FinishedFadeMs != 3 || got.FileTTLMs != 4 {
+		t.Errorf("positive durations changed: %+v", got)
+	}
+	if DefaultLingerMs != want.LingerMs || DefaultStaleMs != want.StaleMs ||
+		DefaultFinishedFadeMs != want.FinishedFadeMs || DefaultFileTTLMs != want.FileTTLMs {
+		t.Errorf("store defaults differ from the lifecycle defaults")
 	}
 }
 

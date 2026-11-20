@@ -243,7 +243,7 @@ func (s *Store) HostStats(host string) (agents, calls int) {
 // older than 4 s are forgotten.
 func (s *Store) TakeUnattributed(now int64) []Touch {
 	var out []Touch
-	ttl := s.lc.fileTTLMs
+	ttl := s.lc.FileTTLMs
 	for _, label := range s.hostOrder {
 		h := s.hosts[label]
 		if len(h.held) > 0 {
