@@ -37,11 +37,16 @@ func TestMain(m *testing.M) {
 	if out := os.Getenv(sessionEnv); out != "" {
 		sid, err := unix.Getsid(0)
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "session helper: getsid:", err)
 			os.Exit(2)
 		}
 		// Rename, so the reader never sees a partial file.
-		if os.WriteFile(out+".tmp", []byte(strconv.Itoa(os.Getpid())+" "+strconv.Itoa(sid)), 0o600) != nil ||
-			os.Rename(out+".tmp", out) != nil {
+		err = os.WriteFile(out+".tmp", []byte(strconv.Itoa(os.Getpid())+" "+strconv.Itoa(sid)), 0o600)
+		if err == nil {
+			err = os.Rename(out+".tmp", out)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session helper: write:", err)
 			os.Exit(2)
 		}
 		time.Sleep(30 * time.Second)
@@ -235,6 +240,17 @@ func pids(t *testing.T, file string) []int {
 		out = append(out, pid)
 	}
 	return out
+}
+
+// firstPid waits until a child has written its pid, as a whole line, to file,
+// and returns that pid. On a slow machine sh may start late.
+func firstPid(t *testing.T, file string) int {
+	t.Helper()
+	until(t, wait, "a child's pid in "+filepath.Base(file), func() bool {
+		data, err := os.ReadFile(file)
+		return err == nil && strings.HasSuffix(string(data), "\n")
+	})
+	return pids(t, file)[0]
 }
 
 // waitGone waits until no process has the pid.
@@ -521,9 +537,10 @@ func TestChildLeadsItsOwnSession(t *testing.T) {
 	script := sessionEnv + "=" + shellQuote(out) + " exec " + shellQuote(exe)
 	r := newRemote(t, Options{Command: func(string, string) []string { return []string{"sh", "-c", script} }})
 	start(t, r)
+	// The helper renames a finished file into place: it is whole once it exists.
 	until(t, wait, "the helper's pid and session", func() bool {
-		data, err := os.ReadFile(out)
-		return err == nil && len(data) > 0
+		_, err := os.Stat(out)
+		return err == nil
 	})
 	ids := pids(t, out)
 	if len(ids) != 2 {
@@ -555,9 +572,17 @@ func TestStopKillsTheGroupOfASessionLeader(t *testing.T) {
 		t.Fatalf("pids = %v, want the grandchild", ps)
 	}
 	grandchild := ps[0]
-	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
+	// Kill it at the end only if the test has not seen it gone: the pid of a
+	// process that has ended may name another process by then.
+	gone := false
+	t.Cleanup(func() {
+		if !gone {
+			_ = syscall.Kill(grandchild, syscall.SIGKILL)
+		}
+	})
 	r.Stop()
 	waitGone(t, grandchild, 5*time.Second)
+	gone = true
 }
 
 // Review Focus 2: a child that ignores SIGTERM, with a grandchild in its
@@ -901,8 +926,13 @@ func silentChild(pidFile string) []string {
 	return []string{"sh", "-c", "echo $$ >> " + shellQuote(pidFile) + "; exec sleep 30"}
 }
 
-// helloTimeoutTest is the hello timeout that the tests below use.
-const helloTimeoutTest = 200 * time.Millisecond
+// helloTimeoutTest is the hello timeout that the tests below use. A test whose
+// child must send its hello before the timer ends uses helloTimeoutSlow, so
+// that a slow start of sh does not decide the test.
+const (
+	helloTimeoutTest = 200 * time.Millisecond
+	helloTimeoutSlow = 500 * time.Millisecond
+)
 
 // A child that sends no hello is ended when the hello timeout ends: the host
 // goes down with the timeout detail, not with the exit of the child, and the
@@ -923,7 +953,7 @@ func TestSilentChildTimesOutWithADetail(t *testing.T) {
 	if d := r.Status().Detail; d != "no hello after 200 ms" {
 		t.Errorf("detail = %q, want %q", d, "no hello after 200 ms")
 	}
-	waitGone(t, pids(t, pidFile)[0], 3*time.Second)
+	waitGone(t, firstPid(t, pidFile), 3*time.Second)
 	if s := w.seen(); !slices.Equal(s, []string{"down:no hello after 200 ms"}) {
 		t.Errorf("states = %q, want [down:no hello after 200 ms]", s)
 	}
@@ -935,11 +965,12 @@ func TestHelloBeforeTheTimeoutKeepsTheChild(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pids")
 	var sp spawns
 	r := newRemote(t, Options{Command: sp.command(fixed(demoScript(pidFile)...))})
-	r.helloTimeout = helloTimeoutTest
+	r.helloTimeout = helloTimeoutSlow
 	w := watch(r)
 	start(t, r)
 	until(t, wait, "up", func() bool { return r.Status().State == "up" })
-	time.Sleep(600 * time.Millisecond)
+	// The timer was armed before the hello: this ends it.
+	time.Sleep(helloTimeoutSlow + 200*time.Millisecond)
 	if s := r.Status(); s.State != "up" || s.Detail != "" {
 		t.Errorf("status = %+v, want up with no detail", s)
 	}
@@ -949,7 +980,7 @@ func TestHelloBeforeTheTimeoutKeepsTheChild(t *testing.T) {
 	if n := sp.count(); n != 1 {
 		t.Errorf("%d spawns, want 1", n)
 	}
-	if err := syscall.Kill(pids(t, pidFile)[0], 0); err != nil {
+	if err := syscall.Kill(firstPid(t, pidFile), 0); err != nil {
 		t.Errorf("the child is gone after the timeout: %v", err)
 	}
 }
@@ -1092,17 +1123,18 @@ func TestHelloCountedWhenTheTimerEndsKeepsTheChild(t *testing.T) {
 	var sig sent
 	r := newRemote(t, Options{Command: sp.command(fixed(demoScript(pidFile)...))})
 	r.signal = sig.signal
-	r.helloTimeout = helloTimeoutTest
+	r.helloTimeout = helloTimeoutSlow
 	r.OnStatusChange(func() {
 		if r.Status().State == "up" {
-			time.Sleep(2 * helloTimeoutTest)
+			// The timer was armed before the hello: it ends inside this sleep.
+			time.Sleep(helloTimeoutSlow + 200*time.Millisecond)
 		}
 	})
 	w := watch(r)
 	start(t, r)
 	until(t, wait, "up", func() bool { return r.Status().State == "up" })
 	// Past the timer, and past the listener, which then lets run read the hello.
-	time.Sleep(4 * helloTimeoutTest)
+	time.Sleep(2 * helloTimeoutSlow)
 	if s := sig.all(); len(s) != 0 {
 		t.Errorf("signals = %q, want none", s)
 	}
