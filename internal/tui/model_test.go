@@ -492,9 +492,13 @@ func TestHostStateKeyedByRawLabel(t *testing.T) {
 
 // TestEmptyHostStateIsTheLocalLabel: the bridge always sets Host. A state
 // without one is shown as "local" and does not touch the state of another
-// host.
+// host, not even the first host that the store knows.
 func TestEmptyHostStateIsTheLocalLabel(t *testing.T) {
 	f := newModelFix(t, true, 120, 40)
+	f.batchFrom("box", schema.Envelope{Kind: "hello", Now: iso(f.clock)}, emptySnapshot())
+	if got := f.s.Hosts(); !reflect.DeepEqual(got, []string{"box"}) {
+		t.Fatalf("store hosts = %q, want [box]", got)
+	}
 	f.send(feed.StateMsg{Host: "box", State: "up"})
 	f.send(feed.StateMsg{State: "down", Detail: "x"})
 
