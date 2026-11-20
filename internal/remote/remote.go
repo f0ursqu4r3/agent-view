@@ -33,6 +33,9 @@ const (
 	// defaultStableUp is how long a child must stay up after its hello for
 	// the retry delay to start over.
 	defaultStableUp = 60 * time.Second
+	// defaultHelloTimeout is how long a child has to send its first hello. A
+	// child that is silent for longer is ended and the host goes down.
+	defaultHelloTimeout = 15 * time.Second
 	// killAfter is how long a child has after SIGTERM before its process
 	// group gets SIGKILL. It is also how long the readers have to reach the
 	// end of the pipes after the child is reaped.
@@ -82,7 +85,8 @@ type Options struct {
 // Subscribe like any other envelope.
 //
 // The status is connecting while a child starts, up after its first hello,
-// down with a detail after it exits or fails to start, and down after Stop.
+// down with a detail after it exits, fails to start or sends no hello within
+// helloTimeout, and down after Stop.
 // Subscribers and status listeners run without the Remote's lock; calls to
 // subscribers never overlap, and neither do calls to listeners. They must not
 // call Stop, which waits for the goroutine that calls them.
@@ -95,6 +99,8 @@ type Remote struct {
 	maxLineBytes int
 	// stableUp is defaultStableUp; tests shorten it before Start.
 	stableUp time.Duration
+	// helloTimeout is defaultHelloTimeout; tests shorten it before Start.
+	helloTimeout time.Duration
 	// signal sends a signal to a process group, with mu held. It is
 	// killGroup; tests replace it before Start.
 	signal func(pid int, sig syscall.Signal)
@@ -135,6 +141,7 @@ func New(o Options) (*Remote, error) {
 		maxDelay:     time.Duration(o.BackoffMs[1]) * time.Millisecond,
 		maxLineBytes: o.MaxLineBytes,
 		stableUp:     defaultStableUp,
+		helloTimeout: defaultHelloTimeout,
 		signal:       killGroup,
 		state:        "connecting",
 		stopCh:       make(chan struct{}),
@@ -277,6 +284,12 @@ func (r *Remote) loop() {
 // run runs one child to its end and returns the down detail. It sets *delay
 // to firstDelay when the child stays up for stableUp after its hello.
 //
+// A child that has sent no hello when helloTimeout ends gets SIGTERM, and
+// SIGKILL killAfter later; the detail is then helloDetail, not the exit of the
+// child. A child that sent its hello, that exited before the timer, or that
+// Stop or Kill ended first is never timed out. The timer decides against the
+// status, not against the order of the select cases (see signalSilentChild).
+//
 // The child leads its own session and process group, and its stdin is
 // /dev/null. Once the child has exited, what is left of its group gets
 // SIGKILL, then the child is reaped. A process outside the group can still
@@ -342,6 +355,10 @@ func (r *Remote) run(delay *time.Duration) string {
 
 		stableC, killC, graceC <-chan time.Time
 	)
+	helloTimerC := arm(r.helloTimeout)
+	// sawHello is set when run has read the hello. timedOut is set when the
+	// hello timer sent the signal.
+	sawHello, timedOut := false, false
 	for open := 2; exitedC != nil || open > 0; {
 		select {
 		case <-exitedC:
@@ -354,8 +371,17 @@ func (r *Remote) run(delay *time.Duration) string {
 				finishedC, graceC = nil, nil
 			}
 		case <-helloC:
-			helloC = nil
+			helloC, sawHello = nil, true
 			stableC = arm(r.stableUp)
+		case <-helloTimerC:
+			helloTimerC = nil
+			// Not after a hello, a stop or the exit of the child. A hello
+			// that the reader has counted but run has not read yet is found
+			// by signalSilentChild.
+			if !sawHello && stopC != nil && exitedC != nil && r.signalSilentChild(pid, syscall.SIGTERM) {
+				timedOut = true
+				killC = arm(killAfter)
+			}
 		case <-stableC:
 			stableC = nil
 			*delay = r.firstDelay
@@ -372,7 +398,19 @@ func (r *Remote) run(delay *time.Duration) string {
 			_ = c.stderr.Close()
 		}
 	}
+	if timedOut {
+		return helloDetail(r.helloTimeout)
+	}
 	return r.exitDetail(c.cmd.ProcessState, lastStderr)
+}
+
+// helloDetail is the down detail of a child that sent no hello within d: whole
+// seconds as "N s", any other time in ms.
+func helloDetail(d time.Duration) string {
+	if d%time.Second == 0 {
+		return "no hello after " + strconv.FormatInt(int64(d/time.Second), 10) + " s"
+	}
+	return "no hello after " + strconv.FormatInt(d.Milliseconds(), 10) + " ms"
 }
 
 // exitDetail describes how the child ended.
@@ -450,6 +488,22 @@ func (r *Remote) signalChild(pid int, sig syscall.Signal) {
 	if r.child == pid {
 		r.signal(pid, sig)
 	}
+}
+
+// signalSilentChild is signalChild for the hello timer: it sends sig only
+// while the status is not up, and reports whether it sent it. The reader sets
+// the status up under the same lock, so a hello is counted either before the
+// signal, and the child is left alone, or after it, and the hello is too late.
+// A hello that the reader has counted but run has not read yet is thus never
+// answered with a signal, whichever select case run takes first.
+func (r *Remote) signalSilentChild(pid int, sig syscall.Signal) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.child != pid || r.state == "up" {
+		return false
+	}
+	r.signal(pid, sig)
+	return true
 }
 
 // endChild sends SIGKILL to what is left of the group of the child pid, which

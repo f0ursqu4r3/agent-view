@@ -4,12 +4,14 @@ package remote
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -890,5 +892,280 @@ func TestRemoteKillRacesStopAndExit(t *testing.T) {
 	}
 	if len(sig.all()) == 0 {
 		t.Fatal("no signal was sent: the test checked nothing")
+	}
+}
+
+// silentChild is a child that writes its pid to pidFile, never sends a hello,
+// and sleeps.
+func silentChild(pidFile string) []string {
+	return []string{"sh", "-c", "echo $$ >> " + shellQuote(pidFile) + "; exec sleep 30"}
+}
+
+// helloTimeoutTest is the hello timeout that the tests below use.
+const helloTimeoutTest = 200 * time.Millisecond
+
+// A child that sends no hello is ended when the hello timeout ends: the host
+// goes down with the timeout detail, not with the exit of the child, and the
+// child is gone.
+func TestSilentChildTimesOutWithADetail(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	r := newRemote(t, Options{
+		Command:   func(string, string) []string { return silentChild(pidFile) },
+		BackoffMs: [2]int64{5000, 5000},
+	})
+	r.helloTimeout = helloTimeoutTest
+	w := watch(r)
+	start(t, r)
+	until(t, 3*time.Second, "down with the timeout detail", func() bool {
+		s := r.Status()
+		return s.State == "down" && strings.HasPrefix(s.Detail, "no hello after")
+	})
+	if d := r.Status().Detail; d != "no hello after 200 ms" {
+		t.Errorf("detail = %q, want %q", d, "no hello after 200 ms")
+	}
+	waitGone(t, pids(t, pidFile)[0], 3*time.Second)
+	if s := w.seen(); !slices.Equal(s, []string{"down:no hello after 200 ms"}) {
+		t.Errorf("states = %q, want [down:no hello after 200 ms]", s)
+	}
+}
+
+// A child that sends its hello before the timeout ends is not ended, and the
+// host stays up after the timeout has ended.
+func TestHelloBeforeTheTimeoutKeepsTheChild(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	var sp spawns
+	r := newRemote(t, Options{Command: sp.command(fixed(demoScript(pidFile)...))})
+	r.helloTimeout = helloTimeoutTest
+	w := watch(r)
+	start(t, r)
+	until(t, wait, "up", func() bool { return r.Status().State == "up" })
+	time.Sleep(600 * time.Millisecond)
+	if s := r.Status(); s.State != "up" || s.Detail != "" {
+		t.Errorf("status = %+v, want up with no detail", s)
+	}
+	if s := w.seen(); !slices.Equal(s, []string{"up"}) {
+		t.Errorf("states = %q, want [up]", s)
+	}
+	if n := sp.count(); n != 1 {
+		t.Errorf("%d spawns, want 1", n)
+	}
+	if err := syscall.Kill(pids(t, pidFile)[0], 0); err != nil {
+		t.Errorf("the child is gone after the timeout: %v", err)
+	}
+}
+
+// A child that exits inside the hello window keeps its own detail: the
+// timeout is not the reason for the exit.
+func TestChildThatExitsFirstKeepsItsOwnDetail(t *testing.T) {
+	for _, tc := range []struct{ name, script, want string }{
+		{"127", "sleep 0.05; exit 127", "agent-view not found on devbox"},
+		{"255", "sleep 0.05; echo 'Permission denied (publickey).' >&2; exit 255", "ssh failed: Permission denied (publickey)."},
+		{"other", "sleep 0.05; exit 3", "collector exited 3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRemote(t, Options{
+				Command:   func(string, string) []string { return []string{"sh", "-c", tc.script} },
+				BackoffMs: [2]int64{5000, 5000},
+			})
+			r.helloTimeout = helloTimeoutTest
+			w := watch(r)
+			start(t, r)
+			until(t, wait, "down", func() bool { return r.Status().State == "down" })
+			if d := r.Status().Detail; d != tc.want {
+				t.Errorf("detail = %q, want %q", d, tc.want)
+			}
+			if s := w.seen(); !slices.Equal(s, []string{"down:" + tc.want}) {
+				t.Errorf("states = %q, want [down:%s]", s, tc.want)
+			}
+		})
+	}
+}
+
+// A child that timed out is started again, and the retry delay grows as it
+// does after any other exit.
+func TestTimedOutChildIsStartedAgainWithBackoff(t *testing.T) {
+	var sp spawns
+	r := newRemote(t, Options{
+		Command:   sp.command(fixed("sh", "-c", "exec sleep 30")),
+		BackoffMs: [2]int64{100, 400},
+	})
+	r.helloTimeout = helloTimeoutTest
+	w := watch(r)
+	start(t, r)
+	until(t, wait, "3 spawns", func() bool { return sp.count() >= 3 })
+	times := sp.all()
+	// A child lives for the timeout, then the host waits 100 ms, then 200 ms.
+	// The timers never fire early, so these are lower bounds.
+	if gap, floor := times[1].Sub(times[0]), helloTimeoutTest+100*time.Millisecond; gap < floor {
+		t.Errorf("first gap = %v, want at least %v", gap, floor)
+	}
+	if gap, floor := times[2].Sub(times[1]), helloTimeoutTest+200*time.Millisecond; gap < floor {
+		t.Errorf("second gap = %v, want at least %v", gap, floor)
+	}
+	want := []string{"down:no hello after 200 ms", "connecting", "down:no hello after 200 ms", "connecting"}
+	if s := w.seen(); len(s) < len(want) || !slices.Equal(s[:len(want)], want) {
+		t.Errorf("states = %q, want them to start with %q", s, want)
+	}
+}
+
+// edge is one Remote of TestHelloAtTheTimerEdge.
+type edge struct {
+	r        *Remote
+	stopping atomic.Bool // set before the test stops r
+	mu       sync.Mutex
+	terms    int      // SIGTERMs sent before the test stopped r
+	bad      []string // SIGTERMs sent while the status was up
+}
+
+// A hello that arrives about when the hello timeout ends is never answered
+// with a signal: the timer must not end a child whose hello the Remote has
+// counted. The race has two legitimate outcomes, so each Remote is checked
+// against its own signals, not against the clock: a SIGTERM before the hello
+// is a timeout, and a SIGTERM after the hello is a bug.
+func TestHelloAtTheTimerEdge(t *testing.T) {
+	edges := make([]*edge, 20)
+	for i := range edges {
+		e := &edge{}
+		edges[i] = e
+		// 180 ms to 199 ms, plus the start of sh and sleep: both sides of 200 ms.
+		script := fmt.Sprintf("sleep 0.%03d; ", 180+i) + printLines(helloLine("devbox")) + "exec sleep 30"
+		e.r = newRemote(t, Options{
+			Command:   func(string, string) []string { return []string{"sh", "-c", script} },
+			BackoffMs: [2]int64{5000, 5000},
+		})
+		e.r.helloTimeout = helloTimeoutTest
+		e.r.signal = func(pid int, sig syscall.Signal) {
+			// signal runs under the Remote's lock, so the state is stable here.
+			if sig == syscall.SIGTERM && !e.stopping.Load() {
+				e.mu.Lock()
+				e.terms++
+				if e.r.state == "up" {
+					e.bad = append(e.bad, "SIGTERM to the child of an up host")
+				}
+				e.mu.Unlock()
+			}
+			killGroup(pid, sig)
+		}
+	}
+	for _, e := range edges {
+		start(t, e.r)
+	}
+	until(t, wait, "every host to be up or down", func() bool {
+		for _, e := range edges {
+			if e.r.Status().State == "connecting" {
+				return false
+			}
+		}
+		return true
+	})
+	// A wrong kill comes within milliseconds of the hello: give it time.
+	time.Sleep(300 * time.Millisecond)
+	timedOut := 0
+	for i, e := range edges {
+		e.stopping.Store(true)
+		e.mu.Lock()
+		terms, bad := e.terms, slices.Clone(e.bad)
+		e.mu.Unlock()
+		s := e.r.Status()
+		switch {
+		case len(bad) > 0:
+			t.Errorf("remote %d: %q", i, bad)
+		case terms == 0 && s.State != "up":
+			t.Errorf("remote %d: status = %+v after a hello and no signal, want up", i, s)
+		case terms > 0 && (s.State != "down" || s.Detail != "no hello after 200 ms"):
+			t.Errorf("remote %d: status = %+v after a timeout, want down with the timeout detail", i, s)
+		}
+		if terms > 0 {
+			timedOut++
+		}
+	}
+	t.Logf("%d of %d hellos came after the timeout", timedOut, len(edges))
+}
+
+// The reader sets the status up and runs the status listeners before run learns
+// of the hello. A timer that ends in that gap must not end the child: the
+// hello was counted first. A slow listener holds the gap open for longer than
+// the timeout, so the order is fixed, not left to the scheduler.
+func TestHelloCountedWhenTheTimerEndsKeepsTheChild(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	var sp spawns
+	var sig sent
+	r := newRemote(t, Options{Command: sp.command(fixed(demoScript(pidFile)...))})
+	r.signal = sig.signal
+	r.helloTimeout = helloTimeoutTest
+	r.OnStatusChange(func() {
+		if r.Status().State == "up" {
+			time.Sleep(2 * helloTimeoutTest)
+		}
+	})
+	w := watch(r)
+	start(t, r)
+	until(t, wait, "up", func() bool { return r.Status().State == "up" })
+	// Past the timer, and past the listener, which then lets run read the hello.
+	time.Sleep(4 * helloTimeoutTest)
+	if s := sig.all(); len(s) != 0 {
+		t.Errorf("signals = %q, want none", s)
+	}
+	if s := r.Status(); s.State != "up" || s.Detail != "" {
+		t.Errorf("status = %+v, want up with no detail", s)
+	}
+	if s := w.seen(); !slices.Equal(s, []string{"up"}) {
+		t.Errorf("states = %q, want [up]", s)
+	}
+	if n := sp.count(); n != 1 {
+		t.Errorf("%d spawns, want 1", n)
+	}
+}
+
+// A Stop that signals the child before the hello timeout ends keeps its own
+// signals: the timer adds no SIGTERM and does not move the SIGKILL.
+func TestStopBeforeTheHelloTimerSendsOneTerm(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "pids")
+	script := "trap '' TERM; sleep 30 & echo $$ $! > " + shellQuote(pidFile) + "; wait"
+	var sig sent
+	r := newRemote(t, Options{Command: func(string, string) []string { return []string{"sh", "-c", script} }})
+	r.signal = sig.signal
+	// The child ignores SIGTERM, so Stop takes 2 s: the timer ends inside it.
+	r.helloTimeout = 1500 * time.Millisecond
+	start(t, r)
+	until(t, wait, "the child and the grandchild", func() bool {
+		data, err := os.ReadFile(pidFile)
+		return err == nil && len(strings.Fields(string(data))) == 2 && strings.HasSuffix(string(data), "\n")
+	})
+	ps := pids(t, pidFile)
+	t.Cleanup(func() {
+		for _, pid := range ps {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	r.Stop()
+	terms := 0
+	for _, s := range sig.all() {
+		if s == strconv.Itoa(ps[0])+":SIGTERM" {
+			terms++
+		}
+	}
+	if terms != 1 {
+		t.Errorf("%d SIGTERMs to the child, want 1: %q", terms, sig.all())
+	}
+	if s := r.Status(); s.State != "down" || s.Detail != "" {
+		t.Errorf("status = %+v, want down with no detail", s)
+	}
+}
+
+// The detail has whole seconds as "N s" and any other time in ms.
+func TestHelloDetailText(t *testing.T) {
+	for _, tc := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{defaultHelloTimeout, "no hello after 15 s"},
+		{200 * time.Millisecond, "no hello after 200 ms"},
+		{2 * time.Second, "no hello after 2 s"},
+		{1500 * time.Millisecond, "no hello after 1500 ms"},
+	} {
+		if got := helloDetail(tc.d); got != tc.want {
+			t.Errorf("helloDetail(%v) = %q, want %q", tc.d, got, tc.want)
+		}
 	}
 }
