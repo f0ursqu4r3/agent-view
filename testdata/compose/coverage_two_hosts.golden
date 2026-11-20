@@ -171,29 +171,29 @@ bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbdddddddddddddddddddbb
 === short box ===
 ┌─ coverage ───────────────────────────────────────────────────────────┐
-│ … 2 more hosts                                                       │
+│ host box                                                             │
+│ log roots          /home/a/.claude/projects                          │
+│                    /home/a/.codex/sessions                           │
+│ logs open          7 of 12 discovered                                │
+│ watch roots        /home/a/work                                      │
+│ malformed records  3                                                 │
+│ … 4 more lines, 1 more host                                          │
 │                                                                      │
 │ diagnostics                                                          │
 │ exec: bun: not found                                                 │
 │ box#2 collector down: exit status 1                                  │
 │ store: dropped 2 envelope(s)                                         │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
 └────────────────────────────────────────────────── c or esc to close ─┘
 bbBBBBBBBBBBbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-btddddddddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btddddddddtttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttb
+btdddddddddddddddddddddddddddttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 btdddddddddddttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
-bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb
 bttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttb

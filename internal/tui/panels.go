@@ -150,33 +150,43 @@ func coverageLines(cov schema.Coverage) []panelLine {
 // always shows (fewer when there are fewer).
 const diagKept = 4
 
-// coverageUnits returns the parts the coverage panel cuts by, in order, and
-// the line that counts the parts left out. With two or more hosts a part is
-// the block of one host (a line "host <label>", then its coverage), and
-// blocks have one blank line between them. With none or one host the parts
-// are the lines of the single coverage, with nothing between them.
-func coverageUnits(covs []HostCoverage) (units [][]panelLine, blankBetween bool, marker func(left int) string) {
+// coverageBlocks returns the blocks of the coverage panel, in order. With two
+// or more hosts a block is one host's coverage after a line "host <label>".
+// With none or one host there is one block with no host line (an empty
+// coverage when there is no host).
+func coverageBlocks(covs []HostCoverage) [][]panelLine {
 	if len(covs) < 2 {
 		var cov schema.Coverage
 		if len(covs) == 1 {
 			cov = covs[0].Coverage
 		}
-		for _, l := range coverageLines(cov) {
-			units = append(units, []panelLine{l})
-		}
-		return units, false, func(left int) string { return fmt.Sprintf("… %d more lines", left) }
+		return [][]panelLine{coverageLines(cov)}
 	}
 	dim := cells.Style{Role: cells.RDim}
-	for _, hc := range covs {
-		block := []panelLine{{value: "host " + text.Clean(hc.Label), st: dim, wide: true}}
-		units = append(units, append(block, coverageLines(hc.Coverage)...))
+	blocks := make([][]panelLine, len(covs))
+	for i, hc := range covs {
+		host := panelLine{value: "host " + text.Clean(hc.Label), st: dim, wide: true}
+		blocks[i] = append([]panelLine{host}, coverageLines(hc.Coverage)...)
 	}
-	return units, true, func(left int) string {
-		if left == 1 {
-			return "… 1 more host"
+	return blocks
+}
+
+// moreMarker returns the line that counts what the coverage panel leaves out:
+// the lines of the first block, the hosts after it, or both.
+func moreMarker(lines, hosts int) string {
+	count := func(n int, noun string) string {
+		if n == 1 {
+			return "1 more " + noun
 		}
-		return fmt.Sprintf("… %d more hosts", left)
+		return fmt.Sprintf("%d more %ss", n, noun)
 	}
+	switch {
+	case lines > 0 && hosts > 0:
+		return "… " + count(lines, "line") + ", " + count(hosts, "host")
+	case lines > 0:
+		return "… " + count(lines, "line")
+	}
+	return "… " + count(hosts, "host")
 }
 
 // CoveragePanel draws the coverage panel, w × h: what the collector watches
@@ -188,11 +198,15 @@ func coverageUnits(covs []HostCoverage) (units [][]panelLine, blankBetween bool,
 // (one line when there are none), and the coverage gets the other lines.
 //
 // With two or more hosts the coverage is one block per host in the order of
-// covs, each starting with a line "host <label>". The panel shows the most
-// whole blocks that fit and, when it leaves some out, the line "… <n> more
-// hosts" ("… 1 more host") after them. With one host (or none: an empty
-// coverage) there is one block with no host line. When it does not fit, the
-// panel shows its first lines and the line "… <n> more lines".
+// covs, each starting with a line "host <label>", with a blank line between
+// blocks. With one host (or none: an empty coverage) there is one block with
+// no host line. The panel shows the most whole blocks that fit. When it
+// leaves some out, it adds the line "… <n> more hosts" after them. When not
+// even the first block fits with that line, the panel shows the first lines
+// of the first block and the line "… <m> more lines, <n> more hosts", m being
+// the lines of that block left out and n the hosts after it. With one host
+// the line reads "… <m> more lines". A count of 1 reads "1 more line" or "1
+// more host".
 //
 // The section of the diagnostics follows the coverage directly and shows the
 // newest lines that fit, at least the reserve; older lines drop with no
@@ -226,18 +240,18 @@ func CoveragePanel(covs []HostCoverage, diag []string, w, h int) *cells.Grid {
 		lines = section(diagKept)
 		lines = lines[len(lines)-inner:]
 	} else {
-		units, blankBetween, more := coverageUnits(covs)
+		blocks := coverageBlocks(covs)
 		body := inner - reserve
-		// Take parts while the next one fits in body with the marker line,
-		// which the last part does not need.
+		// Take whole blocks while the next one fits in body with the marker
+		// line, which the last block does not need.
 		k, used := 0, 0
-		for k < len(units) {
-			next := used + len(units[k])
-			if blankBetween && k > 0 {
-				next++
+		for k < len(blocks) {
+			next := used + len(blocks[k])
+			if k > 0 {
+				next++ // a blank line between blocks
 			}
 			marker := 0
-			if k+1 < len(units) {
+			if k+1 < len(blocks) {
 				marker = 1
 			}
 			if next+marker > body {
@@ -245,14 +259,22 @@ func CoveragePanel(covs []HostCoverage, diag []string, w, h int) *cells.Grid {
 			}
 			k, used = k+1, next
 		}
-		for i, u := range units[:k] {
-			if blankBetween && i > 0 {
+		for i, b := range blocks[:k] {
+			if i > 0 {
 				lines = append(lines, panelLine{})
 			}
-			lines = append(lines, u...)
+			lines = append(lines, b...)
 		}
-		if k < len(units) && body > used { // the marker fits
-			lines = append(lines, panelLine{value: more(len(units) - k), st: dim, wide: true})
+		linesLeft, hostsLeft := 0, len(blocks)-k
+		if k == 0 && body > 0 {
+			// No block fits whole: show the first lines of the first block,
+			// and leave the last line of body to the marker.
+			shown := body - 1
+			lines = append(lines, blocks[0][:shown]...)
+			linesLeft, hostsLeft = len(blocks[0])-shown, len(blocks)-1
+		}
+		if k < len(blocks) && body > used { // the marker fits
+			lines = append(lines, panelLine{value: moreMarker(linesLeft, hostsLeft), st: dim, wide: true})
 		}
 		lines = append(lines, section(inner-len(lines)-2)...)
 	}
