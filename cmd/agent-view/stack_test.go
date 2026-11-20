@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -86,15 +85,14 @@ func TestNewStackInvalidRemote(t *testing.T) {
 
 // A remote child that ignores SIGTERM does not hold stop beyond its bound:
 // stop(300 ms) returns within 1 s, and its own SIGKILL of the child's group
-// (Kill) ends the marked processes within 700 ms of the return. The Remote
+// (Kill) ends the stub processes within 700 ms of the return. The Remote
 // sends its own SIGKILL only 2 s after its SIGTERM, so a child gone before
 // 1.5 s was ended by stop, not by the Remote.
 func TestStackStopBound(t *testing.T) {
 	const bound = 300 * time.Millisecond
-	marker := fmt.Sprintf("sleep 985.%d", time.Now().UnixNano()%1_000_000)
-	// The shell and its sleep both ignore SIGTERM, and both command lines hold
-	// the marker.
-	cmd := []string{"sh", "-c", "trap '' TERM; " + marker + " & wait"}
+	pids := newStubPIDs(t)
+	// The shell and its sleep both ignore SIGTERM. The stub records both PIDs.
+	cmd := []string{"sh", "-c", "trap '' TERM; sleep 600 & " + pids.record("$$ $!") + "wait"}
 	s, err := newStack(cli.Args{Mode: "serve", Demo: true, Remotes: []string{"box1.invalid"}}, cmd, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -108,27 +106,16 @@ func TestStackStopBound(t *testing.T) {
 	})
 	var errs errLog
 	s.start(errs.add)
-	for i := 0; pgrepCount(t, marker) != 2; i++ {
-		if i == 50 {
-			t.Fatalf("%d marked processes, want 2", pgrepCount(t, marker))
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	pids.waitRunning(2, 5*time.Second)
 	began := time.Now()
 	s.stop(bound)
 	returned := time.Now()
 	if took := returned.Sub(began); took < bound-50*time.Millisecond || took > time.Second {
 		t.Fatalf("stop took %v, want its %v bound (the child ignores SIGTERM)", took, bound)
 	}
-	deadline := returned.Add(700 * time.Millisecond)
-	for n := pgrepCount(t, marker); n != 0; n = pgrepCount(t, marker) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%d marked processes left %v after stop returned: stop did not send SIGKILL", n, time.Since(returned))
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	pids.waitGone(time.Until(returned.Add(700*time.Millisecond)), "left 700 ms after stop returned: stop did not send SIGKILL")
 	if gone := time.Since(began); gone > 1500*time.Millisecond {
-		t.Fatalf("marked processes gone %v after stop began: too late to tell stop from the Remote's own SIGKILL", gone)
+		t.Fatalf("stub processes gone %v after stop began: too late to tell stop from the Remote's own SIGKILL", gone)
 	}
 	if got := errs.all(); len(got) != 0 {
 		t.Fatalf("onErr got %q, want nothing", got)

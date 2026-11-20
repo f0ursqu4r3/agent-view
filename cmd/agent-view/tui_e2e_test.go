@@ -172,32 +172,6 @@ func (p *tuiPane) waitExit() int {
 	return n
 }
 
-// newMarker returns a sleep argument unique to this test run. pgrep -f on it
-// finds only the processes of this test.
-func newMarker(t *testing.T) string {
-	t.Helper()
-	m := fmt.Sprintf("600.%d%06d", os.Getpid(), rand.IntN(1_000_000))
-	// SIGKILL only the PIDs found by the marker, if the test fails before the
-	// program stops them.
-	t.Cleanup(func() {
-		out, _ := exec.Command("pgrep", "-f", "sleep "+m).Output()
-		for _, pid := range strings.Fields(string(out)) {
-			_ = exec.Command("kill", "-KILL", pid).Run()
-		}
-	})
-	return m
-}
-
-// waitNoMarked waits up to 1 s until no process holds the marker.
-func waitNoMarked(t *testing.T, marker string) {
-	t.Helper()
-	for deadline := time.Now().Add(time.Second); pgrepCount(t, "sleep "+marker) != 0; time.Sleep(50 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%d marked processes remain", pgrepCount(t, "sleep "+marker))
-		}
-	}
-}
-
 // remoteEnv returns AGENT_VIEW_REMOTE_COMMAND for a remote that runs script.
 func remoteEnv(t *testing.T, script string) string {
 	t.Helper()
@@ -247,12 +221,13 @@ func statusLine(s string) string {
 // hostUp reports whether the status bar shows label as up.
 func hostUp(s, label string) bool { return strings.Contains(statusLine(s), label+" ● up") }
 
-// startDemoRemote starts --demo --remote fakehost with a remote that prints
-// the well-formed stream and then sleeps with marker; prefix runs first.
-func startDemoRemote(t *testing.T, prefix, marker string) *tuiPane {
+// startDemoRemote starts --demo --remote fakehost with a remote that records
+// its PID in pids, prints the well-formed stream and then sleeps; prefix runs
+// first. It returns when the one remote process runs.
+func startDemoRemote(t *testing.T, prefix string, pids *stubPIDs) *tuiPane {
 	t.Helper()
 	stream := remoteStream(t)
-	script := prefix + "cat '" + stream + "'; exec sleep " + marker
+	script := prefix + pids.record("$$") + "cat '" + stream + "'; exec sleep 600"
 	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
 	p.waitScreen("both hosts up", func(s string) bool {
 		return hostUp(s, localLabel()) && hostUp(s, "fakehost")
@@ -275,24 +250,20 @@ func startDemoRemote(t *testing.T, prefix, marker string) *tuiPane {
 		n++
 		return false
 	})
-	for deadline := time.Now().Add(paneWait); pgrepCount(t, "sleep "+marker) != 1; time.Sleep(100 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("%d marked processes, want 1", pgrepCount(t, "sleep "+marker))
-		}
-	}
+	pids.waitRunning(1, paneWait)
 	return p
 }
 
 // --demo with one remote: both hosts come up with the remote's agent; q exits
 // 0 and leaves no remote child.
 func TestTUIDemoAndRemote(t *testing.T) {
-	marker := newMarker(t)
-	p := startDemoRemote(t, "", marker)
+	pids := newStubPIDs(t)
+	p := startDemoRemote(t, "", pids)
 	p.keys("q")
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
 	}
-	waitNoMarked(t, marker)
+	pids.waitGone(time.Second, "remain")
 }
 
 // writeClaudeLog writes one Claude session under home, with records and
@@ -366,15 +337,15 @@ func TestTUIStartupHistory(t *testing.T) {
 func TestTUISignals(t *testing.T) {
 	for _, sig := range []string{"TERM", "HUP"} {
 		t.Run(sig, func(t *testing.T) {
-			marker := newMarker(t)
-			p := startDemoRemote(t, "", marker)
+			pids := newStubPIDs(t)
+			p := startDemoRemote(t, "", pids)
 			if out, err := exec.Command("kill", "-"+sig, strconv.Itoa(p.pid())).CombinedOutput(); err != nil {
 				t.Fatalf("kill -%s: %v: %s", sig, err, out)
 			}
 			if code := p.waitExit(); code != 0 {
 				t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
 			}
-			waitNoMarked(t, marker)
+			pids.waitGone(time.Second, "remain")
 		})
 	}
 }
@@ -382,13 +353,13 @@ func TestTUISignals(t *testing.T) {
 // A remote child that ignores SIGTERM does not hold the exit: q exits 0
 // within 3 s and the child is gone.
 func TestTUIQuitWithStubbornRemote(t *testing.T) {
-	marker := newMarker(t)
-	p := startDemoRemote(t, "trap '' TERM; ", marker)
+	pids := newStubPIDs(t)
+	p := startDemoRemote(t, "trap '' TERM; ", pids)
 	p.keys("q")
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0:\n%s", code, p.history())
 	}
-	waitNoMarked(t, marker)
+	pids.waitGone(time.Second, "remain")
 }
 
 // A remote that sends garbage, one hello and half a line, then exits 1: its
@@ -397,11 +368,11 @@ func TestTUIQuitWithStubbornRemote(t *testing.T) {
 func TestTUIBrokenRemote(t *testing.T) {
 	hello := strings.TrimSuffix(string(wire.EncodeLine(wire.Envelope{V: 1, Host: "fakehost", Seq: 0, Ts: "2026-01-01T00:00:00.000Z",
 		Ev: wire.Hello{CollectorVersion: "0", Platform: "t", Now: "2026-01-01T00:00:00.000Z"}})), "\n")
-	marker := newMarker(t)
+	pids := newStubPIDs(t)
 	flag := filepath.Join(t.TempDir(), "ran")
 	// Later runs wait without a hello, so the host stays connecting: a host
 	// that cycles through connecting and up in milliseconds is hard to see.
-	script := "if [ -e '" + flag + "' ]; then exec sleep " + marker + "; fi; touch '" + flag + "'; " +
+	script := "if [ -e '" + flag + "' ]; then " + pids.record("$$") + "exec sleep 600; fi; touch '" + flag + "'; " +
 		`printf 'garbage {{{\n'; printf '%s\n' '` + hello + `'; printf '{"v":1,"kind":"agent.upsert",'; exit 1`
 	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
 	p.waitScreen("the remote down", func(s string) bool {
@@ -430,17 +401,17 @@ func TestTUIBrokenRemote(t *testing.T) {
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0", code)
 	}
-	waitNoMarked(t, marker)
+	pids.waitGone(time.Second, "remain")
 }
 
 // What a remote writes on stderr never reaches the board: it shows in the
 // coverage panel, and once on the real stderr after the program exits.
 func TestTUIQuietTerminal(t *testing.T) {
-	marker := newMarker(t)
+	pids := newStubPIDs(t)
 	flag := filepath.Join(t.TempDir(), "ran")
 	// The first run fails like ssh (exit 255) with the marker on stderr; later
 	// runs wait, so the detail is held once.
-	script := "if [ -e '" + flag + "' ]; then exec sleep " + marker + "; fi; touch '" + flag +
+	script := "if [ -e '" + flag + "' ]; then " + pids.record("$$") + "exec sleep 600; fi; touch '" + flag +
 		"'; echo QUIET-TEST-MARKER >&2; exit 255"
 	p := startTUI(t, tuiOpts{env: []string{remoteEnv(t, script)}, args: []string{"--demo", "--remote", "fakehost"}})
 	const mark = "QUIET-TEST-MARKER"
@@ -465,7 +436,7 @@ func TestTUIQuietTerminal(t *testing.T) {
 	if code := p.waitExit(); code != 0 {
 		t.Fatalf("exit status %d, want 0", code)
 	}
-	waitNoMarked(t, marker)
+	pids.waitGone(time.Second, "remain")
 	out := p.history()
 	if n := strings.Count(out, mark); n != 1 {
 		t.Fatalf("the marker shows %d times after exit, want 1:\n%s", n, out)

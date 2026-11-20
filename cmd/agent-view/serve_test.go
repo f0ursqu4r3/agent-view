@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -162,23 +164,105 @@ func TestServeBadRemoteCommand(t *testing.T) {
 	}
 }
 
-// pgrepCount returns how many processes have pattern in their command line.
-func pgrepCount(t *testing.T, pattern string) int {
+// stubPIDs is a file in which a stub remote records its own PID and the PIDs
+// of its children, with a shell command such as `echo $$ >> file`. The tests
+// look up and stop only these PIDs. They never find a process by its name or
+// its command line.
+type stubPIDs struct {
+	t    *testing.T
+	path string
+}
+
+// newStubPIDs makes the file. At the end of the test it sends SIGKILL to each
+// recorded PID that still runs: the program did not stop it, because the test
+// failed first.
+func newStubPIDs(t *testing.T) *stubPIDs {
 	t.Helper()
-	out, err := exec.Command("pgrep", "-f", pattern).Output()
-	var ee *exec.ExitError
-	if errors.As(err, &ee) && ee.ExitCode() == 1 {
-		return 0 // no match
+	p := &stubPIDs{t: t, path: filepath.Join(t.TempDir(), "pids")}
+	t.Cleanup(func() {
+		for _, pid := range p.running() {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	return p
+}
+
+// record returns a shell command, with a trailing "; ", that appends vars (for
+// example "$$", or "$$ $!") to the file.
+func (p *stubPIDs) record(vars string) string {
+	return "echo " + vars + " >> " + shellQuote(p.path) + "; "
+}
+
+// shellQuote quotes s for a POSIX shell.
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// recorded returns every PID that the stubs wrote so far.
+func (p *stubPIDs) recorded() []int {
+	data, _ := os.ReadFile(p.path)
+	var pids []int
+	for _, f := range strings.Fields(string(data)) {
+		if n, err := strconv.Atoi(f); err == nil && n > 1 {
+			pids = append(pids, n)
+		}
 	}
-	if err != nil {
-		t.Skipf("pgrep unavailable: %v", err)
+	return pids
+}
+
+// running returns the recorded PIDs that still run.
+func (p *stubPIDs) running() []int {
+	var pids []int
+	for _, pid := range p.recorded() {
+		if procRuns(pid) {
+			pids = append(pids, pid)
+		}
 	}
-	return len(strings.Fields(string(out)))
+	return pids
+}
+
+// procRuns reports whether process pid exists and is not a zombie. A zombie
+// has ended and waits for its parent to collect it.
+func procRuns(pid int) bool {
+	if err := syscall.Kill(pid, 0); err != nil && !errors.Is(err, syscall.EPERM) {
+		return false
+	}
+	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil { // ps exits 1 when no process matches
+		return false
+	}
+	return !strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
+}
+
+// waitRunning waits up to d until exactly n PIDs are recorded and all of them
+// run.
+func (p *stubPIDs) waitRunning(n int, d time.Duration) {
+	p.t.Helper()
+	for deadline := time.Now().Add(d); ; time.Sleep(50 * time.Millisecond) {
+		if len(p.recorded()) == n && len(p.running()) == n {
+			return
+		}
+		if time.Now().After(deadline) {
+			p.t.Fatalf("%d PIDs recorded and %d running, want %d running", len(p.recorded()), len(p.running()), n)
+		}
+	}
+}
+
+// waitGone waits up to d until no recorded PID runs. It fails with what.
+func (p *stubPIDs) waitGone(d time.Duration, what string) {
+	p.t.Helper()
+	for deadline := time.Now().Add(d); ; time.Sleep(50 * time.Millisecond) {
+		n := len(p.running())
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			p.t.Fatalf("%d stub processes %s", n, what)
+		}
+	}
 }
 
 // A listener holds the port: serve exits 1 within 3 s with the message and
 // nothing on stdout. The remotes start only after the server binds, so no
-// remote child may appear: the marker check guards that start order.
+// remote child may appear: no stub records a PID.
 func TestServePortInUse(t *testing.T) {
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -186,10 +270,10 @@ func TestServePortInUse(t *testing.T) {
 	}
 	defer ln.Close()
 	port := ln.Addr().(*net.TCPAddr).Port
-	marker := fmt.Sprintf("sleep 987.%d", time.Now().UnixNano()%1_000_000)
+	pids := newStubPIDs(t)
 	var out, errb bytes.Buffer
 	cmd := exec.Command(binPath, "serve", "--port", fmt.Sprint(port), "--demo", "--remote", "box1.invalid")
-	cmd.Env = append(os.Environ(), `AGENT_VIEW_REMOTE_COMMAND=["sh","-c","`+marker+`"]`)
+	cmd.Env = append(os.Environ(), remoteEnv(t, pids.record("$$")+"exec sleep 600"))
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -213,10 +297,11 @@ func TestServePortInUse(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty", out.String())
 	}
-	// A leftover child would show for a moment at least.
+	// A child that serve started records its PID, and a child that is left
+	// running shows for a moment at least.
 	for i := 0; i < 5; i++ {
-		if n := pgrepCount(t, marker); n != 0 {
-			t.Fatalf("%d child processes left running", n)
+		if n := len(pids.recorded()); n != 0 {
+			t.Fatalf("%d remote children started; none may start before the server binds", n)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -224,20 +309,13 @@ func TestServePortInUse(t *testing.T) {
 
 // A remote child that ignores SIGTERM does not outlive serve: when its stop
 // bound runs out, serve sends SIGKILL to the child's process group and exits
-// 0 within 2.5 s, and no marked process is left.
+// 0 within 2.5 s, and no recorded stub process is left.
 func TestServeKillsStubbornRemote(t *testing.T) {
-	marker := fmt.Sprintf("sleep 986.%d", time.Now().UnixNano()%1_000_000)
-	t.Cleanup(func() { _ = exec.Command("pkill", "-KILL", "-f", marker).Run() })
-	// The shell and its sleep both ignore SIGTERM, and both command lines
-	// hold the marker.
-	env := []string{`AGENT_VIEW_REMOTE_COMMAND=["sh","-c","trap '' TERM; ` + marker + ` & wait"]`}
+	pids := newStubPIDs(t)
+	// The shell and its sleep both ignore SIGTERM. The stub records both PIDs.
+	env := []string{remoteEnv(t, "trap '' TERM; sleep 600 & "+pids.record("$$ $!")+"wait")}
 	c, _ := startServe(t, env, "--demo", "--remote", "box1.invalid")
-	for i := 0; pgrepCount(t, marker) != 2; i++ {
-		if i == 50 {
-			t.Fatalf("%d marked processes, want 2", pgrepCount(t, marker))
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	pids.waitRunning(2, 5*time.Second)
 	began := time.Now()
 	c.cmd.Process.Signal(syscall.SIGTERM)
 	if code := c.waitExit(t, 2500*time.Millisecond); code != 0 {
@@ -246,16 +324,7 @@ func TestServeKillsStubbornRemote(t *testing.T) {
 	if took := time.Since(began); took < 1400*time.Millisecond {
 		t.Fatalf("serve exited after %v: the child did not ignore SIGTERM", took)
 	}
-	for i := 0; ; i++ {
-		n := pgrepCount(t, marker)
-		if n == 0 {
-			break
-		}
-		if i == 10 {
-			t.Fatalf("%d marked processes left 1 s after serve exited", n)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	pids.waitGone(time.Second, "left 1 s after serve exited")
 }
 
 type auditReport struct {
