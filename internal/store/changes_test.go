@@ -197,7 +197,7 @@ func TestReplayIsIgnored(t *testing.T) {
 	if c := s.Counters("a"); c.Calls != 1 || c.Faults != 0 {
 		t.Fatalf("Counters = %+v, want 1 call, 0 faults", c)
 	}
-	if n := s.hosts["local"].recent.len(); n != 0 {
+	if n := s.hosts["local"].recent.Len(); n != 0 {
 		t.Fatalf("recent writes = %d paths, want 0", n)
 	}
 
@@ -270,8 +270,8 @@ func TestEmptySnapshotKeepsAgents(t *testing.T) {
 	s.Apply(evFS("local", "/p/x.ts"))
 	s.Agents(nowMs) // d goes dormant
 	h := s.hosts["local"]
-	if h.dormant.len() != 1 || len(h.held) != 1 || h.recent.len() != 1 {
-		t.Fatalf("before: dormant %d held %d recent %d, want 1 1 1", h.dormant.len(), len(h.held), h.recent.len())
+	if h.dormant.Len() != 1 || len(h.held) != 1 || h.recent.Len() != 1 {
+		t.Fatalf("before: dormant %d held %d recent %d, want 1 1 1", h.dormant.Len(), len(h.held), h.recent.Len())
 	}
 	counters := s.Counters("a")
 
@@ -282,11 +282,11 @@ func TestEmptySnapshotKeepsAgents(t *testing.T) {
 	if c := s.Counters("a"); c != counters {
 		t.Fatalf("Counters = %+v, want %+v", c, counters)
 	}
-	if h.dormant.len() != 1 {
-		t.Fatalf("dormant = %d, want 1", h.dormant.len())
+	if h.dormant.Len() != 1 {
+		t.Fatalf("dormant = %d, want 1", h.dormant.Len())
 	}
-	if !slices.Equal(h.held, []heldTouch{{"/p/seed.ts", nowMs}}) || h.recent.len() != 0 {
-		t.Fatalf("held %v recent %d, want the snapshot's seed only and no writes", h.held, h.recent.len())
+	if !slices.Equal(h.held, []heldTouch{{"/p/seed.ts", nowMs}}) || h.recent.Len() != 0 {
+		t.Fatalf("held %v recent %d, want the snapshot's seed only and no writes", h.held, h.recent.Len())
 	}
 }
 
@@ -655,7 +655,7 @@ func TestUnattributedRules(t *testing.T) {
 		s.Apply(evFS("local", "/p/x.ts", nowMs+2001))
 		eqTouches(t, "at +4001", s.TakeUnattributed(nowMs+4001), []Touch{{Host: "local", Path: "/p/x.ts", AtMs: nowMs + 2001}})
 		// Write times older than 4 s can suppress no held touch, so the take prunes them.
-		if n := s.hosts["local"].recent.len(); n != 0 {
+		if n := s.hosts["local"].recent.Len(); n != 0 {
 			t.Fatalf("recent writes = %d paths, want 0", n)
 		}
 	})

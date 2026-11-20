@@ -4,6 +4,7 @@ import (
 	"iter"
 	"slices"
 
+	"agent-view/internal/ordered"
 	"agent-view/internal/schema"
 )
 
@@ -13,36 +14,36 @@ import (
 // so OpenCalls and RecentEnded read them without a sort. A stored call ends
 // only through end, because the lists are ordered by its times.
 type callTable struct {
-	list  *omap[callKey, *ViewCall]
+	list  *ordered.Map[callKey, *ViewCall]
 	open  map[string][]*ViewCall
 	ended map[string][]*ViewCall
 }
 
 func newCallTable() *callTable {
-	return &callTable{list: newOmap[callKey, *ViewCall](), open: map[string][]*ViewCall{}, ended: map[string][]*ViewCall{}}
+	return &callTable{list: ordered.NewMap[callKey, *ViewCall](), open: map[string][]*ViewCall{}, ended: map[string][]*ViewCall{}}
 }
 
-func (t *callTable) len() int                           { return t.list.len() }
-func (t *callTable) has(k callKey) bool                 { return t.list.has(k) }
-func (t *callTable) get(k callKey) (*ViewCall, bool)    { return t.list.get(k) }
-func (t *callTable) all() iter.Seq2[callKey, *ViewCall] { return t.list.all() }
+func (t *callTable) len() int                           { return t.list.Len() }
+func (t *callTable) has(k callKey) bool                 { return t.list.Has(k) }
+func (t *callTable) get(k callKey) (*ViewCall, bool)    { return t.list.Get(k) }
+func (t *callTable) all() iter.Seq2[callKey, *ViewCall] { return t.list.All() }
 
 // set stores a call under its key. A call stored under the key before is
 // replaced, and the call keeps that position in the list.
 func (t *callTable) set(c *ViewCall) {
 	k := callKey{c.AgentID, c.CallID}
-	if old, ok := t.list.get(k); ok {
+	if old, ok := t.list.Get(k); ok {
 		t.unindex(old)
 	}
-	t.list.set(k, c)
+	t.list.Set(k, c)
 	t.index(c)
 }
 
 // delete removes a call. The loop body of all may delete the current key.
 func (t *callTable) delete(k callKey) {
-	if c, ok := t.list.get(k); ok {
+	if c, ok := t.list.Get(k); ok {
 		t.unindex(c)
-		t.list.delete(k)
+		t.list.Delete(k)
 	}
 }
 

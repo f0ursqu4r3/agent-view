@@ -249,7 +249,7 @@ func TestCallIndexMatchesFullScan(t *testing.T) {
 	// The sequence must reach the paths it claims to cover.
 	dormant := false
 	for _, h := range s.hosts {
-		dormant = dormant || h.dormant.len() > 0
+		dormant = dormant || h.dormant.Len() > 0
 	}
 	if !trimmed || !dormant || !endedSeen {
 		t.Fatalf("sequence too weak: trimmed %v, dormant %v, ended calls seen %v", trimmed, dormant, endedSeen)

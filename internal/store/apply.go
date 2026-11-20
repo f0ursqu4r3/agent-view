@@ -5,6 +5,7 @@ import (
 	"unicode/utf8"
 
 	"agent-view/internal/lifecycle"
+	"agent-view/internal/ordered"
 	"agent-view/internal/schema"
 )
 
@@ -19,15 +20,15 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	// except a call timeout, which only ends the call. An event for an agent
 	// never seen is dropped: the feed has no resnapshot path.
 	if id := subjectOf(e); id != "" {
-		if d, ok := h.dormant.get(id); ok && isTimeout(e) {
+		if d, ok := h.dormant.Get(id); ok && isTimeout(e) {
 			endTally(d.tally, e)
 			return
 		}
-		if !h.agents.has(id) && !revive(h, id) {
+		if !h.agents.Has(id) && !revive(h, id) {
 			s.UnknownEvents++
 			return
 		}
-		a, _ := h.agents.get(id)
+		a, _ := h.agents.Get(id)
 		a.tally.seen(at)
 	}
 	switch e.Kind {
@@ -48,7 +49,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 		seen := max(agentMs(h, in.LastEventAt), at)
 		first := earliest(h, in.LastEventAt, at)
 		s.note(h, in.ID)
-		if cur, ok := h.agents.get(in.ID); ok {
+		if cur, ok := h.agents.Get(in.ID); ok {
 			// Like the collector: an upsert never overrides the tracked status.
 			status, last := cur.agent.Status, cur.agent.LastEventAt
 			cur.agent = *in
@@ -56,11 +57,11 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			cur.lastEventMs = max(cur.lastEventMs, seen)
 			cur.tally.seen(first)
 		} else {
-			h.agents.set(in.ID, &agentEntry{agent: *in, lastEventMs: seen, tally: newTally(first)})
+			h.agents.Set(in.ID, &agentEntry{agent: *in, lastEventMs: seen, tally: newTally(first)})
 			em.add(AgentAdded, in.ID, "", "", at)
 		}
 	case "agent.status":
-		if a, ok := h.agents.get(e.AgentID); ok {
+		if a, ok := h.agents.Get(e.AgentID); ok {
 			setStatus(a, e.AgentID, e.Status, at, em)
 		}
 		bump(h, e.AgentID, at)
@@ -98,7 +99,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	case "tool.end":
 		// A call timeout is no activity of the agent: it bumps nothing, and
 		// the call ends at its last activity.
-		if a, ok := h.agents.get(e.AgentID); ok {
+		if a, ok := h.agents.Get(e.AgentID); ok {
 			if !isTimeout(e) {
 				bump(h, e.AgentID, at)
 			}
@@ -143,7 +144,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		return
 	}
 	h.held = nil
-	h.recent = newOmap[string, []int64]()
+	h.recent = ordered.NewMap[string, []int64]()
 	for _, f := range files {
 		// A confirmed file is a touch seed, not a write, so it suppresses no grey flicker.
 		if f.Path == "" || f.Attribution == "confirmed" {
@@ -155,7 +156,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		return
 	}
 	oldAgents, oldCalls := h.agents, h.calls
-	h.agents = newOmap[string, *agentEntry]()
+	h.agents = ordered.NewMap[string, *agentEntry]()
 	h.calls = newCallTable()
 	h.pending = map[callKey]*ViewCall{}
 	for _, a := range e.Agents {
@@ -164,9 +165,9 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		}
 		var t *tally
 		var statusMs int64
-		if cur, ok := h.agents.get(a.ID); ok { // listed twice
+		if cur, ok := h.agents.Get(a.ID); ok { // listed twice
 			t, statusMs = cur.tally, cur.statusMs
-		} else if prev, ok := oldAgents.get(a.ID); ok {
+		} else if prev, ok := oldAgents.Get(a.ID); ok {
 			t, statusMs = prev.tally, prev.statusMs
 		} else if d, ok := wake(h, a.ID); ok { // a dormant agent keeps its rank and record
 			t, statusMs = d.tally, d.statusMs
@@ -180,10 +181,10 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		} else {
 			t.seen(first)
 		}
-		h.agents.set(a.ID, &agentEntry{agent: a, lastEventMs: last, statusMs: statusMs, tally: t})
+		h.agents.Set(a.ID, &agentEntry{agent: a, lastEventMs: last, statusMs: statusMs, tally: t})
 	}
-	for id, a := range oldAgents.all() {
-		if !h.agents.has(id) {
+	for id, a := range oldAgents.All() {
+		if !h.agents.Has(id) {
 			toDormant(h, id, a)
 		}
 	}
@@ -193,7 +194,7 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		}
 		var t *tally
 		mark := callUnknown
-		if a, ok := h.agents.get(c.AgentID); ok {
+		if a, ok := h.agents.Get(c.AgentID); ok {
 			t, mark = a.tally, a.tally.calls[c.CallID]
 		}
 		if mark == callEnded {
@@ -222,7 +223,7 @@ func (s *Store) toolStart(h *hostState, host string, c *schema.Call, at int64, e
 	if c == nil || c.AgentID == "" || c.CallID == "" {
 		return
 	}
-	a, ok := h.agents.get(c.AgentID)
+	a, ok := h.agents.Get(c.AgentID)
 	if !ok {
 		return // dispatch drops events of unknown agents
 	}
@@ -326,12 +327,12 @@ func trimCalls(h *hostState) {
 
 // recordWrite keeps the time of a confirmed write. Only writes suppress grey flickers.
 func recordWrite(h *hostState, path string, atMs int64) {
-	times, ok := h.recent.get(path)
+	times, ok := h.recent.Get(path)
 	if !ok {
-		h.recent.set(path, []int64{atMs})
-		if h.recent.len() > maxRecentPaths {
-			oldest, _, _ := h.recent.first()
-			h.recent.delete(oldest)
+		h.recent.Set(path, []int64{atMs})
+		if h.recent.Len() > maxRecentPaths {
+			oldest, _, _ := h.recent.First()
+			h.recent.Delete(oldest)
 		}
 		return
 	}
@@ -339,7 +340,7 @@ func recordWrite(h *hostState, path string, atMs int64) {
 	if len(times) > maxRecentPerPath {
 		times = times[len(times)-maxRecentPerPath:]
 	}
-	h.recent.set(path, times)
+	h.recent.Set(path, times)
 }
 
 // subjectOf returns the agent an event is about, for events that need a known agent.

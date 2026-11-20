@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agent-view/internal/lifecycle"
+	"agent-view/internal/ordered"
 	"agent-view/internal/schema"
 )
 
@@ -107,17 +108,17 @@ type hostState struct {
 	offset   int64 // our clock minus the host's clock at its hello
 	demo     bool
 	coverage *schema.Coverage
-	agents   *omap[string, *agentEntry]
+	agents   *ordered.Map[string, *agentEntry]
 	// order is the first-appearance rank of every agent seen on this host, except
 	// dormant agents, whose record holds it. It survives snapshots.
 	order    map[string]int
-	dormant  *omap[string, *dormantRecord]
+	dormant  *ordered.Map[string, *dormantRecord]
 	calls    *callTable
-	pending  map[callKey]*ViewCall  // calls restored from a replayed tool.start, waiting for their replayed tool.end
-	nextSeq  uint64                 // seq of the next stored call
-	held     []heldTouch            // unattributed touches
-	recent   *omap[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
-	presence *presence              // present agents for one (version, now)
+	pending  map[callKey]*ViewCall         // calls restored from a replayed tool.start, waiting for their replayed tool.end
+	nextSeq  uint64                        // seq of the next stored call
+	held     []heldTouch                   // unattributed touches
+	recent   *ordered.Map[string, []int64] // recent confirmed write times per path, for suppressing grey flickers
+	presence *presence                     // present agents for one (version, now)
 }
 
 type presence struct {
@@ -193,7 +194,7 @@ func (s *Store) Agents(now int64) []ViewAgent {
 // Stale is computed at Options.Now. A dormant agent is not returned.
 func (s *Store) Agent(id string) (ViewAgent, bool) {
 	for _, label := range s.hostOrder {
-		if a, ok := s.hosts[label].agents.get(id); ok {
+		if a, ok := s.hosts[label].agents.Get(id); ok {
 			v := ViewAgent{Agent: a.agent, Host: label, LastEventMs: a.lastEventMs}
 			v.LastEventAt = isoOf(a.lastEventMs)
 			v.Stale = isStale(v.Agent, s.now(), s.lc)
@@ -252,9 +253,9 @@ func (s *Store) host(label string) *hostState {
 	h := s.hosts[label]
 	if h == nil {
 		h = &hostState{
-			agents: newOmap[string, *agentEntry](), order: map[string]int{}, dormant: newOmap[string, *dormantRecord](),
+			agents: ordered.NewMap[string, *agentEntry](), order: map[string]int{}, dormant: ordered.NewMap[string, *dormantRecord](),
 			calls: newCallTable(), pending: map[callKey]*ViewCall{},
-			recent: newOmap[string, []int64](),
+			recent: ordered.NewMap[string, []int64](),
 		}
 		s.hosts[label] = h
 		s.hostOrder = append(s.hostOrder, label)
@@ -269,9 +270,9 @@ func (s *Store) presentAgents(h *hostState, now int64) []agentEntry {
 		return p.agents
 	}
 	s.presenceComputes++
-	adjusted := make([]agentEntry, 0, h.agents.len())
-	plain := make([]schema.Agent, 0, h.agents.len())
-	for _, a := range h.agents.all() {
+	adjusted := make([]agentEntry, 0, h.agents.Len())
+	plain := make([]schema.Agent, 0, h.agents.Len())
+	for _, a := range h.agents.All() {
 		ag := a.agent
 		ag.LastEventAt = isoOf(a.lastEventMs)
 		adjusted = append(adjusted, agentEntry{agent: ag, lastEventMs: a.lastEventMs})
@@ -301,7 +302,7 @@ func (s *Store) sweep(now int64) {
 		h := s.hosts[label]
 		var present map[string]bool
 		dropped := false
-		for id, a := range h.agents.all() {
+		for id, a := range h.agents.All() {
 			if now-a.lastEventMs < horizon {
 				continue
 			}
@@ -319,12 +320,12 @@ func (s *Store) sweep(now int64) {
 		}
 		anyDropped = true
 		for k, c := range h.calls.all() {
-			if !h.agents.has(c.AgentID) {
+			if !h.agents.Has(c.AgentID) {
 				h.calls.delete(k)
 				dropOpen(h, c)
 			}
 		}
-		maps.DeleteFunc(h.pending, func(_ callKey, c *ViewCall) bool { return !h.agents.has(c.AgentID) })
+		maps.DeleteFunc(h.pending, func(_ callKey, c *ViewCall) bool { return !h.agents.Has(c.AgentID) })
 	}
 	if anyDropped {
 		s.version++
@@ -333,22 +334,22 @@ func (s *Store) sweep(now int64) {
 
 // toDormant moves a stored agent's record into the dormant map. The oldest record goes past the cap.
 func toDormant(h *hostState, id string, a *agentEntry) {
-	h.agents.delete(id)
-	h.dormant.set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs, statusMs: a.statusMs, tally: a.tally})
-	if h.dormant.len() > maxDormant {
-		oldest, _, _ := h.dormant.first()
-		h.dormant.delete(oldest)
+	h.agents.Delete(id)
+	h.dormant.Set(id, &dormantRecord{agent: a.agent, rank: rank(h, id), lastEventMs: a.lastEventMs, statusMs: a.statusMs, tally: a.tally})
+	if h.dormant.Len() > maxDormant {
+		oldest, _, _ := h.dormant.First()
+		h.dormant.Delete(oldest)
 	}
 	delete(h.order, id)
 }
 
 // wake removes a dormant record and gives the agent its rank back.
 func wake(h *hostState, id string) (*dormantRecord, bool) {
-	d, ok := h.dormant.get(id)
+	d, ok := h.dormant.Get(id)
 	if !ok {
 		return nil, false
 	}
-	h.dormant.delete(id)
+	h.dormant.Delete(id)
 	h.order[id] = d.rank
 	return d, true
 }
@@ -361,14 +362,14 @@ func revive(h *hostState, id string) bool {
 	if !ok {
 		return false
 	}
-	h.agents.set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
+	h.agents.Set(id, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
 	// Each wake removes a dormant record, so a parent cycle ends the walk.
-	for d.agent.ParentID != nil && !h.agents.has(*d.agent.ParentID) {
+	for d.agent.ParentID != nil && !h.agents.Has(*d.agent.ParentID) {
 		pid := *d.agent.ParentID
 		if d, ok = wake(h, pid); !ok {
 			break
 		}
-		h.agents.set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
+		h.agents.Set(pid, &agentEntry{agent: d.agent, lastEventMs: d.lastEventMs, statusMs: d.statusMs, tally: d.tally})
 	}
 	return true
 }
@@ -399,7 +400,7 @@ func (s *Store) note(h *hostState, id string) {
 }
 
 func bump(h *hostState, agentID string, atMs int64) {
-	if a, ok := h.agents.get(agentID); ok {
+	if a, ok := h.agents.Get(agentID); ok {
 		a.lastEventMs = max(a.lastEventMs, atMs)
 	}
 }

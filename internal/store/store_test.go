@@ -154,7 +154,7 @@ func seeded(t *testing.T) *Store {
 func storedAgentCount(s *Store) int {
 	n := 0
 	for _, h := range s.hosts {
-		n += h.agents.len()
+		n += h.agents.Len()
 	}
 	return n
 }
@@ -440,8 +440,8 @@ func TestIgnoresUnknownAndMalformedEnvelopes(t *testing.T) {
 		t.Fatal("nil coverage stored")
 	}
 	// In place of takeTouches(NOW + 5000) == []: nothing was held or recorded.
-	if h := s.hosts["local"]; len(h.held) != 0 || h.recent.len() != 0 {
-		t.Fatalf("held %v recent %d, want none", h.held, h.recent.len())
+	if h := s.hosts["local"]; len(h.held) != 0 || h.recent.Len() != 0 {
+		t.Fatalf("held %v recent %d, want none", h.held, h.recent.Len())
 	}
 }
 
@@ -588,8 +588,8 @@ func TestDormantAgentRevives(t *testing.T) {
 	if c := openCall(s, "old"); c == nil || c.CallID != "c1" {
 		t.Fatalf("openCall(old) = %+v, want c1", c)
 	}
-	if s.UnknownEvents != 0 || s.hosts["local"].dormant.len() != 0 {
-		t.Fatalf("unknown %d dormant %d, want 0 0", s.UnknownEvents, s.hosts["local"].dormant.len())
+	if s.UnknownEvents != 0 || s.hosts["local"].dormant.Len() != 0 {
+		t.Fatalf("unknown %d dormant %d, want 0 0", s.UnknownEvents, s.hosts["local"].dormant.Len())
 	}
 }
 
@@ -615,8 +615,8 @@ func TestUnknownAgentEventDropped(t *testing.T) {
 	}
 	eq(t, "agents", ids(s.Agents(nowMs)), []string{"a"})
 	eq(t, "calls", storedCallIDs(s), []string{})
-	if h := s.hosts["local"]; h.recent.len() != 0 {
-		t.Fatalf("recent = %d paths, want 0", h.recent.len())
+	if h := s.hosts["local"]; h.recent.Len() != 0 {
+		t.Fatalf("recent = %d paths, want 0", h.recent.Len())
 	}
 }
 
@@ -642,7 +642,7 @@ func TestDormantAncestorsReviveWithChild(t *testing.T) {
 
 	s.Apply(evStatus("local", "c1", "working"))
 	eq(t, "lanes", s.LaneOrder(nowMs), []string{"P", "K", "x", "c1", "c2"})
-	if n := s.hosts["local"].dormant.len(); n != 0 || s.UnknownEvents != 0 {
+	if n := s.hosts["local"].dormant.Len(); n != 0 || s.UnknownEvents != 0 {
 		t.Fatalf("dormant %d unknown %d, want 0 0", n, s.UnknownEvents)
 	}
 }
@@ -667,7 +667,7 @@ func TestDormantRecordReturnsOnUpsertOrSnapshot(t *testing.T) {
 	s.Apply(evUpsert("local", agent("new")))
 	s.Apply(evSnapshot("local", []schema.Agent{agent("keep"), agent("new"), agent("old")}, nil))
 	eq(t, "lanes", s.LaneOrder(nowMs), []string{"old", "keep", "new"})
-	if n := s.hosts["local"].dormant.len(); n != 0 {
+	if n := s.hosts["local"].dormant.Len(); n != 0 {
 		t.Fatalf("dormant = %d, want 0", n)
 	}
 }
@@ -682,7 +682,7 @@ func TestDormantCapDropsOldest(t *testing.T) {
 	}
 	s.Apply(evSnapshot("local", agents, nil))
 	s.Agents(nowMs)
-	if n := s.hosts["local"].dormant.len(); n != maxDormant {
+	if n := s.hosts["local"].dormant.Len(); n != maxDormant {
 		t.Fatalf("dormant = %d, want %d", n, maxDormant)
 	}
 	s.Apply(evStatus("local", "d0", "working"))
@@ -704,22 +704,22 @@ func TestUnattributedTouchBookkeeping(t *testing.T) {
 		schema.FileTouch{Path: "/p/grey.ts", LastTouchAt: iso(nowMs - 5000), Attribution: "unattributed"},
 	))
 	h := s.hosts["local"]
-	if !slices.Equal(h.held, []heldTouch{{"/p/grey.ts", nowMs - 5000}}) || h.recent.len() != 0 {
-		t.Fatalf("after snapshot: held %v recent %d, want grey.ts only and no writes", h.held, h.recent.len())
+	if !slices.Equal(h.held, []heldTouch{{"/p/grey.ts", nowMs - 5000}}) || h.recent.Len() != 0 {
+		t.Fatalf("after snapshot: held %v recent %d, want grey.ts only and no writes", h.held, h.recent.Len())
 	}
 	// Reads, call starts, and updates are not writes.
 	s.Apply(evStart("local", call("a", "r1", withFiles("/p/read.ts"))))
 	s.Apply(evStart("local", call("a", "e1", withCategory("edit"), withFiles("/p/started.ts"))))
 	s.Apply(evUpdate("local", "a", "r1", []string{"/p/r2.ts"}))
-	if h.recent.len() != 0 {
-		t.Fatalf("recent = %d paths, want 0", h.recent.len())
+	if h.recent.Len() != 0 {
+		t.Fatalf("recent = %d paths, want 0", h.recent.Len())
 	}
 	s.Apply(evFS("local", "/p/x.ts", nowMs+100))
 	s.Apply(evEnd("local", "a", "w", ptr(true), nil, []schema.Write{{Path: "/p/x.ts", Op: "edit"}}, nowMs+1500))
 	if got := h.held[len(h.held)-1]; got != (heldTouch{"/p/x.ts", nowMs + 100}) {
 		t.Fatalf("last held = %v", got)
 	}
-	if times, _ := h.recent.get("/p/x.ts"); !slices.Equal(times, []int64{nowMs + 1500}) {
+	if times, _ := h.recent.Get("/p/x.ts"); !slices.Equal(times, []int64{nowMs + 1500}) {
 		t.Fatalf("recent x.ts = %v", times)
 	}
 
@@ -733,19 +733,19 @@ func TestUnattributedTouchBookkeeping(t *testing.T) {
 	for i := range 20 {
 		s.Apply(evEnd("local", "a", "w", ptr(true), nil, []schema.Write{{Path: "/p/x.ts"}}, nowMs+int64(i)))
 	}
-	if times, _ := h.recent.get("/p/x.ts"); len(times) != maxRecentPerPath || times[0] != nowMs+4 {
+	if times, _ := h.recent.Get("/p/x.ts"); len(times) != maxRecentPerPath || times[0] != nowMs+4 {
 		t.Fatalf("recent x.ts = %v, want the last %d", times, maxRecentPerPath)
 	}
 	for i := range maxRecentPaths {
 		s.Apply(evEnd("local", "a", "w", ptr(true), nil, []schema.Write{{Path: fmt.Sprintf("/p/w%d.ts", i)}}))
 	}
-	if _, ok := h.recent.get("/p/x.ts"); ok || h.recent.len() != maxRecentPaths {
-		t.Fatalf("recent paths %d, x.ts kept %v; want %d without x.ts", h.recent.len(), ok, maxRecentPaths)
+	if _, ok := h.recent.Get("/p/x.ts"); ok || h.recent.Len() != maxRecentPaths {
+		t.Fatalf("recent paths %d, x.ts kept %v; want %d without x.ts", h.recent.Len(), ok, maxRecentPaths)
 	}
 
 	// A snapshot replaces both.
 	s.Apply(evSnapshot("local", []schema.Agent{agent("a")}, nil))
-	if len(h.held) != 0 || h.recent.len() != 0 {
-		t.Fatalf("after snapshot: held %d recent %d", len(h.held), h.recent.len())
+	if len(h.held) != 0 || h.recent.Len() != 0 {
+		t.Fatalf("after snapshot: held %d recent %d", len(h.held), h.recent.Len())
 	}
 }

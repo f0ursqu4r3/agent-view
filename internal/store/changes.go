@@ -91,10 +91,10 @@ func (t *tally) seen(ms int64) { t.firstSeenMs = min(t.firstSeenMs, ms) }
 
 // tallyOf returns the tally of a stored or dormant agent, or nil.
 func tallyOf(h *hostState, id string) *tally {
-	if a, ok := h.agents.get(id); ok {
+	if a, ok := h.agents.Get(id); ok {
 		return a.tally
 	}
-	if d, ok := h.dormant.get(id); ok {
+	if d, ok := h.dormant.Get(id); ok {
 		return d.tally
 	}
 	return nil
@@ -124,7 +124,7 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 			return false
 		}
 		k := callKey{c.AgentID, c.CallID}
-		if !h.agents.has(c.AgentID) || h.calls.has(k) {
+		if !h.agents.Has(c.AgentID) || h.calls.has(k) {
 			return true
 		}
 		switch t.calls[c.CallID] {
@@ -141,7 +141,7 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 		}
 		k := callKey{e.AgentID, e.CallID}
 		if call, ok := h.pending[k]; ok {
-			a, stored := h.agents.get(e.AgentID)
+			a, stored := h.agents.Get(e.AgentID)
 			if !stored {
 				return true
 			}
@@ -175,7 +175,7 @@ func earliest(h *hostState, iso string, at int64) int64 {
 func (s *Store) holder(id string) (*hostState, *agentEntry) {
 	for _, label := range s.hostOrder {
 		h := s.hosts[label]
-		if a, ok := h.agents.get(id); ok {
+		if a, ok := h.agents.Get(id); ok {
 			return h, a
 		}
 	}
@@ -227,13 +227,13 @@ func (s *Store) HostStats(host string) (agents, calls int) {
 	if h == nil {
 		return 0, 0
 	}
-	for _, a := range h.agents.all() {
+	for _, a := range h.agents.All() {
 		calls += len(a.tally.calls)
 	}
-	for _, d := range h.dormant.all() {
+	for _, d := range h.dormant.All() {
 		calls += len(d.tally.calls)
 	}
-	return h.agents.len() + h.dormant.len(), calls
+	return h.agents.Len() + h.dormant.Len(), calls
 }
 
 // TakeUnattributed releases the held unattributed touches, hosts in order of
@@ -260,12 +260,12 @@ func (s *Store) TakeUnattributed(now int64) []Touch {
 			h.held = keep
 		}
 		// A held touch needs write times back to atMs - 2 s, and atMs > now - 2 s while it is held.
-		for path, times := range h.recent.all() {
+		for path, times := range h.recent.All() {
 			live := slices.DeleteFunc(times, func(t int64) bool { return t < now-2*flickerMs })
 			if len(live) == 0 {
-				h.recent.delete(path)
+				h.recent.Delete(path)
 			} else if len(live) != len(times) {
-				h.recent.set(path, live)
+				h.recent.Set(path, live)
 			}
 		}
 	}
@@ -273,6 +273,6 @@ func (s *Store) TakeUnattributed(now int64) []Touch {
 }
 
 func nearWrite(h *hostState, t heldTouch) bool {
-	times, _ := h.recent.get(t.path)
+	times, _ := h.recent.Get(t.path)
 	return slices.ContainsFunc(times, func(w int64) bool { return abs(w-t.atMs) <= flickerMs })
 }
