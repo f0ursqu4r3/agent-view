@@ -587,9 +587,11 @@ func TestPanicResyncGapDefault(t *testing.T) {
 	}
 }
 
-// A panic in the stop path does not ask for a resync, so Stop ends and does
-// no hub work after the stop began.
-func TestPanicWhileStoppingEnds(t *testing.T) {
+// A panic after the stop began does not ask for a resync, so Stop ends and does
+// no hub work after the stop began. The panic is in Send, called by the flush
+// of the batch timer; Stop is pending while Send blocks, and the stop path
+// itself does not panic.
+func TestPanicAfterStopBeganEnds(t *testing.T) {
 	h, _ := newHub(t, "up")
 	s := &sink{}
 	entered := make(chan struct{})

@@ -220,8 +220,10 @@ func (b *Bridge) loop() (stopped bool) {
 //
 // A panic that repeats on every wake must not make a resync loop. A resync
 // follows at most once per PanicResyncGap, and an identical message is
-// reported at most once per gap, so the diagnostics stay bounded. A panic
-// after the stop began asks for no resync: the stop path ends without it.
+// reported at most once per gap, so the diagnostics stay bounded for identical
+// lines. Panic messages that differ every time give one diagnostic line per
+// batch tick. A panic after the stop began asks for no resync: the stop path
+// ends without it.
 func (b *Bridge) recovered(r any) {
 	now := time.Now()
 	gap := b.c.PanicResyncGap
