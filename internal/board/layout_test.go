@@ -67,6 +67,77 @@ func rowFor(t *testing.T, rows []Row, id string) Row {
 	return Row{}
 }
 
+// hk returns the key of an agent on host "h"; "" gives the zero key, none.
+func hk(id string) store.AgentKey {
+	if id == "" {
+		return store.AgentKey{}
+	}
+	return store.AgentKey{Host: "h", ID: id}
+}
+
+// rowAt returns the row of an agent key.
+func rowAt(t *testing.T, rows []Row, k store.AgentKey) Row {
+	t.Helper()
+	for _, r := range rows {
+		if r.Key() == k {
+			return r
+		}
+	}
+	t.Fatalf("no row for %v", k)
+	return Row{}
+}
+
+// TestRowsParentOnAnotherHostIsNoParent: a parent ID that exists only on
+// another host is no parent. With the parent on both hosts, the child is a
+// sub-row of the parent on its own host only. A selection on one twin makes
+// only that row full.
+func TestRowsParentOnAnotherHostIsNoParent(t *testing.T) {
+	s := newStore(t)
+	addAgent(s, "a", "p", "", "")
+	addAgent(s, "b", "c", "p", "confirmed")
+	rows := Rows(s, UI{}, nowMs)
+	if c := rowAt(t, rows, store.AgentKey{Host: "b", ID: "c"}); c.Sub || c.LastSib {
+		t.Errorf("c on b with p only on a: Sub/LastSib = %v/%v, want false/false", c.Sub, c.LastSib)
+	}
+
+	s = newStore(t)
+	addAgent(s, "a", "p", "", "")
+	addAgent(s, "b", "p", "", "")
+	addAgent(s, "b", "c", "p", "confirmed")
+	rows = Rows(s, UI{}, nowMs)
+	var order []store.AgentKey
+	for _, r := range rows {
+		order = append(order, r.Key())
+	}
+	want := []store.AgentKey{{Host: "a", ID: "p"}, {Host: "b", ID: "p"}, {Host: "b", ID: "c"}}
+	if !slices.Equal(order, want) {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+	if c := rows[2]; !c.Sub || !c.LastSib {
+		t.Errorf("c on b: Sub/LastSib = %v/%v, want true/true", c.Sub, c.LastSib)
+	}
+	for _, i := range []int{0, 1} {
+		if rows[i].Sub {
+			t.Errorf("%v: Sub = true, want false", rows[i].Key())
+		}
+	}
+
+	rows = Rows(s, UI{Selected: store.AgentKey{Host: "b", ID: "p"}}, nowMs)
+	if r := rowAt(t, rows, store.AgentKey{Host: "b", ID: "p"}); !r.Full {
+		t.Errorf("selected b/p: Full = false, want true")
+	}
+	if r := rowAt(t, rows, store.AgentKey{Host: "a", ID: "p"}); r.Full {
+		t.Errorf("twin a/p of the selection: Full = true, want false")
+	}
+	rows = Rows(s, UI{Focus: store.AgentKey{Host: "a", ID: "p"}}, nowMs)
+	if r := rowAt(t, rows, store.AgentKey{Host: "a", ID: "p"}); !r.Full {
+		t.Errorf("focused a/p: Full = false, want true")
+	}
+	if r := rowAt(t, rows, store.AgentKey{Host: "b", ID: "p"}); r.Full {
+		t.Errorf("twin b/p of the focus: Full = true, want false")
+	}
+}
+
 func TestRowsFullRule(t *testing.T) {
 	s := newStore(t)
 	for _, id := range []string{"open", "fresh", "edge", "old", "sel", "foc", "none"} {
@@ -81,7 +152,7 @@ func TestRowsFullRule(t *testing.T) {
 		endCall(s, "h", c.id, "c", nowMs-c.ago)
 	}
 
-	rows := Rows(s, UI{Selected: "sel", Focus: "foc"}, nowMs)
+	rows := Rows(s, UI{Selected: hk("sel"), Focus: hk("foc")}, nowMs)
 	want := map[string]bool{
 		"open": true, "fresh": true, "edge": true, "old": false, "sel": true, "foc": true, "none": false,
 	}
@@ -183,9 +254,9 @@ func TestHistoryCount(t *testing.T) {
 func TestScrollKeepsSelection(t *testing.T) {
 	rows := make([]Row, 10)
 	for i := range rows {
-		rows[i] = Row{AgentID: string(rune('a' + i)), Full: true, Y: i * 9, H: 9}
+		rows[i] = Row{AgentID: string(rune('a' + i)), Host: "h", Full: true, Y: i * 9, H: 9}
 	}
-	top := Scroll(rows, 30, 0, "h") // row 7
+	top := Scroll(rows, 30, 0, hk("h")) // row 7
 	r := rows[7]
 	if r.Y < top || r.Y+r.H > top+30 {
 		t.Errorf("top = %d does not hold row 7 (%d..%d)", top, r.Y, r.Y+r.H)
@@ -195,19 +266,19 @@ func TestScrollKeepsSelection(t *testing.T) {
 			t.Errorf("row %d not fully visible at top %d", i, top)
 		}
 	}
-	if got := Scroll(rows, 30, 17, ""); got != 17 {
+	if got := Scroll(rows, 30, 17, hk("")); got != 17 {
 		t.Errorf("no selection: top = %d, want 17", got)
 	}
-	if got := Scroll(rows, 30, 17, "zz"); got != 17 {
+	if got := Scroll(rows, 30, 17, hk("zz")); got != 17 {
 		t.Errorf("unknown selection: top = %d, want 17", got)
 	}
-	if got := Scroll(rows, 30, 63, "b"); got != 9 { // row 1 above the view
+	if got := Scroll(rows, 30, 63, hk("b")); got != 9 { // row 1 above the view
 		t.Errorf("scroll up: top = %d, want 9", got)
 	}
-	if got := Scroll(rows, 30, 40, "f"); got != 40 { // 45..54 already visible
+	if got := Scroll(rows, 30, 40, hk("f")); got != 40 { // 45..54 already visible
 		t.Errorf("already visible: top = %d, want 40", got)
 	}
-	if got := Scroll(rows, 5, 0, "c"); got != 18 { // taller than height: align top
+	if got := Scroll(rows, 5, 0, hk("c")); got != 18 { // taller than height: align top
 		t.Errorf("tall row: top = %d, want 18", got)
 	}
 }
@@ -326,10 +397,10 @@ func TestRowsFocusedCommandGrows(t *testing.T) {
 		focus string
 		want  int
 	}{{"a", 17}, {"b", 10}, {"c", 9}, {"d", 9}, {"", 9}} {
-		rows := Rows(s, UI{Focus: tc.focus}, nowMs)
+		rows := Rows(s, UI{Focus: hk(tc.focus)}, nowMs)
 		for i, r := range rows {
 			want := 9
-			if r.AgentID == tc.focus {
+			if r.Key() == hk(tc.focus) {
 				want = tc.want
 			}
 			if r.H != want {
@@ -341,11 +412,11 @@ func TestRowsFocusedCommandGrows(t *testing.T) {
 		}
 	}
 
-	rows := Rows(s, UI{Focus: "a", Selected: "b"}, nowMs)
+	rows := Rows(s, UI{Focus: hk("a"), Selected: hk("b")}, nowMs)
 	if b := rowFor(t, rows, "b"); b.Y != 17 {
 		t.Fatalf("b.Y = %d, want 17", b.Y)
 	}
-	if top := Scroll(rows, 10, 0, "b"); top != 17+9-10 {
+	if top := Scroll(rows, 10, 0, hk("b")); top != 17+9-10 {
 		t.Errorf("Scroll to b = %d, want %d", top, 17+9-10)
 	}
 }

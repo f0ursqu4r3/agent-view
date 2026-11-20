@@ -74,24 +74,24 @@ func (a *agentState) active() bool {
 		a.flash < flashFrames || a.stop < stopFrames || a.shift > 0 || (a.seen && a.rowH != a.target)
 }
 
-// Engine holds the animation state of all agents. It is not safe for
-// concurrent use.
+// Engine holds the animation state of all agents, by agent key (host and
+// ID). It is not safe for concurrent use.
 type Engine struct {
 	reduced bool
-	agents  map[string]*agentState
+	agents  map[store.AgentKey]*agentState
 }
 
 // New returns an engine. With reduced, every change is instant: Frame always
 // returns done values and Active is false.
 func New(reduced bool) *Engine {
-	return &Engine{reduced: reduced, agents: map[string]*agentState{}}
+	return &Engine{reduced: reduced, agents: map[store.AgentKey]*agentState{}}
 }
 
-func (e *Engine) state(id string) *agentState {
-	a := e.agents[id]
+func (e *Engine) state(k store.AgentKey) *agentState {
+	a := e.agents[k]
 	if a == nil {
 		a = newState()
-		e.agents[id] = a
+		e.agents[k] = a
 	}
 	return a
 }
@@ -112,25 +112,25 @@ func (e *Engine) OnChange(c store.Change, shownCallChanged bool) {
 		if !shownCallChanged {
 			return
 		}
-		a := e.state(c.AgentID)
+		a := e.state(c.Key())
 		a.callRows = 0
 		a.leaving = leaveFrames
 		a.histRows = 0
 		a.shift = shiftFrames
 		a.where = 0
 	case store.AgentAdded:
-		e.OnAgentAdded(c.AgentID, false)
+		e.OnAgentAdded(c.Key(), false)
 	}
 }
 
 // OnAgentAdded starts the appearance of a new agent. With hasParent, the
 // gutter draws downward one line per frame and then the row prints; without,
 // the row prints.
-func (e *Engine) OnAgentAdded(agentID string, hasParent bool) {
+func (e *Engine) OnAgentAdded(k store.AgentKey, hasParent bool) {
 	if e.reduced {
 		return
 	}
-	a := e.state(agentID)
+	a := e.state(k)
 	a.callRows = 0
 	a.gutterOn = hasParent
 	a.gutter = 0
@@ -138,35 +138,35 @@ func (e *Engine) OnAgentAdded(agentID string, hasParent bool) {
 
 // OnFail starts the 6-frame flash of the call card, for the shown call that
 // ended in failure.
-func (e *Engine) OnFail(agentID string) {
+func (e *Engine) OnFail(k store.AgentKey) {
 	if e.reduced {
 		return
 	}
-	e.state(agentID).flash = 0
+	e.state(k).flash = 0
 }
 
 // OnStopped starts the 2-frame flash of the STOPPED state word, for an
 // agent that was interrupted: it flashes once. The call card does not flash.
-func (e *Engine) OnStopped(agentID string) {
+func (e *Engine) OnStopped(k store.AgentKey) {
 	if e.reduced {
 		return
 	}
-	e.state(agentID).stop = 0
+	e.state(k).stop = 0
 }
 
 // Settle makes the next Frame of an agent jump to the row height it is
 // given, and finish a gutter that is still drawing, so a change that is not
 // live (a history event) does not animate the row. The other effects of the
 // agent keep running. An agent without state has nothing to settle.
-func (e *Engine) Settle(agentID string) {
-	if a := e.agents[agentID]; a != nil {
+func (e *Engine) Settle(k store.AgentKey) {
+	if a := e.agents[k]; a != nil {
 		a.settle = true
 	}
 }
 
 // Forget drops the state of an agent that no longer receives Frame calls.
-func (e *Engine) Forget(agentID string) {
-	delete(e.agents, agentID)
+func (e *Engine) Forget(k store.AgentKey) {
+	delete(e.agents, k)
 }
 
 // Step advances every effect by one 50 ms frame.
@@ -227,7 +227,7 @@ func (e *Engine) Active() bool {
 // records the target and the first sight, so call it for every drawn agent.
 // histCount is the number of history cards. Done values are returned when
 // nothing animates.
-func (e *Engine) Frame(agentID string, targetRowH, histCount int) AgentFrame {
+func (e *Engine) Frame(k store.AgentKey, targetRowH, histCount int) AgentFrame {
 	if histCount < 0 {
 		histCount = 0
 	}
@@ -242,7 +242,7 @@ func (e *Engine) Frame(agentID string, targetRowH, histCount int) AgentFrame {
 	if e.reduced {
 		return f
 	}
-	a := e.state(agentID)
+	a := e.state(k)
 	a.target = targetRowH
 	if !a.seen || a.settle {
 		a.seen = true

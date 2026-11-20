@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"agent-view/internal/board"
+	"agent-view/internal/store"
 )
 
 // key applies a key press, per the spec "Interaction". It returns the
@@ -30,7 +31,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if m.ui.Panel != board.PanelNone {
 			m.ui.Panel = board.PanelNone
 		} else {
-			m.ui.Focus = ""
+			m.ui.Focus = store.AgentKey{}
 			m.thaw = true
 		}
 	case "space":
@@ -58,7 +59,7 @@ func (m *Model) move(now int64, d int) {
 	}
 	i := -1
 	for j, r := range rows {
-		if r.AgentID == m.ui.Selected {
+		if r.Key() == m.ui.Selected {
 			i = j
 			break
 		}
@@ -71,7 +72,7 @@ func (m *Model) move(now int64, d int) {
 	default:
 		i = min(max(i+d, 0), len(rows)-1)
 	}
-	m.ui.Selected = rows[i].AgentID
+	m.ui.Selected = rows[i].Key()
 	m.thaw = true
 }
 
@@ -84,15 +85,15 @@ func (m *Model) selectRow(now int64, i int) {
 	if i < 0 {
 		i += len(rows)
 	}
-	m.ui.Selected = rows[min(max(i, 0), len(rows)-1)].AgentID
+	m.ui.Selected = rows[min(max(i, 0), len(rows)-1)].Key()
 	m.thaw = true
 }
 
 // enter focuses the selected agent, or clears the focus when it is already
 // focused or nothing is selected.
 func (m *Model) enter() {
-	if m.ui.Selected == "" || m.ui.Focus == m.ui.Selected {
-		m.ui.Focus = ""
+	if m.ui.Selected == (store.AgentKey{}) || m.ui.Focus == m.ui.Selected {
+		m.ui.Focus = store.AgentKey{}
 	} else {
 		m.ui.Focus = m.ui.Selected
 	}
@@ -108,8 +109,8 @@ func (m *Model) pause(now int64) {
 	if m.ui.Paused {
 		return
 	}
-	for id := range m.known {
-		m.anim.Forget(id)
+	for k := range m.known {
+		m.anim.Forget(k)
 	}
 	m.checkHosts(now)
 }
@@ -133,11 +134,11 @@ func (m *Model) click(msg tea.MouseClickMsg) bool {
 		if msg.X < h.X || msg.X >= h.X+h.W || msg.Y < h.Y || msg.Y >= h.Y+h.H {
 			continue
 		}
-		m.ui.Selected = h.AgentID
-		if m.ui.Focus == h.AgentID {
-			m.ui.Focus = ""
+		m.ui.Selected = h.Key
+		if m.ui.Focus == h.Key {
+			m.ui.Focus = store.AgentKey{}
 		} else {
-			m.ui.Focus = h.AgentID
+			m.ui.Focus = h.Key
 		}
 		m.thaw = true
 		m.fixTop(m.nowMs())

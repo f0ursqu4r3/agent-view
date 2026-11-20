@@ -247,23 +247,23 @@ func TestModelKeys(t *testing.T) {
 		{"j", "a"}, {"j", "b"}, {"down", "c"}, {"j", "c"}, {"k", "b"}, {"up", "a"}, {"k", "a"}, {"G", "c"}, {"g", "a"},
 	} {
 		f.press(step.key)
-		if ui().Selected != step.want {
+		if ui().Selected != dk(step.want) {
 			t.Fatalf("after %q: Selected = %q, want %q", step.key, ui().Selected, step.want)
 		}
 	}
 
 	f.press("j") // b
 	f.press("enter")
-	if ui().Focus != "b" {
+	if ui().Focus != dk("b") {
 		t.Errorf("enter: Focus = %q, want b", ui().Focus)
 	}
 	f.press("enter")
-	if ui().Focus != "" {
+	if ui().Focus != dk("") {
 		t.Errorf("enter again: Focus = %q, want none", ui().Focus)
 	}
 	f.press("enter")
 	f.press("esc")
-	if ui().Focus != "" || ui().Selected != "b" {
+	if ui().Focus != dk("") || ui().Selected != dk("b") {
 		t.Errorf("esc: Focus %q, Selected %q", ui().Focus, ui().Selected)
 	}
 
@@ -313,15 +313,15 @@ func TestModelMouseFocus(t *testing.T) {
 		t.Fatalf("no card for b:\n%s", f.screen())
 	}
 	f.send(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	if f.m.ui.Focus != "b" {
+	if f.m.ui.Focus != dk("b") {
 		t.Fatalf("click on b: Focus = %q", f.m.ui.Focus)
 	}
 	f.send(tea.MouseClickMsg{X: x + 2, Y: y + 2, Button: tea.MouseLeft})
-	if f.m.ui.Focus != "" {
+	if f.m.ui.Focus != dk("") {
 		t.Errorf("second click on b: Focus = %q, want none", f.m.ui.Focus)
 	}
 	f.send(tea.MouseClickMsg{X: 119, Y: 1, Button: tea.MouseLeft})
-	if f.m.ui.Focus != "" {
+	if f.m.ui.Focus != dk("") {
 		t.Errorf("click on empty space: Focus = %q", f.m.ui.Focus)
 	}
 }
@@ -836,18 +836,18 @@ func TestModelAgentLeavesBoard(t *testing.T) {
 	f.batch(agentEnv("a", "", f.clock), agentEnv("b", "", f.clock))
 	f.press("j")
 	f.press("enter")
-	if f.m.ui.Focus != "a" || f.m.ui.Selected != "a" {
+	if f.m.ui.Focus != dk("a") || f.m.ui.Selected != dk("a") {
 		t.Fatalf("focus %q, selected %q", f.m.ui.Focus, f.m.ui.Selected)
 	}
 	f.batch(schema.Envelope{Kind: "agent.status", AgentID: "a", Status: "finished"})
 	f.clock += store.DefaultFinishedFadeMs + 1000
 	f.batch(schema.Envelope{Kind: "agent.status", AgentID: "b", Status: "idle"})
 	f.send(clockMsg{})
-	if f.m.ui.Focus != "" || f.m.ui.Selected != "" {
+	if f.m.ui.Focus != dk("") || f.m.ui.Selected != dk("") {
 		t.Errorf("after a left: focus %q, selected %q", f.m.ui.Focus, f.m.ui.Selected)
 	}
 	for _, h := range f.m.hits {
-		if h.AgentID == "a" {
+		if h.Key == dk("a") {
 			t.Errorf("a still on the board:\n%s", f.screen())
 		}
 	}
@@ -879,7 +879,7 @@ func TestModelRoutesAnimations(t *testing.T) {
 	f.frames(100)
 	f.clock += 500
 	f.batch(endEnv("a", "c1", false, f.clock))
-	if fr := f.m.anim.Frame("a", 9, 0); !fr.Flash {
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); !fr.Flash {
 		t.Errorf("failed end: no flash")
 	}
 	f.frames(100)
@@ -888,30 +888,30 @@ func TestModelRoutesAnimations(t *testing.T) {
 	f.batch(startEnv("a", "c2", "read", "/work/repo/new.go", f.clock))
 	f.frames(100)
 	f.batch(startEnv("a", "c3", "read", "/work/repo/older.go", f.clock-1000))
-	if fr := f.m.anim.Frame("a", 9, 0); fr.CallRows != 7 || f.m.anim.Active() {
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); fr.CallRows != 7 || f.m.anim.Active() {
 		t.Errorf("unchanged shown call reprinted: %+v", fr)
 	}
 
 	// A history failure starts nothing.
 	f.batch(agentEnv("h", "", nowMs-60_000), startEnv("h", "x", "command", "", nowMs-60_000), endEnv("h", "x", false, nowMs-59_000))
-	if fr := f.m.anim.Frame("h", 1, 0); fr.Flash || fr.CallRows != 7 {
+	if fr := f.m.anim.Frame(dk("h"), 1, 0); fr.Flash || fr.CallRows != 7 {
 		t.Errorf("history change animated: %+v", fr)
 	}
 
 	// A live sub-agent draws its gutter first; an interrupt flashes the
 	// state word once and not the call card.
 	f.batch(agentEnv("s", "a", f.clock))
-	if fr := f.m.anim.Frame("s", 9, 0); fr.GutterRows >= 9 {
+	if fr := f.m.anim.Frame(dk("s"), 9, 0); fr.GutterRows >= 9 {
 		t.Errorf("new sub-agent: gutter %d, want it drawing", fr.GutterRows)
 	}
 	f.frames(100)
 	f.batch(schema.Envelope{Kind: "agent.status", AgentID: "s", Status: "interrupted"})
-	if fr := f.m.anim.Frame("s", 9, 0); !fr.StopFlash || fr.Flash {
+	if fr := f.m.anim.Frame(dk("s"), 9, 0); !fr.StopFlash || fr.Flash {
 		t.Errorf("interrupted: StopFlash %v, Flash %v; want the state word only", fr.StopFlash, fr.Flash)
 	}
 	for i := 1; i <= 3; i++ {
 		f.send(frameMsg{})
-		if fr := f.m.anim.Frame("s", 9, 0); fr.StopFlash || fr.Flash {
+		if fr := f.m.anim.Frame(dk("s"), 9, 0); fr.StopFlash || fr.Flash {
 			t.Errorf("interrupted, frame %d: StopFlash %v, Flash %v; want both off", i, fr.StopFlash, fr.Flash)
 		}
 	}
@@ -931,14 +931,14 @@ func TestModelFlashesOnlyTheShownCall(t *testing.T) {
 	f.frames(100)
 	f.clock += 100
 	f.batch(endEnv("a", "old", false, f.clock))
-	if fr := f.m.anim.Frame("a", 9, 0); fr.Flash || f.m.anim.Active() {
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); fr.Flash || f.m.anim.Active() {
 		t.Errorf("an older parallel call failed: the newer card flashed")
 	}
 
 	// The shown call fails: its card flashes.
 	f.clock += 100
 	f.batch(endEnv("a", "new", false, f.clock))
-	if fr := f.m.anim.Frame("a", 9, 0); !fr.Flash {
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); !fr.Flash {
 		t.Errorf("the shown call failed: no flash")
 	}
 	f.frames(100)
@@ -950,7 +950,7 @@ func TestModelFlashesOnlyTheShownCall(t *testing.T) {
 	f.frames(100)
 	f.clock += 100
 	f.batch(endEnv("a", "c3", false, f.clock), startEnv("a", "c4", "read", "/work/repo/c4.go", f.clock))
-	if fr := f.m.anim.Frame("a", 9, 0); fr.Flash || fr.CallRows != 0 {
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); fr.Flash || fr.CallRows != 0 {
 		t.Errorf("failure and new start in one batch: Flash %v, CallRows %d; want the new card printing, no flash", fr.Flash, fr.CallRows)
 	}
 }
@@ -984,7 +984,7 @@ func TestModelTimeoutEndOfOldCall(t *testing.T) {
 				t.Errorf("status after the end: %q", first)
 			}
 			for _, h := range f.m.hits {
-				if h.AgentID == "a" {
+				if h.Key == dk("a") {
 					t.Errorf("a is on the board:\n%s", f.screen())
 				}
 			}
@@ -1062,7 +1062,7 @@ func TestModelCollectorRestart(t *testing.T) {
 	f.send(clockMsg{}) // the summary goes out
 	f.press("j")
 	f.press("enter")
-	if f.m.ui.Focus != "a" {
+	if f.m.ui.Focus != dk("a") {
 		t.Fatalf("Focus = %q, want a", f.m.ui.Focus)
 	}
 	counters := map[string]store.Counters{"a": f.s.Counters(store.AgentKey{Host: "devbox", ID: "a"}), "b": f.s.Counters(store.AgentKey{Host: "devbox", ID: "b"})}
@@ -1076,7 +1076,7 @@ func TestModelCollectorRestart(t *testing.T) {
 	f.batch(schema.Envelope{Kind: "hello", Now: iso(f.clock)}, emptySnapshot())
 	check := func(when string) {
 		t.Helper()
-		if f.m.ui.Focus != "a" || f.m.ui.Selected != "a" {
+		if f.m.ui.Focus != dk("a") || f.m.ui.Selected != dk("a") {
 			t.Errorf("%s: Focus %q, Selected %q; want a", when, f.m.ui.Focus, f.m.ui.Selected)
 		}
 		if got := f.screen(); got != screen {
@@ -1138,7 +1138,108 @@ func TestModelHistorySettlesRowHeight(t *testing.T) {
 	if !f.m.frameOn || !f.m.anim.Active() {
 		t.Fatalf("mixed batch did not animate")
 	}
-	if fr := f.m.anim.Frame("c", 9, 0); fr.RowH >= 9 || fr.CallRows != 0 {
+	if fr := f.m.anim.Frame(dk("c"), 9, 0); fr.RowH >= 9 || fr.CallRows != 0 {
 		t.Errorf("mixed batch: %+v; want the row growing and the card printing", fr)
+	}
+}
+
+// logLines returns the lines of the log box at the bottom of the screen.
+func (f *modelFix) logLines() string {
+	l := f.lines()
+	lh := logHeight(len(l), f.m.ui.TallLog)
+	return strings.Join(l[len(l)-1-lh:len(l)-1], "\n")
+}
+
+// TestSelectionAndFocusFollowTheHost: two hosts run an agent with the same
+// ID. j, k, enter, esc and a click select and focus one of the two rows, and
+// the log focus keeps the lines of that host only. A third agent after the
+// twins shows that j moves on from the second twin, not from the first.
+func TestSelectionAndFocusFollowTheHost(t *testing.T) {
+	f := newModelFix(t, true, 100, 40)
+	f.boxHosts(map[string]string{"box": "session-1", "box#2": "session-1"})
+	one := store.AgentKey{Host: "box", ID: "session-1"}
+	two := store.AgentKey{Host: "box#2", ID: "session-1"}
+	three := store.AgentKey{Host: "box#2", ID: "session-2"}
+	f.clock += 500
+	f.batchFrom("box", endEnv("session-1", "c-box", true, f.clock))
+	f.batchFrom("box#2", endEnv("session-1", "c-box#2", true, f.clock), agentEnv("session-2", "", f.clock))
+	if got, want := f.s.LaneOrder(f.clock), []store.AgentKey{one, two, three}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("lane order = %v, want %v", got, want)
+	}
+	if lg := f.logLines(); !strings.Contains(lg, "box.go") || !strings.Contains(lg, "box2.go") {
+		t.Fatalf("unfocused log lacks a host's line:\n%s", lg)
+	}
+
+	for _, step := range []struct {
+		key  string
+		want store.AgentKey
+	}{{"j", one}, {"j", two}, {"j", three}, {"k", two}} {
+		f.press(step.key)
+		if f.m.ui.Selected != step.want {
+			t.Fatalf("after %q: Selected = %v, want %v", step.key, f.m.ui.Selected, step.want)
+		}
+	}
+	f.press("enter")
+	if f.m.ui.Focus != two {
+		t.Fatalf("enter: Focus = %v, want %v", f.m.ui.Focus, two)
+	}
+	if lg := f.logLines(); strings.Contains(lg, "box.go") || !strings.Contains(lg, "box2.go") {
+		t.Errorf("focus on %v: log wrong:\n%s", two, lg)
+	}
+	f.press("esc")
+	if f.m.ui.Focus != (store.AgentKey{}) || f.m.ui.Selected != two {
+		t.Fatalf("esc: Focus %v, Selected %v; want none and %v", f.m.ui.Focus, f.m.ui.Selected, two)
+	}
+	if lg := f.logLines(); !strings.Contains(lg, "box.go") || !strings.Contains(lg, "box2.go") {
+		t.Errorf("esc: log lacks a host's line:\n%s", lg)
+	}
+
+	f.press("k") // select the first twin, so the click must move the selection
+	var hit *Hit
+	for i := range f.m.hits {
+		if f.m.hits[i].Key == two {
+			hit = &f.m.hits[i]
+		}
+	}
+	if hit == nil {
+		t.Fatalf("no hit for %v: %+v", two, f.m.hits)
+	}
+	f.send(tea.MouseClickMsg{X: hit.X, Y: hit.Y, Button: tea.MouseLeft})
+	if f.m.ui.Focus != two || f.m.ui.Selected != two {
+		t.Fatalf("click on %v: Focus %v, Selected %v", two, f.m.ui.Focus, f.m.ui.Selected)
+	}
+	if lg := f.logLines(); strings.Contains(lg, "box.go") || !strings.Contains(lg, "box2.go") {
+		t.Errorf("click focus on %v: log wrong:\n%s", two, lg)
+	}
+}
+
+// TestPruneForgetsOnlyTheHostThatLeft: the agent of box leaves the board
+// while its twin on box#2 stays. The model forgets the agent of box only, and
+// the focus and the selection on the twin stay.
+func TestPruneForgetsOnlyTheHostThatLeft(t *testing.T) {
+	f := newModelFix(t, true, 100, 40)
+	f.boxHosts(map[string]string{"box": "session-1", "box#2": "session-1"})
+	one := store.AgentKey{Host: "box", ID: "session-1"}
+	two := store.AgentKey{Host: "box#2", ID: "session-1"}
+	f.batchFrom("box", endEnv("session-1", "c-box", true, f.clock))
+	f.press("j")
+	f.press("j")
+	f.press("enter")
+	if f.m.ui.Focus != two || !f.m.known[one] || !f.m.known[two] {
+		t.Fatalf("before: Focus %v, known %v", f.m.ui.Focus, f.m.known)
+	}
+
+	f.batchFrom("box", schema.Envelope{Kind: "agent.status", AgentID: "session-1", Status: "finished"})
+	f.clock += store.DefaultFinishedFadeMs + 1000
+	f.batchFrom("box#2", schema.Envelope{Kind: "agent.status", AgentID: "session-1", Status: "working"})
+	f.send(clockMsg{})
+	if got, want := f.s.LaneOrder(f.clock), []store.AgentKey{two}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("lane order = %v, want %v", got, want)
+	}
+	if f.m.known[one] || !f.m.known[two] {
+		t.Errorf("known = %v, want %v only", f.m.known, two)
+	}
+	if f.m.ui.Focus != two || f.m.ui.Selected != two {
+		t.Errorf("after box left: Focus %v, Selected %v; want %v", f.m.ui.Focus, f.m.ui.Selected, two)
 	}
 }

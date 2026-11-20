@@ -20,7 +20,8 @@ const (
 
 // UI is the interface state that affects the layout.
 type UI struct {
-	Selected, Focus          string
+	// Selected and Focus are agent keys; the zero key means none.
+	Selected, Focus          store.AgentKey
 	Paused, TallLog, Reduced bool
 	Panel                    Panel
 	Top                      int
@@ -41,6 +42,9 @@ type Row struct {
 	// focused row is taller when its call card grows for command output.
 	Y, H int
 }
+
+// Key returns the key of the row's agent.
+func (r Row) Key() store.AgentKey { return store.AgentKey{Host: r.Host, ID: r.AgentID} }
 
 const (
 	fullHeight      = 9
@@ -75,7 +79,7 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 			r.Sub = true
 			r.SessionLink = a.Link == "session"
 		}
-		r.Full = a.ID == ui.Selected || a.ID == ui.Focus || isActive(s, k, now)
+		r.Full = k == ui.Selected || k == ui.Focus || isActive(s, k, now)
 		rows = append(rows, r)
 		parents = append(parents, parent)
 		hosts[a.Host] = true
@@ -101,8 +105,8 @@ func Rows(s *store.Store, ui UI, now int64) []Row {
 		}
 		r.H = collapsedHeight
 		switch {
-		case r.Full && r.AgentID == ui.Focus:
-			r.H = focusedHeight(s, store.AgentKey{Host: r.Host, ID: r.AgentID})
+		case r.Full && r.Key() == ui.Focus:
+			r.H = focusedHeight(s, r.Key())
 		case r.Full:
 			r.H = fullHeight
 		}
@@ -152,14 +156,14 @@ func HistoryCount(width int, sub bool) int {
 }
 
 // Scroll returns the new top line that keeps the selected row fully inside
-// [top, top+height). It returns top unchanged when no row is selected. A row
-// taller than the view gets its top aligned.
-func Scroll(rows []Row, height, top int, selected string) int {
-	if selected == "" {
+// [top, top+height). It returns top unchanged when no row is selected (the
+// zero key). A row taller than the view gets its top aligned.
+func Scroll(rows []Row, height, top int, selected store.AgentKey) int {
+	if selected == (store.AgentKey{}) {
 		return top
 	}
 	for _, r := range rows {
-		if r.AgentID != selected {
+		if r.Key() != selected {
 			continue
 		}
 		switch {

@@ -36,12 +36,13 @@ const (
 )
 
 // LogLine is one line of the event log. A HOST line has the label "HOST" and
-// no agent. An FS line has the label "FS" and no agent or who. A line with an
-// empty Who puts its label in the who column and its target two cells after
-// the label.
+// no agent. An FS line has the label "FS" and no agent or who. Host and
+// AgentID identify the agent of a line. A line with an empty Who puts its
+// label in the who column and its target two cells after the label.
 type LogLine struct {
 	AtMs           int64
-	AgentID, Who   string
+	Host, AgentID  string
+	Who            string
 	WhoRole        cells.Role
 	Label          string
 	LabelRole      cells.Role
@@ -128,7 +129,7 @@ func agentLine(a store.ViewAgent, atMs int64, label string, role cells.Role) Log
 	case a.Provider == "codex":
 		whoRole = cells.RCodex
 	}
-	return LogLine{AtMs: atMs, AgentID: a.ID, Who: who, WhoRole: whoRole, Label: label, LabelRole: role}
+	return LogLine{AtMs: atMs, Host: a.Host, AgentID: a.ID, Who: who, WhoRole: whoRole, Label: label, LabelRole: role}
 }
 
 // toolLine adds the line of an ended call. A call the store no longer holds
@@ -252,9 +253,9 @@ func fsTarget(n int, folder string) string {
 
 // Render draws the log box, exactly w by h cells: a border with the title,
 // the lines (newest at the bottom, the most that fit), and the prompt on the
-// last inner line. With focus set, only that agent's lines and the HOST lines
-// show.
-func (l *Log) Render(w, h int, focus string) *cells.Grid {
+// last inner line. With focus set (not the zero key), only the lines of that
+// agent, by host and ID, and the HOST lines show.
+func (l *Log) Render(w, h int, focus store.AgentKey) *cells.Grid {
 	g := cells.New(w, h)
 	dim := cells.Style{Role: cells.RDim}
 	g.Box(0, 0, w, h, cells.Square, dim)
@@ -267,7 +268,7 @@ func (l *Log) Render(w, h int, focus string) *cells.Grid {
 	var shown []LogLine
 	for i := len(l.lines) - 1; i >= 0 && len(shown) < h-3; i-- {
 		ln := l.lines[i]
-		if focus != "" && ln.AgentID != focus && ln.Label != "HOST" {
+		if focus != (store.AgentKey{}) && (store.AgentKey{Host: ln.Host, ID: ln.AgentID}) != focus && ln.Label != "HOST" {
 			continue
 		}
 		shown = append(shown, ln)

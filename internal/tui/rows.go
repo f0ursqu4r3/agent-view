@@ -45,15 +45,14 @@ func planRows(in Input, rows []board.Row, w int, eng *anim.Engine) []*rowPlan {
 	plans := make([]*rowPlan, 0, len(rows))
 	parents := map[store.AgentKey]bool{}
 	for i, r := range rows {
-		a, _ := s.Agent(store.AgentKey{Host: r.Host, ID: r.AgentID}) // board.Rows keeps only stored agents
+		a, _ := s.Agent(r.Key()) // board.Rows keeps only stored agents
 		if a.ParentID != nil {
 			parents[store.AgentKey{Host: a.Host, ID: *a.ParentID}] = true // a parent is on the host of its child
 		}
 		plans = append(plans, &rowPlan{row: r, rows: rows, index: i, w: w, agent: a, target: r.H})
 	}
 	for _, p := range plans {
-		id := p.row.AgentID
-		k := store.AgentKey{Host: p.row.Host, ID: id}
+		k := p.row.Key()
 		p.hasKids = parents[k]
 		p.open = s.OpenCalls(k)
 		histN := 0
@@ -74,12 +73,12 @@ func planRows(in Input, rows []board.Row, w int, eng *anim.Engine) []*rowPlan {
 			ended = ended[1:] // the shown call is not history
 		}
 		p.hist = ended[:min(histN, len(ended))]
-		if p.row.Full && in.UI.Focus == id {
+		if p.row.Full && in.UI.Focus == k {
 			p.outputs = cards.MaxOutputLines
 		}
 		// board.Rows sized the row for this card.
 		p.callH = cards.CallCardHeight(p.shown, p.outputs)
-		p.f = eng.Frame(id, p.target, len(p.hist))
+		p.f = eng.Frame(k, p.target, len(p.hist))
 	}
 	return plans
 }
@@ -122,7 +121,7 @@ func (p *rowPlan) hit(y, h int) (Hit, bool) {
 		return Hit{}, false
 	}
 	x := p.cardX()
-	hit := Hit{AgentID: p.row.AgentID, X: x, Y: y + p.head(), W: cards.AgentW, H: cards.AgentH}
+	hit := Hit{Key: p.row.Key(), X: x, Y: y + p.head(), W: cards.AgentW, H: cards.AgentH}
 	if !p.row.Full {
 		hit.W, hit.H = p.lineW(), 1
 	}
@@ -225,7 +224,7 @@ func drawFull(in Input, p *rowPlan, g *cells.Grid, head int) {
 	x := p.cardX()
 	g.Blit(cards.AgentCard(cards.AgentIn{
 		Agent: a, State: p.state(in), Counters: in.Store.Counters(a.Key()), Now: in.Now,
-		HasSubs: p.hasSubRow(), Selected: in.UI.Selected == a.ID, Focused: in.UI.Focus == a.ID,
+		HasSubs: p.hasSubRow(), Selected: in.UI.Selected == a.Key(), Focused: in.UI.Focus == a.Key(),
 	}), x, head)
 
 	cx := x + callX

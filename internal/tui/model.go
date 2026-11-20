@@ -74,9 +74,9 @@ type Model struct {
 	// same key, so a repeated message adds no second diagnostic.
 	hostDetail map[string]string
 	hosts      map[string]*hostInfo
-	known      map[string]bool // agents that may have animation state
-	starts     []int64         // arrival times of live call starts
-	fails      []int64         // arrival times of live failed ends
+	known      map[store.AgentKey]bool // agents that may have animation state
+	starts     []int64                 // arrival times of live call starts
+	fails      []int64                 // arrival times of live failed ends
 	diag       []string
 	panics     int // store panics already reported
 
@@ -120,7 +120,7 @@ func NewModel(c Config) *Model {
 	return &Model{
 		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger, encode: encode,
 		ui:        board.UI{Reduced: c.Reduced},
-		hostState: map[string]string{}, hostDetail: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[string]bool{},
+		hostState: map[string]string{}, hostDetail: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[store.AgentKey]bool{},
 	}
 }
 
@@ -289,28 +289,28 @@ func (m *Model) fixTop(now int64) {
 	m.ui.Top = min(max(m.ui.Top, 0), max(0, total-bh))
 }
 
-// prune forgets the agents that left the board, and clears the focus and
-// the selection when their agent left.
+// prune forgets the agents that left the board, by host and ID, and clears
+// the focus and the selection when their agent left.
 func (m *Model) prune(now int64) {
 	order := m.store.LaneOrder(now)
-	present := make(map[string]bool, len(order))
+	present := make(map[store.AgentKey]bool, len(order))
 	for _, k := range order {
-		present[k.ID] = true
+		present[k] = true
 	}
-	for id := range m.known {
-		if !present[id] {
-			m.anim.Forget(id)
-			delete(m.known, id)
+	for k := range m.known {
+		if !present[k] {
+			m.anim.Forget(k)
+			delete(m.known, k)
 		}
 	}
 	for _, k := range order {
-		m.known[k.ID] = true
+		m.known[k] = true
 	}
 	if !present[m.ui.Focus] {
-		m.ui.Focus = ""
+		m.ui.Focus = store.AgentKey{}
 	}
 	if !present[m.ui.Selected] {
-		m.ui.Selected = ""
+		m.ui.Selected = store.AgentKey{}
 	}
 }
 

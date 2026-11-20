@@ -39,7 +39,7 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		before = m.shownCalls(keys)
 	}
 	var live []liveChange
-	histOnly := map[string]bool{} // agent → no live change in this batch
+	histOnly := map[store.AgentKey]bool{} // agent → no live change in this batch
 	for _, e := range envs {
 		if e.Kind == "hello" && e.Host != "" {
 			if h := m.host(e.Host); h.helloMs == 0 {
@@ -51,13 +51,13 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		m.summaryAt(e.Host, changes, now)
 		for _, c := range changes {
 			if c.History {
-				if _, ok := histOnly[c.AgentID]; !ok {
-					histOnly[c.AgentID] = true
+				if _, ok := histOnly[c.Key()]; !ok {
+					histOnly[c.Key()] = true
 				}
 				m.host(c.Host).histMs = now
 				continue
 			}
-			histOnly[c.AgentID] = false
+			histOnly[c.Key()] = false
 			switch {
 			case c.Kind == store.CallStarted:
 				m.starts = append(m.starts, now)
@@ -74,13 +74,13 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 		after := m.shownCalls(keys)
 		for _, lc := range live {
 			c := lc.c
-			m.known[c.AgentID] = true
+			m.known[c.Key()] = true
 			m.animate(c, lc.failed, after[c.Key()] != before[c.Key()], after[c.Key()] == c.CallID)
 		}
 	}
-	for id, only := range histOnly {
+	for k, only := range histOnly {
 		if only {
-			m.anim.Settle(id)
+			m.anim.Settle(k)
 		}
 	}
 	if n := m.store.Panics - m.panics; n > 0 {
@@ -104,14 +104,14 @@ func (m *Model) animate(c store.Change, failed, shownChanged, shown bool) {
 		m.anim.OnChange(c, shownChanged)
 	case store.CallEnded:
 		if failed && shown {
-			m.anim.OnFail(c.AgentID)
+			m.anim.OnFail(c.Key())
 		}
 	case store.AgentAdded:
 		a, ok := m.store.Agent(c.Key())
-		m.anim.OnAgentAdded(c.AgentID, ok && a.ParentID != nil)
+		m.anim.OnAgentAdded(c.Key(), ok && a.ParentID != nil)
 	case store.AgentStatus:
 		if c.Status == "interrupted" {
-			m.anim.OnStopped(c.AgentID) // flashes the STOPPED word once
+			m.anim.OnStopped(c.Key()) // flashes the STOPPED word once
 		}
 	}
 }

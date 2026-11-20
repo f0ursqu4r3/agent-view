@@ -55,7 +55,7 @@ type Input struct {
 // Hit is the screen rectangle of one agent card (one line for a collapsed
 // row), for mouse clicks. It holds only the visible part of the card.
 type Hit struct {
-	AgentID    string
+	Key        store.AgentKey
 	X, Y, W, H int
 }
 
@@ -172,7 +172,7 @@ func drawBoard(in Input, w, h int) (*cells.Grid, []Hit) {
 	for _, p := range plans {
 		if y < h && y+p.f.RowH > 0 {
 			rg := drawRow(in, p, w)
-			if in.UI.Focus != "" && p.row.AgentID != in.UI.Focus {
+			if in.UI.Focus != (store.AgentKey{}) && p.row.Key() != in.UI.Focus {
 				rg.Dim()
 			}
 			b.Blit(rg, 0, y)

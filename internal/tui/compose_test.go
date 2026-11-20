@@ -102,10 +102,19 @@ func at(g *cells.Grid, x, y, w int) string {
 	return b.String()
 }
 
+// dk returns the key of an agent on host "devbox", the host of the fixtures;
+// "" gives the zero key, none.
+func dk(id string) store.AgentKey {
+	if id == "" {
+		return store.AgentKey{}
+	}
+	return store.AgentKey{Host: "devbox", ID: id}
+}
+
 func hitFor(t *testing.T, hits []Hit, id string) Hit {
 	t.Helper()
 	for _, h := range hits {
-		if h.AgentID == id {
+		if h.Key == dk(id) {
 			return h
 		}
 	}
@@ -339,7 +348,7 @@ func TestComposeFocusDims(t *testing.T) {
 	f.clock += 1500
 	f.end("b", "c2", true)
 	in := f.input(120, 40)
-	in.UI.Focus = "a"
+	in.UI.Focus = dk("a")
 	g, hits := Compose(in)
 	masks := strings.Split(cells.Mask(g), "\n")
 
@@ -522,7 +531,7 @@ func TestComposeAnimation(t *testing.T) {
 		t.Errorf("history card = %q", got)
 	}
 
-	e.OnFail("a")
+	e.OnFail(dk("a"))
 	g, _ = Compose(in)
 	mask := strings.Split(cells.Mask(g), "\n")
 	if got := mask[cy+2][cx : cx+28]; strings.Trim(got, "#") != "" {
@@ -572,7 +581,7 @@ func TestComposeStopFlash(t *testing.T) {
 	in.Anim = e
 	_, hits := Compose(in) // first sight: done values
 	ha := hitFor(t, hits, "a")
-	e.OnStopped("a")
+	e.OnStopped(dk("a"))
 
 	word := func(g *cells.Grid) (plain, mask string) {
 		lines, masks := plainLines(g), strings.Split(cells.Mask(g), "\n")
@@ -627,7 +636,7 @@ func TestComposeTallRows(t *testing.T) {
 	f.start("s2", "c3", "read", "/work/repo/y.go")
 	e := anim.New(false)
 	in := f.input(120, 60)
-	in.Anim, in.UI.Focus = e, "a"
+	in.Anim, in.UI.Focus = e, dk("a")
 	g, hits := Compose(in)
 	ha, hs1 := hitFor(t, hits, "a"), hitFor(t, hits, "s1")
 	rows := board.Rows(f.s, in.UI, f.clock)
@@ -663,7 +672,7 @@ func TestComposeTallRows(t *testing.T) {
 	f.clock += 61_000
 	f.end("s2", "c3", true) // keeps s2 full
 	in = f.input(120, 60)
-	in.Anim, in.UI.Focus = e, "a"
+	in.Anim, in.UI.Focus = e, dk("a")
 	g, hits = Compose(in)
 	hs1, hs2 := hitFor(t, hits, "s1"), hitFor(t, hits, "s2")
 	if hs1.H != 1 || hs2.Y != hs1.Y+9 {
@@ -695,7 +704,7 @@ func TestComposeGutterFirst(t *testing.T) {
 	f.start("a", "c1", "read", "/work/repo/a.go")
 	f.start("s1", "c2", "read", "/work/repo/s.go")
 	e := anim.New(false)
-	e.OnAgentAdded("s1", true)
+	e.OnAgentAdded(dk("s1"), true)
 	in := f.input(120, 40)
 	in.Anim = e
 	blankRow := func(g *cells.Grid, y int) bool { return strings.TrimSpace(at(g, 0, y, g.W)) == "" }
