@@ -586,6 +586,32 @@ func TestDownAgainAfterUpAddsADiagnostic(t *testing.T) {
 	}
 }
 
+// TestHostDetailClearedByAnEmptyDetailThenRepeated: a message with an empty
+// detail clears the stored detail, so the first message again is a new event
+// and adds a second diagnostic.
+func TestHostDetailClearedByAnEmptyDetailThenRepeated(t *testing.T) {
+	const diag = "devbox collector down: x"
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "x"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "x"})
+	if got := countDiag(f, diag); got != 2 || len(f.m.Diagnostics()) != 2 {
+		t.Errorf("diagnostics = %q, want %q twice", f.m.Diagnostics(), diag)
+	}
+}
+
+// TestHostDetailComparesTheCleanedText: two details that differ only by an
+// escape sequence are one text once cleaned, so the second adds no line.
+func TestHostDetailComparesTheCleanedText(t *testing.T) {
+	const diag = "devbox collector down: x"
+	f := newModelFix(t, true, 120, 40)
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "x"})
+	f.send(feed.StateMsg{Host: "devbox", State: "down", Detail: "\x1b[31mx"})
+	if got := countDiag(f, diag); got != 1 || len(f.m.Diagnostics()) != 1 {
+		t.Errorf("diagnostics = %q, want the one line %q", f.m.Diagnostics(), diag)
+	}
+}
+
 // TestModelCoveragePanelShowsEveryHost: the panel holds one block per store
 // host, in the store's order, each with its own coverage.
 func TestModelCoveragePanelShowsEveryHost(t *testing.T) {
