@@ -16,6 +16,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"agent-view/internal/anim"
 	"agent-view/internal/board"
 	"agent-view/internal/cards"
 	"agent-view/internal/feed"
@@ -974,6 +975,47 @@ func TestModelRoutesAnimations(t *testing.T) {
 	}
 }
 
+func TestWriteBurstAndHistorySlide(t *testing.T) {
+	f := newModelFix(t, false, 120, 40)
+	frame := func() anim.AgentFrame { return f.m.anim.Frame(dk("a"), 9, 2) }
+	start := func(id string) schema.Envelope { return startEnv("a", id, "write", "/repo/"+id+".go", f.clock) }
+	f.batch(agentEnv("a", "", f.clock), start("first"))
+	if frame().SweepLeft != anim.SweepFrames || !strings.Contains(f.screen(), "first.go") {
+		t.Fatal("first write should sweep with its filename already visible")
+	}
+	f.frames(2)
+	f.clock += 100
+	f.batch(endEnv("a", "first", true, f.clock), start("second"))
+	if fr := frame(); fr.SweepLeft != anim.SweepFrames-2 || fr.SlidingCall != "first" || fr.SlideLeft != anim.SlideFrames {
+		t.Fatalf("second write restarted the sweep or lost the slide: %+v", fr)
+	}
+	f.frames(1)
+	h := hitFor(t, f.m.hits, "a")
+	bottom := []rune(f.lines()[h.Y+cards.CallH-1])
+	if bottom[h.X+histX+cards.HistoryW-1] == '┘' || !strings.Contains(f.lines()[h.Y+1], "second.go") {
+		t.Fatal("history already in place or current filename hidden during slide")
+	}
+	f.clock += 50
+	f.batch(endEnv("a", "second", true, f.clock), start("third"))
+	if fr := frame(); fr.SlideLeft != 0 || fr.SweepLeft != anim.SweepFrames-3 {
+		t.Fatalf("fast handoff should snap to latest history: %+v", fr)
+	}
+	if row := f.lines()[h.Y+cards.CallH-cards.HistoryH+1]; !strings.Contains(row, "second.go") {
+		t.Fatalf("latest history missing: %s", row)
+	}
+	f.batch(endEnv("a", "third", true, f.clock))
+	f.frames(10)
+	f.clock += 1001
+	f.batch(start("fourth"))
+	if frame().SweepLeft != anim.SweepFrames {
+		t.Fatal("write after a quiet gap should start a fresh sweep")
+	}
+	f.frames(anim.SlideFrames)
+	if fr := frame(); fr.SlideLeft != 0 || fr.SlidingCall != "" {
+		t.Fatalf("slide did not finish after 150 ms: %+v", fr)
+	}
+}
+
 // TestModelFlashesOnlyTheShownCall: a failed end flashes the call card only
 // when the card shows the failed call after the batch.
 func TestModelFlashesOnlyTheShownCall(t *testing.T) {
@@ -1001,14 +1043,14 @@ func TestModelFlashesOnlyTheShownCall(t *testing.T) {
 	f.frames(100)
 
 	// The shown call fails in the batch that starts the next call: the new
-	// card prints and does not flash.
+	// card appears immediately as the failed call slides into history.
 	f.clock += 100
 	f.batch(startEnv("a", "c3", "command", "", f.clock))
 	f.frames(100)
 	f.clock += 100
 	f.batch(endEnv("a", "c3", false, f.clock), startEnv("a", "c4", "read", "/work/repo/c4.go", f.clock))
-	if fr := f.m.anim.Frame(dk("a"), 9, 0); fr.Flash || fr.CallRows != 0 {
-		t.Errorf("failure and new start in one batch: Flash %v, CallRows %d; want the new card printing, no flash", fr.Flash, fr.CallRows)
+	if fr := f.m.anim.Frame(dk("a"), 9, 0); fr.Flash || fr.CallRows != cards.CallH || fr.SlidingCall != "c3" {
+		t.Errorf("failed call handoff: %+v", fr)
 	}
 }
 
@@ -1195,8 +1237,8 @@ func TestModelHistorySettlesRowHeight(t *testing.T) {
 	if !f.m.frameOn || !f.m.anim.Active() {
 		t.Fatalf("mixed batch did not animate")
 	}
-	if fr := f.m.anim.Frame(dk("c"), 9, 0); fr.RowH >= 9 || fr.CallRows != 0 {
-		t.Errorf("mixed batch: %+v; want the row growing and the card printing", fr)
+	if fr := f.m.anim.Frame(dk("c"), 9, 0); fr.RowH >= 9 || fr.CallRows != cards.CallH || fr.SweepLeft == 0 {
+		t.Errorf("mixed batch: %+v; want the row growing with a write sweep", fr)
 	}
 }
 

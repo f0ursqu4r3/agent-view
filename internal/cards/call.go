@@ -299,6 +299,10 @@ func CallCard(in CallIn) *cells.Grid {
 func footer(g *cells.Grid, y int, in CallIn, failed bool) {
 	c := in.Call
 	dim := cells.Style{Role: cells.RDim}
+	if need := humanRequest(c); need != "" {
+		g.Text(callTextX, y, callTextW, "Needs "+strings.ToLower(need), cells.Style{Role: cells.RSearch, Bold: true})
+		return
+	}
 	switch {
 	case !c.Ended && in.Stale:
 		g.Text(callTextX, y, callTextW, "no events "+seenAge(in.Now-in.LastEventMs), dim)

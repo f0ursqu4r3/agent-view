@@ -11,6 +11,10 @@ Each agent is one row of text cards:
 - **History cards:** the latest ended calls, newest on the left.
 - **Where line:** the repository and folder of the agent.
 
+The live card shows the filename as soon as a write starts. A mint streak crosses its top border once per burst of edits or writes. Consecutive writes join the same burst if they overlap or start within one second of the previous write ending. When the next call takes over, the completed card shrinks and slides into the first history slot in 150 ms. A faster handoff goes straight to the latest history. Use `--reduced-motion` for immediate transitions.
+
+An open question or permission request from a supported tool shows `! INPUT` or `! APPROVAL` on the agent card. The marker clears when the request ends. Shell commands require an explicit request in the session data to show an approval marker.
+
 Sub-agents sit under their parent, joined by tree lines. An idle agent shrinks to one line. The terminal must be at least 80 columns by 24 lines.
 
 A status bar shows each host and its state. It also shows the number of agents, the working agents, the calls per minute and the faults. `agents` counts every agent on the board. `working` counts the agents that are working and not STALE.

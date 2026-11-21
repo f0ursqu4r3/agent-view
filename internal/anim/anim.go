@@ -18,6 +18,8 @@ const (
 	shiftStep       = 3
 	shiftFrames     = shiftStart / shiftStep // frames from -15 to 0
 	defaultRowH     = 9                      // full row height, until Frame reports one
+	SlideFrames     = 3                      // 150 ms from live call to history
+	SweepFrames     = 6                      // one pass along the live border
 )
 
 // AgentFrame holds the values the composer applies for one agent.
@@ -38,18 +40,22 @@ type AgentFrame struct {
 	CallRows, LeavingRows, HistPrintRows, WhereChars, GutterRows, RowH int
 	Flash, StopFlash                                                   bool
 	HistOffset                                                         []int
+	SlideLeft, SweepLeft                                               int // frames remaining
+	SlidingCall                                                        string
 }
 
 type agentState struct {
-	callRows int  // 0..7
-	leaving  int  // frames left of the collapse, 0..4
-	histRows int  // 0..4
-	where    int  // 0..6
-	flash    int  // frames played, 6 = done
-	stop     int  // stop flash frames played, 2 = done
-	shift    int  // frames left of the history shift, 0..5
-	gutterOn bool // the gutter still draws
-	gutter   int  // gutter lines drawn
+	slide, sweep int
+	slidingCall  string
+	callRows     int  // 0..7
+	leaving      int  // frames left of the collapse, 0..4
+	histRows     int  // 0..4
+	where        int  // 0..6
+	flash        int  // frames played, 6 = done
+	stop         int  // stop flash frames played, 2 = done
+	shift        int  // frames left of the history shift, 0..5
+	gutterOn     bool // the gutter still draws
+	gutter       int  // gutter lines drawn
 
 	seen   bool // Frame has been called
 	rowH   int
@@ -69,9 +75,33 @@ func newState() *agentState {
 }
 
 func (a *agentState) active() bool {
-	return a.gutterOn || a.callRows < callPrintFrames || a.leaving > 0 ||
+	return a.slide > 0 || a.sweep > 0 || a.gutterOn || a.callRows < callPrintFrames || a.leaving > 0 ||
 		a.histRows < histPrintFrames || a.where < whereFrames ||
 		a.flash < flashFrames || a.stop < stopFrames || a.shift > 0 || (a.seen && a.rowH != a.target)
+}
+
+// OnDisplay switches to the new live card. A second handoff during a slide
+// snaps to the latest history instead of queuing another animation.
+func (e *Engine) OnDisplay(k store.AgentKey, write, burstStart bool, historyID string) {
+	if e.reduced {
+		return
+	}
+	a := e.state(k)
+	a.flash = flashFrames // a previous call's failure cannot flash its replacement
+	if !write {
+		a.sweep = 0
+	} else if burstStart {
+		a.sweep = SweepFrames
+	}
+	if write || historyID != "" || a.slide > 0 {
+		a.callRows, a.leaving = callPrintFrames, 0
+		a.histRows, a.shift = histPrintFrames, 0
+	}
+	if historyID != "" && a.slide == 0 {
+		a.slide, a.slidingCall = SlideFrames, historyID
+	} else {
+		a.slide, a.slidingCall = 0, ""
+	}
 }
 
 // Engine holds the animation state of all agents, by agent key (host and
@@ -172,6 +202,15 @@ func (e *Engine) Forget(k store.AgentKey) {
 // Step advances every effect by one 50 ms frame.
 func (e *Engine) Step() {
 	for _, a := range e.agents {
+		if a.slide > 0 {
+			a.slide--
+			if a.slide == 0 {
+				a.slidingCall = ""
+			}
+		}
+		if a.sweep > 0 {
+			a.sweep--
+		}
 		if a.gutterOn {
 			a.gutter++
 			if a.gutter >= a.target {
@@ -254,6 +293,7 @@ func (e *Engine) Frame(k store.AgentKey, targetRowH, histCount int) AgentFrame {
 	}
 	a.settle = false
 	f.RowH = a.rowH
+	f.SlideLeft, f.SweepLeft, f.SlidingCall = a.slide, a.sweep, a.slidingCall
 	f.CallRows = a.callRows
 	f.HistPrintRows = a.histRows
 	f.WhereChars = a.where

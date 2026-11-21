@@ -33,7 +33,7 @@ type liveChange struct {
 func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 	now := m.nowMs()
 	var keys []store.AgentKey
-	var before map[store.AgentKey]string
+	var before map[store.AgentKey]*store.ViewCall
 	if !m.ui.Paused {
 		keys = callAgents(envs)
 		before = m.shownCalls(keys)
@@ -72,10 +72,48 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 	}
 	if len(live) > 0 {
 		after := m.shownCalls(keys)
+		// A batch can contain several starts, parallel ends, and replayed
+		// history. Animate only the transition the viewer actually sees.
+		type transition struct{ changed, started, failed bool }
+		display := make(map[store.AgentKey]transition)
 		for _, lc := range live {
 			c := lc.c
-			m.known[c.Key()] = true
-			m.animate(c, lc.failed, after[c.Key()] != before[c.Key()], after[c.Key()] == c.CallID)
+			k := c.Key()
+			m.known[k] = true
+			next, old := after[k], before[k]
+			move := display[k]
+			switch c.Kind {
+			case store.CallStarted:
+				if next != nil && next.CallID == c.CallID && (old == nil || old.CallID != next.CallID) {
+					m.anim.OnChange(c, true)
+					move.changed, move.started = true, true
+				}
+			case store.CallEnded:
+				if next != nil && old != nil && old.CallID == c.CallID && next.CallID != old.CallID {
+					move.changed = true
+				}
+				if lc.failed && next != nil && next.CallID == c.CallID {
+					move.failed = true
+				}
+			case store.AgentAdded:
+				a, ok := m.store.Agent(k)
+				m.anim.OnAgentAdded(k, ok && a.ParentID != nil)
+			case store.AgentStatus:
+				if c.Status == "interrupted" {
+					m.anim.OnStopped(k)
+				}
+			}
+			if move.changed || move.failed {
+				display[k] = move
+			}
+		}
+		for k, move := range display {
+			if move.changed {
+				m.displayCall(k, before[k], after[k], move.started)
+			}
+			if move.failed {
+				m.anim.OnFail(k)
+			}
 		}
 	}
 	for k, only := range histOnly {
@@ -93,27 +131,26 @@ func (m *Model) applyBatch(envs feed.EnvelopesMsg) {
 	m.fixTop(now)
 }
 
-// animate starts the effects of a live change. shownChanged reports whether
-// the batch changed the call on the agent's call card; shown reports whether
-// the card shows the change's call after the batch. A failed call flashes
-// the card only when the card shows it: a failed older parallel call, or a
-// failure followed by a newer start, flashes nothing.
-func (m *Model) animate(c store.Change, failed, shownChanged, shown bool) {
-	switch c.Kind {
-	case store.CallStarted:
-		m.anim.OnChange(c, shownChanged)
-	case store.CallEnded:
-		if failed && shown {
-			m.anim.OnFail(c.Key())
+func fileWrite(c *store.ViewCall) bool {
+	return c != nil && (c.Category == "write" || c.Category == "edit")
+}
+
+func (m *Model) displayCall(k store.AgentKey, old, next *store.ViewCall, started bool) {
+	// Overlapping writes, or writes separated by at most one second,
+	// belong to the same burst for this agent.
+	write := fileWrite(next)
+	burstStart := started && write && (!fileWrite(old) || (old.Ended && next.StartMs-old.EndMs > 1000))
+	historyID := ""
+	if old != nil && old.Ended {
+		head := m.store.RecentEnded(k, 2)
+		if next.Ended && len(head) > 0 {
+			head = head[1:]
 		}
-	case store.AgentAdded:
-		a, ok := m.store.Agent(c.Key())
-		m.anim.OnAgentAdded(c.Key(), ok && a.ParentID != nil)
-	case store.AgentStatus:
-		if c.Status == "interrupted" {
-			m.anim.OnStopped(c.Key()) // flashes the STOPPED word once
+		if len(head) > 0 && head[0].CallID == old.CallID {
+			historyID = old.CallID
 		}
 	}
+	m.anim.OnDisplay(k, write, burstStart, historyID)
 }
 
 // callAgents returns the agents whose calls a batch may start or end. An agent
@@ -144,14 +181,14 @@ func callAgents(envs []schema.Envelope) []store.AgentKey {
 }
 
 // shownCalls returns the call on the call card of each agent: the newest
-// open call, else the newest ended one, else "".
-func (m *Model) shownCalls(keys []store.AgentKey) map[store.AgentKey]string {
-	out := make(map[store.AgentKey]string, len(keys))
+// open call, else the newest ended one, else nil.
+func (m *Model) shownCalls(keys []store.AgentKey) map[store.AgentKey]*store.ViewCall {
+	out := make(map[store.AgentKey]*store.ViewCall, len(keys))
 	for _, k := range keys {
 		if open := m.store.OpenCalls(k); len(open) > 0 {
-			out[k] = open[0].CallID
+			out[k] = open[0]
 		} else if ended := m.store.RecentEnded(k, 1); len(ended) > 0 {
-			out[k] = ended[0].CallID
+			out[k] = ended[0]
 		}
 	}
 	return out

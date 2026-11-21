@@ -1,6 +1,8 @@
 package cards
 
 import (
+	"strings"
+
 	"agent-view/internal/cells"
 	"agent-view/internal/store"
 )
@@ -27,6 +29,13 @@ func State(a store.ViewAgent, open []*store.ViewCall, hasPresentChild bool, now,
 		return StateWord{"✓ DONE", dim, false}
 	case a.Status == "idle":
 		return StateWord{"- IDLE", dim, false}
+	}
+	for _, c := range open {
+		if need := humanRequest(c); need != "" {
+			return StateWord{"! " + need, cells.Style{Role: cells.RSearch, Bold: true}, false}
+		}
+	}
+	switch {
 	case Waiting(a, open, hasPresentChild):
 		return StateWord{"• WAITING", cyan, false}
 	case len(open) > 0 && fresh:
@@ -39,6 +48,20 @@ func State(a store.ViewAgent, open []*store.ViewCall, hasPresentChild bool, now,
 		return StateWord{"◌ STALE", dim, false}
 	}
 	return StateWord{"- IDLE", dim, false}
+}
+
+// Only an explicit, open request warrants a human-attention indicator.
+func humanRequest(c *store.ViewCall) string {
+	if c.Ended {
+		return ""
+	}
+	switch strings.TrimPrefix(c.RawName, "functions.") {
+	case "AskUserQuestion", "request_user_input":
+		return "INPUT"
+	case "ExitPlanMode", "request_permissions":
+		return "APPROVAL"
+	}
+	return ""
 }
 
 // Waiting reports whether the state word of an agent is WAITING: the shown

@@ -18,6 +18,7 @@ const (
 	RCodex
 	ROK
 	RFail
+	RMint
 )
 
 type rgb struct{ r, g, b uint8 }
@@ -37,10 +38,11 @@ var palette = [...]rgb{
 	RCodex:   {0x56, 0xb6, 0xc2},
 	ROK:      {0x98, 0xc3, 0x79},
 	RFail:    {0xe0, 0x6c, 0x75},
+	RMint:    {0x71, 0xe3, 0xb7},
 }
 
 // maskLetters holds one letter per role, in Role order.
-const maskLetters = "tdfbrecsaoxkz"
+const maskLetters = "tdfbrecsaoxkzm"
 
 // RoleOf returns the role for a call category.
 func RoleOf(category string) Role {

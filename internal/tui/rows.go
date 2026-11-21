@@ -233,12 +233,20 @@ func drawFull(in Input, p *rowPlan, g *cells.Grid, head int) {
 		lc.ClipRows(0, p.f.LeavingRows)
 		g.Blit(lc, cx, head)
 	}
-	g.Blit(shownCard(in, p), cx, head)
+	sliding := p.f.SlideLeft > 0 && len(p.hist) > 0 && p.hist[0].CallID == p.f.SlidingCall
 
 	// Oldest first, so a newer card that moves right slides out from under
 	// the next older one.
 	hy := head + p.callH - cards.HistoryH
 	for i := len(p.hist) - 1; i >= 0; i-- {
+		if sliding && i == 0 {
+			left := p.f.SlideLeft
+			w := cards.HistoryW + (cards.CallW-cards.HistoryW)*left/anim.SlideFrames
+			h := cards.HistoryH + (cards.CallH-cards.HistoryH)*left/anim.SlideFrames
+			dx := (histX - callX) * left / anim.SlideFrames
+			g.Blit(cards.HistoryCardSize(p.hist[i], w, h), x+histX-dx, hy+cards.HistoryH-h)
+			continue
+		}
 		hc := cards.HistoryCard(p.hist[i])
 		if i >= dimHistoryAt {
 			hc.Dim()
@@ -250,8 +258,13 @@ func drawFull(in Input, p *rowPlan, g *cells.Grid, head int) {
 		if i < len(p.f.HistOffset) {
 			off = p.f.HistOffset[i]
 		}
+		if sliding {
+			off = -histStep * p.f.SlideLeft / anim.SlideFrames
+		}
 		g.Blit(hc, x+histX+i*histStep+off, hy)
 	}
+	// The moving card emerges from behind the newest call.
+	g.Blit(shownCard(in, p), cx, head)
 	drawWhere(p, g, cx, head+p.callH)
 }
 
@@ -269,6 +282,9 @@ func shownCard(in Input, p *rowPlan) *cells.Grid {
 			other = len(p.open) - 1
 		}
 		card = callCard(in, p, p.shown, other, p.outputs)
+		if !p.shown.Ended && fileWrite(p.shown) && p.f.SweepLeft > 0 {
+			sweepBorder(card, p.f.SweepLeft)
+		}
 	}
 	if p.f.Flash {
 		for i := range card.C {
@@ -281,6 +297,20 @@ func shownCard(in Input, p *rowPlan) *cells.Grid {
 		card.ClipRows(0, p.f.CallRows)
 	}
 	return card
+}
+
+// Sweep only the horizontal rule between the title and elapsed time.
+func sweepBorder(card *cells.Grid, left int) {
+	first, end := 3, 3
+	for first < card.W-1 && card.C[first].G != "─" {
+		first++
+	}
+	for end = first; end < card.W-1 && card.C[end].G == "─"; end++ {
+	}
+	head := first + (end-first+1)*(anim.SweepFrames-left)/(anim.SweepFrames-1)
+	for x := max(first, head-2); x <= head && x < end; x++ {
+		card.C[x].S = cells.Style{Role: cells.RMint, Bold: x == head}
+	}
 }
 
 // callCard draws a call of the row's agent. An open call is stale when the

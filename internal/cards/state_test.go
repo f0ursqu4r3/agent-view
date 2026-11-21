@@ -71,3 +71,21 @@ func TestStateStaleBoundary(t *testing.T) {
 		t.Fatalf("just past 2 min: %q", got.Text)
 	}
 }
+
+func TestExplicitHumanRequests(t *testing.T) {
+	for name, want := range map[string]string{
+		"AskUserQuestion": "! INPUT", "functions.request_user_input": "! INPUT",
+		"ExitPlanMode": "! APPROVAL", "functions.request_permissions": "! APPROVAL",
+		"Bash": "• WORKING", "request_user_input_async": "• WORKING",
+	} {
+		calls := openCall("other")
+		calls[0].RawName = name
+		if got := State(agentWith("working", nowMs), calls, false, nowMs, staleMs); got.Text != want {
+			t.Errorf("%s: got %q, want %q", name, got.Text, want)
+		}
+		calls[0].Ended = true
+		if humanRequest(calls[0]) != "" {
+			t.Errorf("%s still requests attention after completion", name)
+		}
+	}
+}
