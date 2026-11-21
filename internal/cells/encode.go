@@ -25,7 +25,8 @@ func sgr(s Style) string {
 // 1 for bold, 7 for inverse.
 func sgrNoColor(s Style) string {
 	var p []string
-	if s.Role == RDim || s.Role == RFaint {
+	switch s.Role {
+	case RDim, RFaint, RPlasma, REmber, RRain, RIndigo, RCoal, RDeepWater, RForest:
 		p = append(p, "2")
 	}
 	if s.Bold {

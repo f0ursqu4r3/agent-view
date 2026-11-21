@@ -256,10 +256,13 @@ func (g *Grid) ClipRows(top, n int) {
 	g.H = n
 }
 
-// Dim recolors every cell to RDim, except RFaint, RDim, and RFail, which stay,
-// and clears Bold on every cell. Inverse is kept.
+// Dim subdues foreground content. Leave the background colors continuous
+// across row boundaries when the user focuses another agent.
 func (g *Grid) Dim() {
 	for i := range g.C {
+		if g.C[i].S.Role >= RPlasma {
+			continue
+		}
 		g.C[i].S.Bold = false
 		switch g.C[i].S.Role {
 		case RDim, RFaint, RFail:

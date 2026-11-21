@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "agent-view",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["src/cli.ts", "--no-open"],
+      "port": 4317
+    },
+    {
+      "name": "agent-view-demo",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["src/cli.ts", "--no-open", "--demo", "--port", "4318"],
+      "port": 4318
+    }
+  ]
+}

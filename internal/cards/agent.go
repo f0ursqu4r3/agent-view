@@ -26,6 +26,7 @@ type AgentIn struct {
 	Counters                   store.Counters
 	Now                        int64
 	HasSubs, Selected, Focused bool
+	SpriteFrame                int // positive while a focused sprite is scrambling
 }
 
 // providerRole returns the color role of a provider.
@@ -85,6 +86,15 @@ func AgentCard(in AgentIn) *cells.Grid {
 	dim := cells.Style{Role: cells.RDim}
 	bright := cells.Style{Role: cells.RBright}
 	for i, row := range Sprite(a.ID) {
+		if in.Focused && in.SpriteFrame > 0 {
+			const glyphs = "@% #+/: *=?"
+			var scrambled [8]byte
+			for x := range scrambled {
+				n := in.SpriteFrame*(x+5) + i*17 + x*x
+				scrambled[x] = glyphs[n%len(glyphs)]
+			}
+			row = string(scrambled[:])
+		}
 		g.Text(spriteX, 1+i, 8, row, cells.Style{Role: prov})
 	}
 

@@ -168,11 +168,11 @@ func TestMaskLetters(t *testing.T) {
 }
 
 func TestMaskAllRoles(t *testing.T) {
-	g := New(13, 1)
-	for r := RText; r <= RFail; r++ {
-		g.Text(int(r), 0, 1, "x", Style{Role: r})
+	g := New(len(palette), 1)
+	for r := range palette {
+		g.Text(r, 0, 1, "x", Style{Role: Role(r)})
 	}
-	if got := Mask(g); got != "tdfbrecsaoxkz" {
+	if got := Mask(g); got != "tdfbrecsaoxkzmpuipppuuuiiggg" {
 		t.Fatalf("Mask = %q", got)
 	}
 }
@@ -253,15 +253,16 @@ func TestClipRows(t *testing.T) {
 }
 
 func TestDim(t *testing.T) {
-	g := New(5, 1)
+	g := New(6, 1)
 	g.Text(0, 0, 1, "a", Style{Role: RRead, Bold: true})
 	g.Text(1, 0, 1, "b", Style{Role: RFail, Bold: true})
 	g.Text(2, 0, 1, "c", Style{Role: RFaint})
 	g.Text(3, 0, 1, "d", Style{Role: RBright, Bold: true})
 	g.Text(4, 0, 1, "e", Style{Role: RRead, Inverse: true})
+	g.Text(5, 0, 1, "~", Style{Role: RFoam})
 	g.Dim()
 	// Bold is cleared on every cell; Inverse is kept.
-	if got := Mask(g); got != "dzfd#" {
-		t.Fatalf("Mask = %q, want %q", got, "dzfd#")
+	if got := Mask(g); got != "dzfd#i" || g.C[5].S.Role != RFoam {
+		t.Fatalf("dimmed mask = %q, background role = %v", got, g.C[5].S.Role)
 	}
 }

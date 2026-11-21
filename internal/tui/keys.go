@@ -26,6 +26,9 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "G":
 		m.selectRow(now, -1)
 	case "enter":
+		if m.ui.Selected == (store.AgentKey{}) && len(m.hits) > 0 {
+			m.ui.Selected = m.hits[0].Key
+		}
 		m.enter()
 	case "esc":
 		if m.ui.Panel != board.PanelNone {
@@ -33,6 +36,16 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		} else {
 			m.ui.Focus = store.AgentKey{}
 			m.thaw = true
+		}
+	case "b":
+		if !m.ui.Reduced {
+			m.motion.background = (m.motion.background + 1) % backgroundCount
+			m.motion.phase = 0
+			m.thaw = true
+		}
+	case "r":
+		if !m.ui.Reduced && !m.ui.Paused {
+			m.motion.title = 19
 		}
 	case "space":
 		m.pause(now)
@@ -53,6 +66,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 // move moves the selection d rows down (up when d is negative). With no
 // selection, down selects the first row and up the last.
 func (m *Model) move(now int64, d int) {
+	m.manualScroll = false
 	rows := board.Rows(m.store, m.ui, now)
 	if len(rows) == 0 {
 		return
@@ -78,6 +92,7 @@ func (m *Model) move(now int64, d int) {
 
 // selectRow selects row i; a negative i counts from the end.
 func (m *Model) selectRow(now int64, i int) {
+	m.manualScroll = false
 	rows := board.Rows(m.store, m.ui, now)
 	if len(rows) == 0 {
 		return
@@ -92,10 +107,15 @@ func (m *Model) selectRow(now int64, i int) {
 // enter focuses the selected agent, or clears the focus when it is already
 // focused or nothing is selected.
 func (m *Model) enter() {
+	m.manualScroll = false
+	m.motion.avatar = 0
 	if m.ui.Selected == (store.AgentKey{}) || m.ui.Focus == m.ui.Selected {
 		m.ui.Focus = store.AgentKey{}
 	} else {
 		m.ui.Focus = m.ui.Selected
+		if !m.ui.Paused && !m.ui.Reduced {
+			m.motion.avatar = 10
+		}
 	}
 	m.thaw = true
 }
@@ -107,6 +127,7 @@ func (m *Model) enter() {
 func (m *Model) pause(now int64) {
 	m.ui.Paused = !m.ui.Paused
 	if m.ui.Paused {
+		m.motion.avatar, m.motion.title = 0, 0
 		return
 	}
 	for k := range m.known {
@@ -135,14 +156,35 @@ func (m *Model) click(msg tea.MouseClickMsg) bool {
 			continue
 		}
 		m.ui.Selected = h.Key
-		if m.ui.Focus == h.Key {
-			m.ui.Focus = store.AgentKey{}
-		} else {
-			m.ui.Focus = h.Key
-		}
-		m.thaw = true
+		m.enter()
 		m.fixTop(m.nowMs())
 		return true
 	}
 	return false
+}
+
+func (m *Model) wheel(msg tea.MouseWheelMsg) bool {
+	bh := boardHeight(m.h, m.ui.TallLog)
+	if m.ui.Panel != board.PanelNone || m.w < MinW || m.h < MinH || msg.X < 0 || msg.X >= m.w || msg.Y < boardTop || msg.Y >= boardTop+bh {
+		return false
+	}
+	const linesPerNotch = 3
+	old := m.ui.Top
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.ui.Top -= linesPerNotch
+	case tea.MouseWheelDown:
+		m.ui.Top += linesPerNotch
+	default:
+		return false
+	}
+	previousMode := m.manualScroll
+	m.manualScroll = true
+	m.fixTop(m.nowMs())
+	if m.ui.Top == old {
+		m.manualScroll = previousMode
+		return false
+	}
+	m.thaw = true
+	return true
 }

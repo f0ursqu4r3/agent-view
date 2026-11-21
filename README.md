@@ -78,8 +78,11 @@ While the TUI runs, agent-view writes nothing to the terminal except its own scr
 | Key | Action |
 |---|---|
 | `j` / `↓`, `k` / `↑` | Select the next or previous row. |
+| Mouse wheel over the agent board | Scroll three lines per notch. Selection and focus stay on the same agent. |
+| `b` | Cycle the background through off, glyph rain, scan wave, plasma, fire, and raindrops. It starts off. |
+| `r` | Replay the launch title animation. Focusing an agent scrambles its avatar once. `--reduced-motion` disables these effects and the background. |
 | `g` / `G` | Select the first or last row. |
-| `enter`, or a click on an agent card | Focus the selected or clicked agent. Press `enter` again to clear the focus. |
+| `enter`, or a click on an agent card | Focus the selected or clicked agent. With no selection, Enter focuses the first visible agent. Press `enter` again to clear the focus. |
 | `esc` | Clear the focus, or close a panel. |
 | `space` | Pause or resume the board and the log. The program keeps reading events. |
 | `l` | Switch the tall log on or off. |

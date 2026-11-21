@@ -26,7 +26,18 @@ func drawStatus(g *cells.Grid, st Status, paused bool) {
 	}
 
 	wr := writer{g: g, x: marginX, y: 0, end: right}
-	wr.put("AGENT VIEW", cells.Style{Role: cells.RBright, Bold: true})
+	title := "AGENT VIEW"
+	if st.titleFrame > 0 {
+		const glyphs = "@#%?=+*/:"
+		b := []byte(title)
+		for i, c := range b {
+			if c != ' ' {
+				b[i] = glyphs[(st.titleFrame*(1+i%2)+i*i)%len(glyphs)]
+			}
+		}
+		title = string(b)
+	}
+	wr.put(title, cells.Style{Role: cells.RBright, Bold: true})
 	for _, h := range st.Hosts {
 		word, role := hostState(h)
 		wr.put("  "+text.Clean(h.Label)+" ", cells.Style{Role: cells.RText})
@@ -95,8 +106,11 @@ var keyItems = []keyItem{
 
 // drawKeys draws the key bar on line y. Entries are dropped, lowest rank
 // first, until the bar fits; "q quit" stays.
-func drawKeys(g *cells.Grid, y int, paused bool) {
+func drawKeys(g *cells.Grid, y int, paused bool, bg background, reduced bool) {
 	items := append([]keyItem(nil), keyItems...)
+	if !reduced {
+		items = append(items, keyItem{"b", "bg " + bg.String(), 3})
+	}
 	if paused {
 		items[0].word = "resume"
 	}

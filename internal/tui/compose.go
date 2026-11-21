@@ -37,6 +37,7 @@ type Status struct {
 	Agents, Working, CallsPerMin, Faults int
 	Paused                               bool
 	Clock                                string
+	titleFrame                           int
 }
 
 // Input is everything one frame shows. Anim and Log may be nil.
@@ -50,6 +51,7 @@ type Input struct {
 	Spin        int
 	W, H        int
 	Diagnostics []string
+	motion      motionState
 }
 
 // Hit is the screen rectangle of one agent card (one line for a collapsed
@@ -85,7 +87,7 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 		log = &board.Log{}
 	}
 	g.Blit(log.Render(g.W-2*marginX, lh, in.UI.Focus), marginX, g.H-1-lh)
-	drawKeys(g, g.H-1, paused)
+	drawKeys(g, g.H-1, paused, in.motion.background, in.UI.Reduced)
 
 	if drawPanel(g, in) {
 		hits = nil
@@ -148,6 +150,7 @@ func panel(in Input, w, h int) *cells.Grid {
 // below them.
 func drawBoard(in Input, w, h int) (*cells.Grid, []Hit) {
 	b := cells.New(w, h)
+	in.motion.drawBackground(b)
 	var rows []board.Row
 	if in.Store != nil {
 		rows = board.Rows(in.Store, in.UI, in.Now)
@@ -171,7 +174,7 @@ func drawBoard(in Input, w, h int) (*cells.Grid, []Hit) {
 	y := -top
 	for _, p := range plans {
 		if y < h && y+p.f.RowH > 0 {
-			rg := drawRow(in, p, w)
+			rg := drawRow(in, p, b, y)
 			if in.UI.Focus != (store.AgentKey{}) && p.row.Key() != in.UI.Focus {
 				rg.Dim()
 			}

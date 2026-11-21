@@ -61,9 +61,11 @@ type Model struct {
 	linger int64
 	encode func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
 
-	ui   board.UI
-	w, h int
-	spin int
+	ui                               board.UI
+	w, h                             int
+	spin                             int
+	motion                           motionState
+	motionOn, launched, manualScroll bool
 
 	frameOn, spinOn, clockOn bool // a tick of that kind is on its way
 
@@ -143,6 +145,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ui.Paused {
 			m.anim.Step()
 		}
+	case motionMsg:
+		m.motionOn = false
+		if !m.ui.Paused {
+			m.motion.phase++
+			m.motion.title = max(0, m.motion.title-1)
+			m.motion.avatar = max(0, m.motion.avatar-1)
+		}
 	case spinMsg:
 		m.spinOn = false
 		m.spin++
@@ -151,12 +160,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tick()
 	case tea.WindowSizeMsg:
 		m.w, m.h = max(msg.Width, 0), max(msg.Height, 0)
+		if !m.launched && !m.ui.Reduced && m.w >= MinW && m.h >= MinH {
+			m.launched = true
+			m.motion.title = 19
+		}
 		m.thaw = true
 		m.fixTop(m.nowMs())
 	case tea.KeyPressMsg:
 		cmd, ok := m.key(msg)
 		if !ok || cmd != nil {
 			return m, cmd
+		}
+	case tea.MouseWheelMsg:
+		if !m.wheel(msg) {
+			return m, nil
 		}
 	case tea.MouseClickMsg:
 		if !m.click(msg) {
@@ -181,6 +198,9 @@ func (m *Model) Diagnostics() []string { return slices.Clone(m.diag) }
 // arm returns the ticks that are needed and not on their way.
 func (m *Model) arm() tea.Cmd {
 	var cmds []tea.Cmd
+	if cmd := m.motionTick(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if !m.clockOn {
 		m.clockOn = true
 		cmds = append(cmds, tea.Every(clockEvery, func(time.Time) tea.Msg { return clockMsg{} }))
@@ -224,7 +244,7 @@ func (m *Model) render() {
 	now := m.nowMs()
 	in := Input{
 		Store: m.store, UI: m.ui, Anim: m.anim, Log: m.log, Status: m.status(now),
-		Now: now, Spin: m.spin, W: m.w, H: m.h, Diagnostics: m.diag,
+		Now: now, Spin: m.spin, motion: m.motion, W: m.w, H: m.h, Diagnostics: m.diag,
 	}
 	if !m.ui.Paused || m.w < MinW || m.h < MinH {
 		var g *cells.Grid
@@ -256,7 +276,7 @@ func (m *Model) render() {
 // sub-agent) counts as well, because the store marks it stale and the row does
 // not.
 func (m *Model) status(now int64) Status {
-	st := Status{Hosts: m.segments(), Paused: m.ui.Paused, Clock: time.UnixMilli(now).Format("15:04:05")}
+	st := Status{titleFrame: m.motion.title, Hosts: m.segments(), Paused: m.ui.Paused, Clock: time.UnixMilli(now).Format("15:04:05")}
 	agents := m.store.Agents(now)
 	var parents map[store.AgentKey]bool // built at the first stale agent
 	for _, a := range agents {
@@ -311,7 +331,9 @@ func (m *Model) fixTop(now int64) {
 		return
 	}
 	rows := board.Rows(m.store, m.ui, now)
-	m.ui.Top = board.Scroll(rows, bh, m.ui.Top, m.ui.Selected)
+	if !m.manualScroll {
+		m.ui.Top = board.Scroll(rows, bh, m.ui.Top, m.ui.Selected)
+	}
 	total := 0
 	for _, r := range rows {
 		total += r.H

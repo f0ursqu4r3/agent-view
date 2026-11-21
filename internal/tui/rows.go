@@ -167,8 +167,13 @@ func (p *rowPlan) hasSubRow() bool {
 
 // drawRow draws one row into a grid as wide as the board and as high as its
 // animated height.
-func drawRow(in Input, p *rowPlan, w int) *cells.Grid {
+func drawRow(in Input, p *rowPlan, boardGrid *cells.Grid, y int) *cells.Grid {
+	w := boardGrid.W
 	g := cells.New(w, max(p.target, p.f.RowH))
+	if in.motion.background != backgroundOff {
+		first, end := max(0, -y), min(g.H, boardGrid.H-y)
+		copy(g.C[first*w:end*w], boardGrid.C[(y+first)*w:(y+end)*w])
+	}
 	dim := cells.Style{Role: cells.RDim}
 	head := p.head()
 	if head > 0 {
@@ -223,7 +228,7 @@ func drawFull(in Input, p *rowPlan, g *cells.Grid, head int) {
 	a := p.agent
 	x := p.cardX()
 	g.Blit(cards.AgentCard(cards.AgentIn{
-		Agent: a, State: p.state(in), Counters: in.Store.Counters(a.Key()), Now: in.Now,
+		SpriteFrame: in.motion.avatar, Agent: a, State: p.state(in), Counters: in.Store.Counters(a.Key()), Now: in.Now,
 		HasSubs: p.hasSubRow(), Selected: in.UI.Selected == a.Key(), Focused: in.UI.Focus == a.Key(),
 	}), x, head)
 
