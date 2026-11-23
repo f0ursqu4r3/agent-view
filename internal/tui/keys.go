@@ -27,12 +27,33 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.selectRow(now, -1)
 	case "enter":
 		if m.ui.Selected == (store.AgentKey{}) && len(m.hits) > 0 {
-			m.ui.Selected = m.hits[0].Key
+			m.setSelection(m.hits[0].Key)
 		}
 		m.enter()
+	case "h":
+		if m.ui.Panel != board.PanelNone {
+			return nil, false
+		}
+		m.ui.History = !m.ui.History
+		m.ui.HistoryTop = board.HistoryPosition{}
+		if m.ui.History && m.ui.Selected == (store.AgentKey{}) && len(m.hits) > 0 {
+			m.setSelection(m.hits[0].Key)
+		}
+		m.thaw = true
+	case "pgdown", "pgup":
+		step := historyPageSize(m.h)
+		if msg.String() == "pgup" {
+			step = -step
+		}
+		if !m.scrollHistory(step) {
+			return nil, false
+		}
 	case "esc":
 		if m.ui.Panel != board.PanelNone {
 			m.ui.Panel = board.PanelNone
+		} else if m.ui.History {
+			m.ui.History = false
+			m.thaw = true
 		} else {
 			m.ui.Focus = store.AgentKey{}
 			m.thaw = true
@@ -86,7 +107,7 @@ func (m *Model) move(now int64, d int) {
 	default:
 		i = min(max(i+d, 0), len(rows)-1)
 	}
-	m.ui.Selected = rows[i].Key()
+	m.setSelection(rows[i].Key())
 	m.thaw = true
 }
 
@@ -100,8 +121,15 @@ func (m *Model) selectRow(now int64, i int) {
 	if i < 0 {
 		i += len(rows)
 	}
-	m.ui.Selected = rows[min(max(i, 0), len(rows)-1)].Key()
+	m.setSelection(rows[min(max(i, 0), len(rows)-1)].Key())
 	m.thaw = true
+}
+
+func (m *Model) setSelection(key store.AgentKey) {
+	if m.ui.Selected != key {
+		m.ui.Selected = key
+		m.ui.HistoryTop = board.HistoryPosition{}
+	}
 }
 
 // enter focuses the selected agent, or clears the focus when it is already
@@ -155,7 +183,7 @@ func (m *Model) click(msg tea.MouseClickMsg) bool {
 		if msg.X < h.X || msg.X >= h.X+h.W || msg.Y < h.Y || msg.Y >= h.Y+h.H {
 			continue
 		}
-		m.ui.Selected = h.Key
+		m.setSelection(h.Key)
 		m.enter()
 		m.fixTop(m.nowMs())
 		return true
@@ -165,19 +193,26 @@ func (m *Model) click(msg tea.MouseClickMsg) bool {
 
 func (m *Model) wheel(msg tea.MouseWheelMsg) bool {
 	bh := boardHeight(m.h, m.ui.TallLog)
-	if m.ui.Panel != board.PanelNone || m.w < MinW || m.h < MinH || msg.X < 0 || msg.X >= m.w || msg.Y < boardTop || msg.Y >= boardTop+bh {
+	if m.ui.Panel != board.PanelNone || m.w < MinW || m.h < MinH || msg.X < 0 || msg.X >= m.w || msg.Y < boardTop {
 		return false
 	}
 	const linesPerNotch = 3
-	old := m.ui.Top
+	delta := linesPerNotch
 	switch msg.Button {
 	case tea.MouseWheelUp:
-		m.ui.Top -= linesPerNotch
+		delta = -delta
 	case tea.MouseWheelDown:
-		m.ui.Top += linesPerNotch
 	default:
 		return false
 	}
+	if m.ui.History && msg.X >= m.w-historyWidth(m.w) {
+		return msg.Y < boardTop+historyHeight(m.h) && m.scrollHistory(delta)
+	}
+	if msg.Y >= boardTop+bh {
+		return false
+	}
+	old := m.ui.Top
+	m.ui.Top += delta
 	previousMode := m.manualScroll
 	m.manualScroll = true
 	m.fixTop(m.nowMs())

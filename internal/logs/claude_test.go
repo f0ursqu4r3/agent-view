@@ -256,7 +256,7 @@ func TestClaudeNoInventedFileAttribution(t *testing.T) {
 	}
 }
 
-// tool_use emits tool.start with category, files resolved against cwd, command capped at 4096
+// tool_use emits tool.start with category, files resolved against cwd, complete command text
 func TestClaudeToolUseStart(t *testing.T) {
 	a := NewClaudeAdapter("mac")
 	out := feed(a, rec("", jl{
@@ -269,7 +269,7 @@ func TestClaudeToolUseStart(t *testing.T) {
 		t.Fatalf("calls = %d", len(cs))
 	}
 	deepEq(t, "read", cs[0], wire.Call{AgentID: "mac/claude:default:root", CallID: "r", StartedAt: t1, Category: "read", RawName: "Read", Files: []string{"/project/src/a.ts"}})
-	if cs[1].Category != "command" || len(cs[1].Command) != 4096 || cs[1].Files != nil {
+	if cs[1].Category != "command" || cs[1].Command != strings.Repeat("x", 5000) || cs[1].Files != nil {
 		t.Errorf("command call: category=%s len=%d files=%v", cs[1].Category, len(cs[1].Command), cs[1].Files)
 	}
 	deepEq(t, "abs files", cs[2].Files, []string{"/other/b.ts"})

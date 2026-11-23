@@ -258,7 +258,7 @@ func (a *ClaudeAdapter) toolUse(agent *agentState, agentID string, cwd *string, 
 	agent.status = "working"
 	call := wire.Call{AgentID: agentID, CallID: callID, StartedAt: ts, Category: category, RawName: name, Files: files}
 	if command, ok := input.Get("command").(string); ok && category == "command" {
-		call.Command = text.SliceUTF16(command, MaxCommandChars)
+		call.Command = command
 	}
 	if pattern, ok := input.Get("pattern").(string); ok && category == "search" {
 		call.Pattern = pattern

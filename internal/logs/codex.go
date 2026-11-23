@@ -395,7 +395,7 @@ func (a *CodexAdapter) directCall(r *codexRecord, agent *agentState, agentID str
 			command, ok = commandText(in.Get("cmd"))
 		}
 		if ok {
-			call.Command = text.SliceUTF16(command, MaxCommandChars)
+			call.Command = command
 		}
 	}
 	r.emit(wire.ToolStart{Call: call}, r.ts)
@@ -513,7 +513,7 @@ func (a *CodexAdapter) nativeItem(r *codexRecord, file string, p *Obj, prefix st
 	switch changes := obj(item.Get("changes")); {
 	case typ == "CommandExecution":
 		if command, ok := commandText(item.Get("command")); ok {
-			call.Command = text.SliceUTF16(command, MaxCommandChars)
+			call.Command = command
 		}
 		if code, ok := isInteger(item.Get("exit_code")); ok {
 			end.ExitCode = &code

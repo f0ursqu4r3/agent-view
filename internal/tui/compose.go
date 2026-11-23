@@ -42,16 +42,17 @@ type Status struct {
 
 // Input is everything one frame shows. Anim and Log may be nil.
 type Input struct {
-	Store       *store.Store
-	UI          board.UI
-	Anim        *anim.Engine
-	Log         *board.Log
-	Status      Status
-	Now         int64
-	Spin        int
-	W, H        int
-	Diagnostics []string
-	motion      motionState
+	historyCache *historyCache
+	Store        *store.Store
+	UI           board.UI
+	Anim         *anim.Engine
+	Log          *board.Log
+	Status       Status
+	Now          int64
+	Spin         int
+	W, H         int
+	Diagnostics  []string
+	motion       motionState
 }
 
 // Hit is the screen rectangle of one agent card (one line for a collapsed
@@ -76,7 +77,13 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 	drawStatus(g, in.Status, paused)
 
 	lh := logHeight(g.H, in.UI.TallLog)
-	b, hits := drawBoard(in, g.W, boardHeight(g.H, in.UI.TallLog))
+	left := g.W
+	if in.UI.History {
+		w := historyWidth(g.W)
+		left -= w
+		g.Blit(historyPanel(in, w, historyHeight(g.H)), left, boardTop)
+	}
+	b, hits := drawBoard(in, left, boardHeight(g.H, in.UI.TallLog))
 	g.Blit(b, 0, boardTop)
 	for i := range hits {
 		hits[i].Y += boardTop
@@ -86,7 +93,7 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 	if log == nil {
 		log = &board.Log{}
 	}
-	g.Blit(log.Render(g.W-2*marginX, lh, in.UI.Focus), marginX, g.H-1-lh)
+	g.Blit(log.Render(left-2*marginX, lh, in.UI.Focus), marginX, g.H-1-lh)
 	drawKeys(g, g.H-1, paused, in.motion.background, in.UI.Reduced)
 
 	if drawPanel(g, in) {

@@ -545,7 +545,7 @@ func TestCodexCommandExecutionOkAndExitCode(t *testing.T) {
 	check("f", end("f", jm{"status": "completed", "exit_code": "0"}), true, nil)
 }
 
-// native command output and history are bounded
+// native command text is complete and output is bounded
 func TestCodexNativeCommandOutputBounded(t *testing.T) {
 	a := cxSetup()
 	output := strings.Repeat("a", 10000) + strings.Repeat("b", 10000) + "END"
@@ -553,7 +553,7 @@ func TestCodexNativeCommandOutputBounded(t *testing.T) {
 		"type": "CommandExecution", "id": "big", "status": "completed", "command": jl{strings.Repeat("x", 5000)},
 		"aggregated_output": output, "exit_code": 1,
 	}, "main", nil))
-	if got := len(cxCall(t, out).Command); got != 4096 {
+	if got := len(cxCall(t, out).Command); got != 5000 {
 		t.Errorf("command length = %d", got)
 	}
 	chunks := only[wire.ToolOutput](out)
@@ -618,7 +618,7 @@ func TestCodexDirectShellCalls(t *testing.T) {
 	}
 	start := cxFeed(a, cxResp(jm{"type": "function_call", "name": "exec_command", "call_id": "s", "arguments": args(jm{"cmd": strings.Repeat("x", 5000)})}))
 	c := cxCall(t, start)
-	if c.Category != "command" || c.RawName != "exec_command" || len(c.Command) != 4096 {
+	if c.Category != "command" || c.RawName != "exec_command" || c.Command != strings.Repeat("x", 5000) {
 		t.Errorf("call = %+v", c)
 	}
 	arr := cxFeed(a, cxResp(jm{"type": "function_call", "name": "shell", "call_id": "s2", "arguments": args(jm{"command": jl{"bash", "-lc", "ls"}})}))

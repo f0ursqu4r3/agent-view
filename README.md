@@ -83,7 +83,9 @@ While the TUI runs, agent-view writes nothing to the terminal except its own scr
 | `r` | Replay the launch title animation. Focusing an agent scrambles its avatar once. `--reduced-motion` disables these effects and the background. |
 | `g` / `G` | Select the first or last row. |
 | `enter`, or a click on an agent card | Focus the selected or clicked agent. With no selection, Enter focuses the first visible agent. Press `enter` again to clear the focus. |
-| `esc` | Clear the focus, or close a panel. |
+| `h` | Toggle the history sidebar. It follows the selected agent and shows all tool calls observed for that agent, oldest start first. Shell commands wrap to the sidebar width and keep their line breaks. |
+| `PgDn` / `PgUp`, or mouse wheel over the sidebar | Page or scroll through the full command text and the surrounding calls. The sidebar opens at the bottom and follows new calls. Scroll up to hold your place. Scroll back to the bottom to follow again. |
+| `esc` | Close the open panel, then the history sidebar, then clear focus on successive presses. |
 | `space` | Pause or resume the board and the log. The program keeps reading events. |
 | `l` | Switch the tall log on or off. |
 | `c` | Open or close the coverage panel and the diagnostics. |

@@ -116,40 +116,11 @@ func Where(projectRoot string, c *store.ViewCall) (repo, folder string) {
 	return repo, dir + "/"
 }
 
-// fileParts returns the cleaned base name of a file call and its "+N" suffix.
-func fileParts(c *store.ViewCall) (name, suffix string) {
-	if len(c.Files) == 0 {
-		return "", ""
-	}
-	name = path.Base(text.Clean(c.Files[0]))
-	if len(c.Files) > 1 {
-		suffix = fmt.Sprintf(" +%d", len(c.Files)-1)
-	}
-	return name, suffix
-}
-
 // Target returns the line-1 text of a call without decoration: the file base
 // name (and +N), $ command, pattern, sub-agent name, or raw name.
 func Target(c *store.ViewCall) string {
-	name, suffix := targetParts(c)
+	name, suffix := c.TargetParts()
 	return name + suffix
-}
-
-// targetParts splits Target into the name and the dim "+N" suffix.
-func targetParts(c *store.ViewCall) (name, suffix string) {
-	switch c.Category {
-	case "read", "edit", "write":
-		if name, suffix = fileParts(c); name != "" {
-			return name, suffix
-		}
-	case "command":
-		return strings.TrimRight("$ "+text.Clean(c.Command), " "), ""
-	case "search":
-		return text.Clean(c.Pattern), ""
-	case "agent":
-		return "sub-agent", ""
-	}
-	return text.Clean(c.RawName), ""
 }
 
 // cellWidth returns the layout width of s, as Grid.Text counts it.
@@ -174,7 +145,7 @@ func clipWidth(s string, w int) string {
 // max cells. A file name that is too long keeps its extension when the
 // extension fits; the suffix always stays.
 func fitTarget(c *store.ViewCall, max int) (name, suffix string) {
-	name, suffix = targetParts(c)
+	name, suffix = c.TargetParts()
 	if !isFileCategory(c.Category) {
 		return name, ""
 	}

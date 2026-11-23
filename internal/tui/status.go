@@ -97,6 +97,7 @@ var keyItems = []keyItem{
 	{"space", "pause", 7},
 	{"j/k", "select", 4},
 	{"enter", "focus", 5},
+	{"h", "history", 5},
 	{"esc", "clear", 1},
 	{"c", "coverage", 3},
 	{"l", "log", 2},

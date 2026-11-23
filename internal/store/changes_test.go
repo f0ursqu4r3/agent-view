@@ -500,10 +500,19 @@ func TestStatusOrderedByEventTime(t *testing.T) {
 
 func TestCountersSurviveTrim(t *testing.T) {
 	s := seeded(t)
+	firstCommand := strings.Repeat("echo café\n", 600) + "echo end"
 	for i := range 2100 {
 		id := fmt.Sprintf("c%d", i)
-		s.Apply(evStart("local", call("a", id)))
+		cmd := id
+		if i == 0 {
+			cmd = firstCommand
+		}
+		s.Apply(evStart("local", call("a", id, withCommand(cmd))))
 		s.Apply(evEnd("local", "a", id, ptr(true), nil, nil))
+	}
+	history := s.CallHistory(k("a"))
+	if len(history) != 2100 || history[0].Target != "$ "+firstCommand || history[0].Result() != "ok" {
+		t.Fatalf("trim lost the oldest call summary (%d entries)", len(history))
 	}
 	if c := s.Counters(k("a")); c.Calls != 2100 || c.Faults != 0 {
 		t.Fatalf("Counters = %+v, want 2100 calls, 0 faults", c)

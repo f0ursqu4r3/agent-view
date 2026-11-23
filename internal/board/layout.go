@@ -18,11 +18,20 @@ const (
 	PanelHelp
 )
 
+// HistoryPosition anchors the top line to a call as new entries arrive.
+// A nil call follows the bottom of the history.
+type HistoryPosition struct {
+	Call *store.HistoryCall
+	Line int // zero for the header, then the wrapped target lines
+}
+
 // UI is the interface state that affects the layout.
 type UI struct {
 	// Selected and Focus are agent keys; the zero key means none.
 	Selected, Focus          store.AgentKey
 	Paused, TallLog, Reduced bool
+	History                  bool
+	HistoryTop               HistoryPosition
 	Panel                    Panel
 	Top                      int
 }

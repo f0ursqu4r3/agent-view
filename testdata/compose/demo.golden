@@ -37,4 +37,4 @@
  │ 23:05:16  Review drawer s…  RUN   $ git status --short                                                 ok     2.8s │ 
  │ $ ▌                                                                                                                │ 
  └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ 
- space pause  j/k select  enter focus  esc clear  c coverage  l log  ? help  q quit  b bg off                           
+ space pause  j/k select  enter focus  h history  esc clear  c coverage  l log  ? help  q quit  b bg off                

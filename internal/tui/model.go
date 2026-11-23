@@ -11,6 +11,7 @@ import (
 	"agent-view/internal/cards"
 	"agent-view/internal/cells"
 	"agent-view/internal/feed"
+	"agent-view/internal/ordered"
 	"agent-view/internal/store"
 	"agent-view/internal/text"
 )
@@ -54,12 +55,13 @@ type Config struct {
 // that changes the board (selection, focus, log size) or a resize draws it
 // again from the store.
 type Model struct {
-	store  *store.Store
-	anim   *anim.Engine
-	log    *board.Log
-	now    func() time.Time
-	linger int64
-	encode func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
+	historyCache *historyCache
+	store        *store.Store
+	anim         *anim.Engine
+	log          *board.Log
+	now          func() time.Time
+	linger       int64
+	encode       func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
 
 	ui                               board.UI
 	w, h                             int
@@ -122,8 +124,9 @@ func NewModel(c Config) *Model {
 	}
 	return &Model{
 		store: s, anim: anim.New(c.Reduced), log: &board.Log{}, now: now, linger: linger, encode: encode,
-		ui:        board.UI{Reduced: c.Reduced},
-		hostState: map[string]string{}, hostDetail: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[store.AgentKey]bool{},
+		historyCache: ordered.NewLRU[*store.HistoryCall, wrappedCommand](32),
+		ui:           board.UI{Reduced: c.Reduced},
+		hostState:    map[string]string{}, hostDetail: map[string]string{}, hosts: map[string]*hostInfo{}, known: map[store.AgentKey]bool{},
 	}
 }
 
@@ -242,8 +245,15 @@ func (m *Model) tick() {
 // only the status bar and the panel are drawn again.
 func (m *Model) render() {
 	now := m.nowMs()
+	if m.ui.HistoryTop.Call != nil && m.ui.History && m.w >= MinW && m.h >= MinH && (!m.ui.Paused || m.thaw) {
+		v := m.historyView()
+		bottom := v.bottom(historyPageSize(m.h))
+		if v.top(m.ui.HistoryTop, bottom) == bottom {
+			m.ui.HistoryTop = board.HistoryPosition{}
+		}
+	}
 	in := Input{
-		Store: m.store, UI: m.ui, Anim: m.anim, Log: m.log, Status: m.status(now),
+		Store: m.store, UI: m.ui, historyCache: m.historyCache, Anim: m.anim, Log: m.log, Status: m.status(now),
 		Now: now, Spin: m.spin, motion: m.motion, W: m.w, H: m.h, Diagnostics: m.diag,
 	}
 	if !m.ui.Paused || m.w < MinW || m.h < MinH {
@@ -362,7 +372,7 @@ func (m *Model) prune(now int64) {
 		m.ui.Focus = store.AgentKey{}
 	}
 	if !present[m.ui.Selected] {
-		m.ui.Selected = store.AgentKey{}
+		m.setSelection(store.AgentKey{})
 	}
 }
 

@@ -4,10 +4,9 @@ import "agent-view/internal/wire"
 
 // Limits shared by the log adapters.
 const (
-	MaxPending      = 5000
-	MaxCommandChars = 4096
-	MaxChunkBytes   = 4096
-	MaxOutputBytes  = 16 * 1024
+	MaxPending     = 5000
+	MaxChunkBytes  = 4096
+	MaxOutputBytes = 16 * 1024
 )
 
 // chunkBytes splits UTF-8 bytes into chunks of at most size bytes without

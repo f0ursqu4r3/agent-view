@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"agent-view/internal/text"
 )
 
 // envelope is one parsed NDJSON line.
@@ -58,11 +60,11 @@ func normalize(lines []string) (stream, error) {
 				continue
 			}
 		case "tool.start":
-			dropEmptyCallText(env["call"])
+			normalizeCallText(env["call"])
 		case "snapshot":
 			if calls, ok := env["openCalls"].([]any); ok {
 				for _, c := range calls {
-					dropEmptyCallText(c)
+					normalizeCallText(c)
 				}
 			}
 		}
@@ -73,11 +75,15 @@ func normalize(lines []string) (stream, error) {
 	return s, nil
 }
 
-// dropEmptyCallText removes a command or pattern that is the empty string.
-func dropEmptyCallText(call any) {
+// normalizeCallText compares the command prefix recorded by the legacy collector.
+// The log adapter tests check the full command.
+func normalizeCallText(call any) {
 	c, ok := call.(map[string]any)
 	if !ok {
 		return
+	}
+	if command, ok := c["command"].(string); ok {
+		c["command"] = text.SliceUTF16(command, 4096)
 	}
 	for _, k := range []string{"command", "pattern"} {
 		if v, present := c[k]; present && v == "" {

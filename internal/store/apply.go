@@ -21,7 +21,7 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 	// never seen is dropped: the feed has no resnapshot path.
 	if id := subjectOf(e); id != "" {
 		if d, ok := h.dormant.Get(id); ok && isTimeout(e) {
-			endTally(d.tally, e)
+			endTally(d.tally, e, at, d.lastEventMs)
 			return
 		}
 		if !h.agents.Has(id) && !revive(h, id) {
@@ -75,6 +75,9 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			return
 		}
 		call.Files = union(call.Files, files)
+		if c := tallyOf(h, e.AgentID).calls[e.CallID]; c != nil && c.mark == callOpen {
+			c.Target = historyTarget(call)
+		}
 	case "tool.output":
 		call, stored := h.calls.get(callKey{e.AgentID, e.CallID})
 		if !stored {
@@ -103,9 +106,9 @@ func (s *Store) dispatch(e schema.Envelope, em *emitter) {
 			if !isTimeout(e) {
 				bump(h, e.AgentID, at)
 			}
-			endTally(a.tally, e)
+			endTally(a.tally, e, at, a.lastEventMs)
 			if call, ok := h.calls.get(callKey{e.AgentID, e.CallID}); ok && !call.Ended {
-				end := endMs(a, call, e, at)
+				end := endMs(call.StartMs, a.lastEventMs, e, at)
 				h.calls.end(call, e, end)
 				em.add(CallEnded, e.AgentID, e.CallID, "", end)
 			}
@@ -195,18 +198,18 @@ func (s *Store) snapshot(h *hostState, e schema.Envelope, at int64, em *emitter)
 		var t *tally
 		mark := callUnknown
 		if a, ok := h.agents.Get(c.AgentID); ok {
-			t, mark = a.tally, a.tally.calls[c.CallID]
+			t, mark = a.tally, a.tally.calls[c.CallID].state()
 		}
 		if mark == callEnded {
 			continue
 		}
 		start := s.ms(h, c.StartedAt)
-		addCall(h, e.Host, c, start)
+		call := addCall(h, e.Host, c, start)
 		if t == nil {
 			continue // a call of an agent the snapshot does not list is kept but not counted
 		}
 		t.seen(start)
-		t.calls[c.CallID] = callOpen
+		t.recordStart(call)
 		if mark == callUnknown { // a dropped call comes back silently
 			em.add(CallStarted, c.AgentID, c.CallID, "", start)
 		}
@@ -229,7 +232,7 @@ func (s *Store) toolStart(h *hostState, host string, c *schema.Call, at int64, e
 	}
 	call := addCall(h, host, *c, s.ms(h, c.StartedAt))
 	a.tally.seen(call.StartMs)
-	a.tally.calls[c.CallID] = callOpen
+	a.tally.recordStart(call)
 	em.add(CallStarted, c.AgentID, c.CallID, "", at)
 	setStatus(a, c.AgentID, "working", at, em)
 	bump(h, c.AgentID, at)
@@ -265,17 +268,19 @@ func isTimeout(e schema.Envelope) bool { return e.Kind == "tool.end" && e.Ok == 
 // endMs returns the end time of a call that e ends at at. A call timeout comes
 // long after the call's last activity, so the call ends at that activity: its
 // start, or the agent's last event when that is later.
-func endMs(a *agentEntry, call *ViewCall, e schema.Envelope, at int64) int64 {
+func endMs(start, lastEvent int64, e schema.Envelope, at int64) int64 {
 	if isTimeout(e) {
-		return max(call.StartMs, a.lastEventMs)
+		return max(start, lastEvent)
 	}
 	return at
 }
 
 // endTally marks a call of a tally ended, once, and counts a fault.
-func endTally(t *tally, e schema.Envelope) {
-	if m := t.calls[e.CallID]; m == callOpen || m == callDropped {
-		t.calls[e.CallID] = callEnded
+func endTally(t *tally, e schema.Envelope, at, lastEvent int64) {
+	if c := t.calls[e.CallID]; c != nil && c.mark != callEnded {
+		c.mark = callEnded
+		c.ok = clonePtr(e.Ok)
+		c.EndMs = endMs(c.StartMs, lastEvent, e, at)
 		if e.Ok != nil && !*e.Ok {
 			t.faults++
 		}

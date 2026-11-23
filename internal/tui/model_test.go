@@ -1342,3 +1342,138 @@ func TestPruneForgetsOnlyTheHostThatLeft(t *testing.T) {
 		t.Errorf("after box left: Focus %v, Selected %v; want %v", f.m.ui.Focus, f.m.ui.Selected, two)
 	}
 }
+
+func TestHistorySidebarNavigation(t *testing.T) {
+	f := newModelFix(t, true, MinW, MinH)
+	f.batch(agentEnv("a", "", f.clock))
+	f.batchFrom("other", agentEnv("a", "", f.clock))
+	var events []schema.Envelope
+	for i := range 24 {
+		id := fmt.Sprintf("call-%02d", i)
+		at := f.clock - int64(24-i)*1000
+		events = append(events, startEnv("a", id, "read", id, at), endEnv("a", id, i != 0, at+500))
+	}
+	f.batch(events...)
+	f.press("h")
+	sidebar := func() string {
+		var lines []string
+		for _, line := range f.lines()[boardTop : MinH-1] {
+			chars := []rune(line)
+			lines = append(lines, string(chars[MinW-historyWidth(MinW):]))
+		}
+		return strings.Join(lines, "\n")
+	}
+	has := func(s string) {
+		t.Helper()
+		if !strings.Contains(sidebar(), s) {
+			t.Fatalf("sidebar lacks %q:\n%s", s, sidebar())
+		}
+	}
+	has("Call history")
+	has("call-23")
+	has("call-16")
+	if strings.Index(sidebar(), "call-16") >= strings.Index(sidebar(), "call-23") {
+		t.Fatal("calls are not ordered oldest first")
+	}
+	f.batch(startEnv("a", "new", "read", "live.go", f.clock))
+	has("live.go")
+	f.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	has("call-15")
+	f.send(tea.MouseWheelMsg{X: MinW - 1, Y: MinH - 3, Button: tea.MouseWheelUp})
+	has("call-12")
+	f.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	has("call-00")
+	has("fail")
+	anchor := f.m.ui.HistoryTop
+	f.batch(startEnv("a", "later", "read", "later.go", f.clock+10),
+		startEnv("a", "backfill", "read", "older.go", f.clock-100000))
+	if f.m.ui.HistoryTop != anchor || strings.Contains(sidebar(), "later.go") || strings.Contains(sidebar(), "older.go") {
+		t.Fatal("live or backfilled calls moved the scrolled viewport")
+	}
+	has("call-00")
+	for range 5 {
+		f.send(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+	has("later.go")
+	f.batch(startEnv("a", "latest", "read", "latest.go", f.clock+20))
+	has("latest.go")
+	if f.m.ui.HistoryTop.Call != nil {
+		t.Fatal("returning to the bottom did not resume following")
+	}
+	f.press("j")
+	has("other")
+	has("No calls yet")
+	f.press("k")
+	has("live.go")
+	has("open")
+	f.press("esc")
+	if strings.Contains(f.screen(), "Call history") || f.m.ui.Selected != dk("a") {
+		t.Fatal("closing history changed the selection or left the sidebar visible")
+	}
+}
+
+// Read an entire multiline command from its beginning to its live tail.
+func TestHistoryFullCommand(t *testing.T) {
+	f := newModelFix(t, true, MinW, MinH)
+	call := startEnv("a", "script", "command", "", f.clock)
+	var script strings.Builder
+	script.WriteString("printf '界e\u0301'\n\n")
+	for i := range 240 {
+		fmt.Fprintf(&script, "echo command-line-%03d\n", i)
+	}
+	script.WriteString("echo SCRIPT-END")
+	call.Call.Command = script.String()
+	f.batch(agentEnv("a", "", f.clock), call)
+	f.press("h")
+	if !strings.Contains(f.screen(), "SCRIPT-END") {
+		t.Fatal("history did not open at the end of the long command")
+	}
+	for range 25 {
+		f.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	}
+	var seen [240]bool
+	for page := 0; page < 25; page++ {
+		lines := f.lines()
+		for _, line := range lines[boardTop+3 : MinH-3] {
+			i := strings.Index(line, "echo command-line-")
+			if i >= 0 {
+				var n int
+				if _, err := fmt.Sscanf(line[i:], "echo command-line-%03d", &n); err == nil && n >= 0 && n < len(seen) {
+					seen[n] = true
+				}
+			}
+		}
+		if strings.Contains(f.screen(), "SCRIPT-END") {
+			break
+		}
+		f.send(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+	for i, ok := range seen {
+		if !ok {
+			t.Fatalf("missing command line %d", i)
+		}
+	}
+	if !strings.Contains(f.screen(), "SCRIPT-END") {
+		t.Fatal("could not reach end of command")
+	}
+	if f.m.ui.HistoryTop != (board.HistoryPosition{}) {
+		t.Fatal("paging down did not return to live history")
+	}
+}
+
+func TestCommandLineWrap(t *testing.T) {
+	s := "abc界e\u0301\n\n01234567\n"
+	var lines []string
+	for {
+		line, next := commandLine(s, 4)
+		lines = append(lines, line)
+		if next < 0 {
+			break
+		}
+		s = s[next:]
+	}
+	want := []string{"abc", "界e\u0301", "", "0123", "4567", ""}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("wrapped command = %q, want %q", lines, want)
+	}
+}

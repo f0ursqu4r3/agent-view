@@ -80,13 +80,14 @@ const (
 // tally holds an agent's counters and every call it made. It travels with the
 // agent into and out of the dormant map.
 type tally struct {
-	calls       map[string]callMark
+	calls       map[string]*HistoryCall
+	history     []*HistoryCall // oldest start first
 	faults      int
 	firstSeenMs int64
 }
 
 func newTally(firstSeenMs int64) *tally {
-	return &tally{calls: map[string]callMark{}, firstSeenMs: firstSeenMs}
+	return &tally{calls: map[string]*HistoryCall{}, firstSeenMs: firstSeenMs}
 }
 
 // seen moves the first-seen time back to ms when ms is older.
@@ -105,7 +106,7 @@ func tallyOf(h *hostState, id string) *tally {
 
 func markOf(h *hostState, agentID, callID string) callMark {
 	if t := tallyOf(h, agentID); t != nil {
-		return t.calls[callID]
+		return t.calls[callID].state()
 	}
 	return callUnknown
 }
@@ -123,17 +124,17 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 			return false
 		}
 		t := tallyOf(h, c.AgentID)
-		if t == nil || t.calls[c.CallID] == callUnknown {
+		if t == nil || t.calls[c.CallID] == nil {
 			return false
 		}
 		k := callKey{c.AgentID, c.CallID}
 		if !h.agents.Has(c.AgentID) || h.calls.has(k) {
 			return true
 		}
-		switch t.calls[c.CallID] {
+		switch t.calls[c.CallID].mark {
 		case callDropped:
 			addCall(h, e.Host, *c, s.ms(h, c.StartedAt))
-			t.calls[c.CallID] = callOpen
+			t.calls[c.CallID].mark = callOpen
 		case callEnded:
 			h.pending[k] = newCall(e.Host, *c, s.ms(h, c.StartedAt))
 		}
@@ -149,7 +150,7 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 				return true
 			}
 			delete(h.pending, k)
-			endCall(call, e, endMs(a, call, e, at))
+			endCall(call, e, endMs(call.StartMs, a.lastEventMs, e, at))
 			storeCall(h, call)
 			trimCalls(h)
 		}
@@ -161,8 +162,8 @@ func (s *Store) replay(h *hostState, e schema.Envelope, at int64) bool {
 // dropOpen marks an open call that left the call list. A replayed tool.start
 // restores it.
 func dropOpen(h *hostState, c *ViewCall) {
-	if t := tallyOf(h, c.AgentID); t != nil && !c.Ended && t.calls[c.CallID] == callOpen {
-		t.calls[c.CallID] = callDropped
+	if t := tallyOf(h, c.AgentID); t != nil && !c.Ended && t.calls[c.CallID].state() == callOpen {
+		t.calls[c.CallID].mark = callDropped
 	}
 }
 

@@ -17,6 +17,11 @@ func Clean(s string) string {
 	return clean(ansi.Strip(strings.ToValidUTF8(s, "�")), newlineMark)
 }
 
+// CleanMultiline removes terminal controls and preserves line breaks, including blank lines.
+func CleanMultiline(s string) string {
+	return clean(ansi.Strip(strings.ToValidUTF8(s, "�")), "\n")
+}
+
 // CleanLines applies the same cleaning to each line of s and drops the lines
 // that end up empty.
 func CleanLines(s string) []string {
