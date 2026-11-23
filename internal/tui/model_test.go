@@ -1359,7 +1359,7 @@ func TestHistorySidebarNavigation(t *testing.T) {
 		var lines []string
 		for _, line := range f.lines()[boardTop : MinH-1] {
 			chars := []rune(line)
-			lines = append(lines, string(chars[MinW-historyWidth(MinW):]))
+			lines = append(lines, string(chars[MinW-historyWidth(MinW, f.m.ui.HistoryWidth):]))
 		}
 		return strings.Join(lines, "\n")
 	}
@@ -1475,5 +1475,69 @@ func TestCommandLineWrap(t *testing.T) {
 	want := []string{"abc", "界e\u0301", "", "0123", "4567", ""}
 	if !reflect.DeepEqual(lines, want) {
 		t.Fatalf("wrapped command = %q, want %q", lines, want)
+	}
+}
+
+func TestHistorySidebarResize(t *testing.T) {
+	const w = 140
+	f := newModelFix(t, true, w, MinH)
+	command := startEnv("a", "long", "command", "", f.clock)
+	command.Call.Command = strings.Repeat("1234567890", 240)
+	f.batch(agentEnv("a", "", f.clock), command)
+	f.press("h")
+
+	// Read the border from the rendered screen so hit testing must agree with layout.
+	border := func() int {
+		t.Helper()
+		x, _, ok := f.find("┌─ Call history")
+		if !ok {
+			t.Fatal("missing sidebar border")
+		}
+		return x
+	}
+	start := border()
+	f.press("]")
+	if border() != start-4 {
+		t.Fatal("widen shortcut did not move the border left")
+	}
+	f.press("[")
+	if border() != start {
+		t.Fatal("narrow shortcut did not restore the width")
+	}
+	f.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	f.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	anchor := f.m.ui.HistoryTop
+	if anchor.Offset <= 1 {
+		t.Fatal("expected to be reading inside the long command")
+	}
+	f.send(tea.MouseClickMsg{X: start, Y: MinH - 4, Button: tea.MouseLeft})
+	f.send(tea.MouseMotionMsg{X: start - 25, Y: MinH - 4, Button: tea.MouseLeft})
+	if border() != start-25 || f.m.ui.HistoryTop != anchor {
+		t.Fatal("drag did not widen the sidebar and preserve the reading position")
+	}
+	v := f.m.historyView()
+	row := v.top(anchor, v.bottom(historyPageSize(MinH)))
+	line := v.lines(anchor.Call)[row.line-1]
+	if line.offset > anchor.Offset || line.offset+len(line.text) <= anchor.Offset {
+		t.Fatal("the first visible line lost the anchored text after rewrapping")
+	}
+	f.send(tea.MouseReleaseMsg{X: start - 26, Y: MinH - 4, Button: tea.MouseLeft})
+	f.send(tea.MouseMotionMsg{X: 0, Y: boardTop, Button: tea.MouseLeft})
+	if border() != start-26 {
+		t.Fatal("drag did not stop at release")
+	}
+	f.press("h")
+	f.press("]")
+	f.press("h")
+	if border() != start-26 || f.m.ui.HistoryTop.Call != nil {
+		t.Fatal("reopening history did not restore the width and live tail")
+	}
+	f.send(tea.WindowSizeMsg{Width: MinW, Height: MinH})
+	if border() != minHistoryBoardWidth {
+		t.Fatal("terminal resize did not reserve room for the board")
+	}
+	f.send(tea.WindowSizeMsg{Width: w, Height: MinH})
+	if border() != start-26 {
+		t.Fatal("terminal resize lost the preferred width")
 	}
 }

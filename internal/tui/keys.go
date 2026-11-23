@@ -40,6 +40,17 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			m.setSelection(m.hits[0].Key)
 		}
 		m.thaw = true
+	case "[", "]":
+		const step = 4
+		width := historyWidth(m.w, m.ui.HistoryWidth)
+		if msg.String() == "[" {
+			width -= step
+		} else {
+			width += step
+		}
+		if !m.resizeHistory(width) {
+			return nil, false
+		}
 	case "pgdown", "pgup":
 		step := historyPageSize(m.h)
 		if msg.String() == "pgup" {
@@ -173,11 +184,15 @@ func (m *Model) togglePanel(p board.Panel) {
 	}
 }
 
-// click toggles the focus of the agent card under a left click, and selects
-// that agent. It reports whether the click hit a card.
+// A left click on the history border starts a drag. A click on an agent card selects and focuses it.
 func (m *Model) click(msg tea.MouseClickMsg) bool {
 	if msg.Button != tea.MouseLeft {
 		return false
+	}
+	if m.canResizeHistory() && msg.X == m.w-historyWidth(m.w, m.ui.HistoryWidth) &&
+		msg.Y >= boardTop && msg.Y < boardTop+historyHeight(m.h) {
+		m.draggingHistory = true
+		return true
 	}
 	for _, h := range m.hits {
 		if msg.X < h.X || msg.X >= h.X+h.W || msg.Y < h.Y || msg.Y >= h.Y+h.H {
@@ -205,7 +220,7 @@ func (m *Model) wheel(msg tea.MouseWheelMsg) bool {
 	default:
 		return false
 	}
-	if m.ui.History && msg.X >= m.w-historyWidth(m.w) {
+	if m.ui.History && msg.X >= m.w-historyWidth(m.w, m.ui.HistoryWidth) {
 		return msg.Y < boardTop+historyHeight(m.h) && m.scrollHistory(delta)
 	}
 	if msg.Y >= boardTop+bh {

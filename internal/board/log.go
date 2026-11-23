@@ -289,12 +289,16 @@ func drawLogLine(g *cells.Grid, y int, ln LogLine) {
 		return role
 	}
 	right := g.W - 2 // the text area ends here
-	g.Text(logTextX, y, logTimeW, time.UnixMilli(ln.AtMs).Format("15:04:05"), cells.Style{Role: cells.RDim})
+	g.Text(logTextX, y, min(logTimeW, right-logTextX), time.UnixMilli(ln.AtMs).Format("15:04:05"), cells.Style{Role: cells.RDim})
 
 	label := cells.Style{Role: pick(ln.LabelRole), Bold: !ln.Dim}
-	if ln.Who == "" {
-		// The label takes the who column and the target follows it.
-		n := g.Text(logWhoX, y, max(right-logWhoX, 0), ln.Label, label)
+	if ln.Who == "" || right < logTargetX+logResultW+logDurW+2 {
+		// At narrow widths use the name column for the event type and result.
+		field := ln.Label
+		if ln.Result != "" {
+			field += " " + ln.Result
+		}
+		n := g.Text(logWhoX, y, max(right-logWhoX, 0), field, label)
 		x := logWhoX + n + 2
 		g.Text(x, y, max(right-x, 0), ln.Target, cells.Style{Role: pick(cells.RText)})
 		return

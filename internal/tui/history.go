@@ -16,7 +16,35 @@ import (
 	"agent-view/internal/text"
 )
 
-func historyWidth(w int) int    { return min(54, max(28, w/3)) }
+const (
+	minHistoryWidth = 28
+	// Leave enough room for an indented agent card and the board margins.
+	minHistoryBoardWidth = 2*marginX + subIndent + cards.AgentW
+)
+
+func historyWidth(w, preferred int) int {
+	if preferred == 0 {
+		preferred = min(54, w/3)
+	}
+	return max(minHistoryWidth, min(preferred, w-minHistoryBoardWidth))
+}
+
+func (m *Model) canResizeHistory() bool {
+	return m.ui.History && m.ui.Panel == board.PanelNone && m.w >= MinW && m.h >= MinH
+}
+
+func (m *Model) resizeHistory(columns int) bool {
+	if !m.canResizeHistory() {
+		return false
+	}
+	width := historyWidth(m.w, max(minHistoryWidth, columns))
+	if width == historyWidth(m.w, m.ui.HistoryWidth) {
+		return false
+	}
+	m.ui.HistoryWidth = width
+	m.thaw = true
+	return true
+}
 func historyHeight(h int) int   { return h - boardTop - 1 }
 func historyPageSize(h int) int { return historyHeight(h) - 5 }
 
@@ -39,10 +67,15 @@ func commandLine(s string, width int) (line string, next int) {
 
 // Cache wrapped commands across animation frames. Calls can receive a new
 // target from a snapshot, and the sidebar width changes on terminal resize.
+type historyLine struct {
+	text   string
+	offset int // one plus the starting byte offset; zero belongs to the header
+}
+
 type wrappedCommand struct {
 	source string
 	width  int
-	lines  []string
+	lines  []historyLine
 }
 
 type historyCache = ordered.LRU[*store.HistoryCall, wrappedCommand]
@@ -53,19 +86,19 @@ type historyView struct {
 	cache *historyCache
 }
 
-func (v historyView) lines(c *store.HistoryCall) []string {
+func (v historyView) lines(c *store.HistoryCall) []historyLine {
 	if c.Category != "command" {
-		return []string{c.Target}
+		return []historyLine{{c.Target, 1}}
 	}
 	if v.cache != nil {
 		if cached, ok := v.cache.Get(c); ok && cached.width == v.width && cached.source == c.Target {
 			return cached.lines
 		}
 	}
-	var lines []string
+	var lines []historyLine
 	for s := c.Target; ; {
 		line, next := commandLine(s, v.width)
-		lines = append(lines, line)
+		lines = append(lines, historyLine{line, 1 + len(c.Target) - len(s)})
 		if next < 0 {
 			break
 		}
@@ -112,7 +145,9 @@ func (v historyView) top(anchor board.HistoryPosition, bottom historyRow) histor
 		i := sort.Search(len(v.calls), func(i int) bool { return v.calls[i].StartMs >= anchor.Call.StartMs })
 		for ; i < len(v.calls) && v.calls[i].StartMs == anchor.Call.StartMs; i++ {
 			if v.calls[i] == anchor.Call {
-				p := historyRow{i, min(anchor.Line, len(v.lines(anchor.Call)))}
+				lines := v.lines(anchor.Call)
+				line := sort.Search(len(lines), func(j int) bool { return lines[j].offset > anchor.Offset })
+				p := historyRow{i, line}
 				if p.before(bottom) {
 					return p
 				}
@@ -124,7 +159,7 @@ func (v historyView) top(anchor board.HistoryPosition, bottom historyRow) histor
 }
 
 func (m *Model) historyView() historyView {
-	return historyView{m.store.CallHistory(m.ui.Selected), historyWidth(m.w) - 4, m.historyCache}
+	return historyView{m.store.CallHistory(m.ui.Selected), historyWidth(m.w, m.ui.HistoryWidth) - 4, m.historyCache}
 }
 
 func (m *Model) scrollHistory(delta int) bool {
@@ -143,14 +178,18 @@ func (m *Model) scrollHistory(delta int) bool {
 	}
 	m.ui.HistoryTop = board.HistoryPosition{}
 	if next.before(bottom) {
-		m.ui.HistoryTop = board.HistoryPosition{Call: v.calls[next.index], Line: next.line}
+		call := v.calls[next.index]
+		m.ui.HistoryTop.Call = call
+		if next.line > 0 {
+			m.ui.HistoryTop.Offset = v.lines(call)[next.line-1].offset
+		}
 	}
 	m.thaw = true
 	return true
 }
 
 func historyPanel(in Input, w, h int) *cells.Grid {
-	g := panelBox(w, h, "Call history", "PgUp/PgDn")
+	g := panelBox(w, h, "Call history", "[ ] width · PgUp/PgDn")
 	dim := cells.Style{Role: cells.RDim}
 	if in.Store == nil {
 		g.Text(2, 2, w-4, "Select an agent", dim)
@@ -186,7 +225,7 @@ func historyPanel(in Input, w, h int) *cells.Grid {
 			if y == h-2 {
 				break
 			}
-			g.Text(2, y, v.width, body, cells.Style{Role: cells.RText})
+			g.Text(2, y, v.width, body.text, cells.Style{Role: cells.RText})
 			y++
 		}
 	}

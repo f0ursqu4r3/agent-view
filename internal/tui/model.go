@@ -55,13 +55,14 @@ type Config struct {
 // that changes the board (selection, focus, log size) or a resize draws it
 // again from the store.
 type Model struct {
-	historyCache *historyCache
-	store        *store.Store
-	anim         *anim.Engine
-	log          *board.Log
-	now          func() time.Time
-	linger       int64
-	encode       func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
+	draggingHistory bool
+	historyCache    *historyCache
+	store           *store.Store
+	anim            *anim.Engine
+	log             *board.Log
+	now             func() time.Time
+	linger          int64
+	encode          func(*cells.Grid) string // cells.Encode, or cells.EncodeNoColor
 
 	ui                               board.UI
 	w, h                             int
@@ -162,6 +163,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clockOn = false
 		m.tick()
 	case tea.WindowSizeMsg:
+		m.draggingHistory = false
 		m.w, m.h = max(msg.Width, 0), max(msg.Height, 0)
 		if !m.launched && !m.ui.Reduced && m.w >= MinW && m.h >= MinH {
 			m.launched = true
@@ -170,6 +172,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.thaw = true
 		m.fixTop(m.nowMs())
 	case tea.KeyPressMsg:
+		m.draggingHistory = false
 		cmd, ok := m.key(msg)
 		if !ok || cmd != nil {
 			return m, cmd
@@ -178,7 +181,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.wheel(msg) {
 			return m, nil
 		}
+	case tea.MouseMotionMsg:
+		if !m.draggingHistory || msg.Button != tea.MouseLeft || !m.resizeHistory(m.w-msg.X) {
+			return m, nil
+		}
+	case tea.MouseReleaseMsg:
+		if !m.draggingHistory {
+			return m, nil
+		}
+		m.draggingHistory = false
+		if !m.resizeHistory(m.w - msg.X) {
+			return m, nil
+		}
 	case tea.MouseClickMsg:
+		m.draggingHistory = false
 		if !m.click(msg) {
 			return m, nil
 		}

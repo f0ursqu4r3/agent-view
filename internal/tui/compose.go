@@ -79,7 +79,7 @@ func Compose(in Input) (*cells.Grid, []Hit) {
 	lh := logHeight(g.H, in.UI.TallLog)
 	left := g.W
 	if in.UI.History {
-		w := historyWidth(g.W)
+		w := historyWidth(g.W, in.UI.HistoryWidth)
 		left -= w
 		g.Blit(historyPanel(in, w, historyHeight(g.H)), left, boardTop)
 	}

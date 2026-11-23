@@ -25,6 +25,7 @@ var helpKeys = [][2]string{
 	{"enter", "focus the selected agent; again to clear"},
 	{"click", "focus the clicked agent"},
 	{"h", "toggle call history for the selected agent"},
+	{"[ / ]", "narrow / widen history, or drag its left border"},
 	{"PgUp/PgDn", "scroll history up / down"},
 	{"wheel", "scroll the board or history under the pointer"},
 	{"b", "cycle the animated board background"},

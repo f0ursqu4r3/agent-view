@@ -84,6 +84,7 @@ While the TUI runs, agent-view writes nothing to the terminal except its own scr
 | `g` / `G` | Select the first or last row. |
 | `enter`, or a click on an agent card | Focus the selected or clicked agent. With no selection, Enter focuses the first visible agent. Press `enter` again to clear the focus. |
 | `h` | Toggle the history sidebar. It follows the selected agent and shows all tool calls observed for that agent, oldest start first. Shell commands wrap to the sidebar width and keep their line breaks. |
+| `[` / `]`, or drag the left border of the history sidebar | Narrow or widen the sidebar. It keeps your chosen width when you close and reopen it during the same run. |
 | `PgDn` / `PgUp`, or mouse wheel over the sidebar | Page or scroll through the full command text and the surrounding calls. The sidebar opens at the bottom and follows new calls. Scroll up to hold your place. Scroll back to the bottom to follow again. |
 | `esc` | Close the open panel, then the history sidebar, then clear focus on successive presses. |
 | `space` | Pause or resume the board and the log. The program keeps reading events. |

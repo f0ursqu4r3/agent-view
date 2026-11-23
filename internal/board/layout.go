@@ -21,8 +21,8 @@ const (
 // HistoryPosition anchors the top line to a call as new entries arrive.
 // A nil call follows the bottom of the history.
 type HistoryPosition struct {
-	Call *store.HistoryCall
-	Line int // zero for the header, then the wrapped target lines
+	Call   *store.HistoryCall
+	Offset int // zero for the header, otherwise one plus a byte offset in the target
 }
 
 // UI is the interface state that affects the layout.
@@ -32,6 +32,7 @@ type UI struct {
 	Paused, TallLog, Reduced bool
 	History                  bool
 	HistoryTop               HistoryPosition
+	HistoryWidth             int // preferred columns; zero uses the automatic width
 	Panel                    Panel
 	Top                      int
 }
